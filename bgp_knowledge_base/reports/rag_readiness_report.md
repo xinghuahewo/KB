@@ -10,7 +10,7 @@
 - LLM 默认 provider：`mock`
 - DeepSeek：已预留 OpenAI-compatible provider，默认启用：False。
 - Qwen/vLLM：已预留 OpenAI-compatible provider，默认启用：False。
-- Embedding 默认 provider：`deterministic_mock`。
+- Embedding 默认 provider：`siliconflow_bge_m3`。
 - BGE-M3：模型 `BAAI/bge-m3`，默认启用：False。
 - BGE-M3 ColBERT/multi-vector 默认启用：False。
 - Vector store 默认 provider：`mock_jsonl`。

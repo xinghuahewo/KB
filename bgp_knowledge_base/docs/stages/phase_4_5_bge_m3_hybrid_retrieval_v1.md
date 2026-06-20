@@ -3,7 +3,7 @@ title: "阶段 4.5 BGE-M3 混合检索 v1"
 document_type: "阶段说明"
 purpose: "定义阶段 4.5 的终极目标、技术选型、约束边界、交付物和验收标准。"
 scope: "阶段 4.5"
-status: "计划中"
+status: "框架已完成，真实向量构建待配置远程 key"
 last_reviewed: "2026-06-20"
 ---
 # 阶段 4.5 BGE-M3 混合检索 v1
@@ -38,12 +38,13 @@ last_reviewed: "2026-06-20"
 | `aliyun_eas_bge_m3` | 后续正式部署 | `ALIYUN_BGE_M3_ENDPOINT`、`ALIYUN_BGE_M3_API_KEY` | 阿里云 PAI/EAS 自托管 endpoint |
 | `fake_bge_m3` | 无 key 测试 | 无 | 确定性 fake embedding，用于单元测试和 CI |
 
-默认执行顺序：
+Provider 通过命令行参数显式选择，不做静默自动切换：
 
 ```text
-优先读取 siliconflow_bge_m3
--> 不可用时尝试 aliyun_eas_bge_m3
--> 无 key 或 CI 环境使用 fake_bge_m3
+默认使用 siliconflow_bge_m3
+-> 需要阿里云时显式指定 aliyun_eas_bge_m3
+-> 无 key 时生成 skipped manifest
+-> 单元测试和 CI 使用 fake_bge_m3
 ```
 
 ## 工业化混合检索链路
@@ -79,7 +80,8 @@ last_reviewed: "2026-06-20"
 - 无 SiliconFlow key 或阿里云 key 时，测试和结构评测必须能用 fake client 运行。
 - 阶段 4.5 不自动写回实体、关系、chunk、术语表或人工复核状态。
 - 阶段 4.5 不强制引入 Milvus、Qdrant 或其它常驻向量数据库。
-- 默认 context pack 不包含 `pending`、`deprecated`、`archived` 或被策略排除的内容。
+- pending 实体不作为已批准实体事实进入 context pack；pending chunk 仅在关联 approved entity evidence，或来源已完成确定性处理且保留溯源时进入检索，并保持原始 pending 标签。
+- `deprecated`、`archived` 或被策略排除的内容不进入默认 context pack。
 - 每条检索结果必须保留 `source_ref`、`chunk_id`、`review_status`、`source_type` 和排序解释。
 - 生成报告和结果文件不得包含真实 API key。
 
@@ -93,7 +95,7 @@ last_reviewed: "2026-06-20"
 | 向量索引构建脚本 | `scripts/build_bge_m3_index.py` |
 | 混合检索查询脚本 | `scripts/query_hybrid_rag.py` |
 | 混合检索评测脚本 | `scripts/run_hybrid_retrieval_eval.py` |
-| 向量索引 | `published/bge_m3_vector_index.jsonl` |
+| 向量索引 | `published/bge_m3_vector_index.jsonl`，配置真实远程 key 后生成 |
 | embedding manifest | `published/bge_m3_embedding_manifest.json` |
 | 构建报告 | `reports/bge_m3_embedding_report.md` |
 | 检索评测报告 | `reports/hybrid_retrieval_eval_report.md` |
@@ -124,6 +126,15 @@ last_reviewed: "2026-06-20"
 - 本地模型仍为禁用状态。
 - 质量检查 JSON 错误数和 Schema 错误数均为 0。
 - 仓库中不包含真实 DeepSeek、SiliconFlow 或阿里云 API key。
+
+## 当前实施结果
+
+- 远程 provider、文件化索引构建、混合检索、CLI、API、RAG Answer 接入和阶段评测框架均已实现。
+- embedding 输入共 2269 条：2037 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
+- 当前未配置 SiliconFlow key，`published/bge_m3_embedding_manifest.json` 状态为 `skipped`，未伪造真实 BGE-M3 向量。
+- 离线混合检索评测 20/20 通过，Recall@5 为 84.31%，Recall@8 为 87.25%，MRR 为 0.6882，无证据拒答率为 100%。
+- 来源类型覆盖 `case_report`、`data_doc`、`paper`、`standard`、`tool_doc`。
+- 下一项外部条件是配置 `SILICONFLOW_API_KEY`，生成真实向量索引后复跑同一评测集，对比真实 BGE-M3 与离线基线。
 
 ## 参考资料
 

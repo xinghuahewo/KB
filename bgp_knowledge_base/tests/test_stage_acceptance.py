@@ -87,6 +87,22 @@ def test_stage_acceptance_config_registers_phase_4_4_deepseek_eval_analysis():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_4_5_bge_m3_hybrid_retrieval():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_4_5_bge_m3_hybrid_retrieval_v1"]
+
+    assert stage["name"] == "BGE-M3 混合检索 v1"
+    assert "service/bge_m3_remote_client.py" in stage["required_files"]
+    assert "service/hybrid_retrieval.py" in stage["required_files"]
+    assert "published/bge_m3_embedding_manifest.json" in stage["required_files"]
+    assert "reports/hybrid_retrieval_eval_report.md" in stage["required_files"]
+    assert any(command["id"] == "bge_m3_embedding_build" for command in stage["commands"])
+    assert any(command["id"] == "hybrid_retrieval_eval" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "scripts/run_stage_acceptance.py", "--stage", "phase_1_data_management_v1"],

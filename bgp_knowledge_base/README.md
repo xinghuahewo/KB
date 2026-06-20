@@ -219,6 +219,8 @@ curl http://127.0.0.1:8000/api/v1/entities/anomaly_route_leak
 curl "http://127.0.0.1:8000/api/v1/search/entities?q=RPKI&limit=5"
 curl "http://127.0.0.1:8000/api/v1/search/chunks?q=route%20leak&limit=5"
 curl "http://127.0.0.1:8000/api/v1/actions?needs_llm=true&limit=5"
+curl "http://127.0.0.1:8000/api/v1/hybrid/search?q=route%20leak&limit=5"
+curl "http://127.0.0.1:8000/api/v1/hybrid/context-pack?q=%E8%B7%AF%E7%94%B1%E6%B3%84%E9%9C%B2&limit=5"
 curl -X POST http://127.0.0.1:8000/api/v1/rag/answer \
   -H "Content-Type: application/json" \
   -d '{"query":"route leak","limit":3}'
@@ -262,6 +264,35 @@ python3 scripts/build_rag_answer_failure_analysis.py
 - `reports/deepseek_rag_answer_eval_report.md`
 - `reports/rag_answer_failure_analysis_report.md`
 
+阶段 4.5 使用远程 BGE-M3、关键词和元数据做 RRF 混合检索。默认远程 provider 是 SiliconFlow `BAAI/bge-m3`；当前设备不运行或下载模型。无 key 时 embedding 构建会生成结构化 `skipped` manifest，CLI、API、离线 mock 向量和检索评测仍可运行：
+
+```bash
+# 无 key：验证框架、边界和离线检索基线
+python3 scripts/build_bge_m3_index.py
+python3 scripts/query_hybrid_rag.py search "路由泄露" --top-k 5
+python3 scripts/query_hybrid_rag.py context-pack "route leak" --top-k 8
+python3 scripts/run_hybrid_retrieval_eval.py
+
+# 有 SiliconFlow key：构建真实 BGE-M3 文件化向量索引
+export SILICONFLOW_API_KEY="你的 SiliconFlow API key"
+python3 scripts/build_bge_m3_index.py --provider siliconflow_bge_m3
+
+# 阿里云 PAI/EAS 兼容路径
+export ALIYUN_BGE_M3_ENDPOINT="你的 EAS endpoint"
+export ALIYUN_BGE_M3_API_KEY="你的 EAS token"
+python3 scripts/build_bge_m3_index.py --provider aliyun_eas_bge_m3
+```
+
+阶段 4.5 输入数据限定为：`published/chunk_catalog.jsonl`、`published/entity_catalog.jsonl`、`datasets/glossary.jsonl` 和 `entities/evidence_templates.jsonl`。不直接 embedding `raw/` 或整份 `cleaned/` 文件。
+
+输出：
+
+- `published/bge_m3_embedding_manifest.json`
+- 配置真实 key 后生成 `published/bge_m3_vector_index.jsonl`
+- `reports/bge_m3_embedding_report.md`
+- `datasets/hybrid_retrieval_eval_results.jsonl`
+- `reports/hybrid_retrieval_eval_report.md`
+
 自动化测试：
 
 ```bash
@@ -272,8 +303,9 @@ pytest tests -v
 
 - 只读访问 SQLite，缺失数据库时通过 `/health` 和 API 错误返回清晰状态。
 - 阶段 4.1 提供 `POST /api/v1/rag/answer`，只做检索、context pack 和可追溯答案编排。
+- 阶段 4.5 提供 `/api/v1/hybrid/search` 和 `/api/v1/hybrid/context-pack`，RAG Answer 复用同一混合检索 context pack。
 - DeepSeek API 只从环境变量 `DEEPSEEK_API_KEY` 读取密钥；仓库只提供 `.env.example`，不保存真实密钥。
-- 当前设备不运行本地模型；`config/rag_retrieval.yaml` 中 `embedding.local_model_enabled=false`，Qwen embedding 只预留后续部署字段。
+- 当前设备不运行本地模型；`config/rag_retrieval.yaml` 中 `embedding.local_model_enabled=false`，BGE-M3 只调用远程 provider，Qwen embedding 只预留后续部署字段。
 - LLM 不可用或没有证据时不会编造答案，会返回检索证据、引用和失败状态。
 - 不提供编辑、审批、写入、导出、权限系统或知识库自动改写能力。
 - API 返回结构尽量贴近 `scripts/query_knowledge_base.py` 的 JSON 输出，方便后续迁移和集成。

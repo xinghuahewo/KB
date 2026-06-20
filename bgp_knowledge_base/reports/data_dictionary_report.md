@@ -11,9 +11,9 @@
 - Readiness：ready_deterministic
 - 发布完整性：pass
 - SQLite integrity_check：ok
-- Published 文件数：17
+- Published 文件数：18
 - SQLite 表数：30
-- JSONL 数据集数：32
+- JSONL 数据集数：34
 - 查询命令数：23
 - JSON 输出：`published/data_dictionary.json`
 
@@ -22,9 +22,10 @@
 | 文件 | 大小字节 | 说明 | JSONL 字段 |
 | --- | ---: | --- | --- |
 | `published/README.md` | 2601 | 发布入口说明。 |  |
+| `published/bge_m3_embedding_manifest.json` | 523 |  |  |
 | `published/bgp_knowledge_base.sqlite` | 12963840 | 本地 SQL 查询入口。 |  |
 | `published/chunk_catalog.jsonl` | 1438186 | chunk 目录，包含 chunk 元数据、预览和所在文件。 | chunk_file, chunk_id, chunk_type, content_chars, content_preview, doc_id, language, review_status, section_path, source_ref, source_type, title, topics |
-| `published/data_dictionary.json` | 100512 | 本数据字典的机器可读版本。 |  |
+| `published/data_dictionary.json` | 101087 | 本数据字典的机器可读版本。 |  |
 | `published/embedding_manifest.json` | 401 | 阶段四 RAG 框架的 embedding 覆盖、provider 和边界摘要。 |  |
 | `published/entity_catalog.jsonl` | 121250 | 实体目录，包含实体 payload、来源、证据和复核桶。 | aliases, case_observation_count, category, chunk_count, entity_file, entity_id, entity_payload, entity_type, evidence_record_count, name, review_bucket, review_status, source_ref_count, source_refs |
 | `published/integrity_summary.json` | 8950 | 发布完整性 gate 的机器可读摘要。 |  |
@@ -78,7 +79,7 @@
 
 | 数据集 | 记录数 | 字段 |
 | --- | ---: | --- |
-| `datasets/artifact_manifest.jsonl` | 449 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
+| `datasets/artifact_manifest.jsonl` | 457 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
 | `datasets/authoritative_source_requirements.jsonl` | 0 |  |
 | `datasets/case_observations.jsonl` | 148 | context, observation_type, review_status, source_id, source_ref, title, value |
 | `datasets/chunk_enrichment_candidates.jsonl` | 25 | candidate_id, chunk_id, evidence_type, generated_by, keywords, provider, review_status, semantic_title, source_ref, summary |
@@ -100,6 +101,8 @@
 | `datasets/human_review_source_matrix.jsonl` | 31 | chunk_sample_ids, cleaned_paths, cleaned_status, decision_input_path, entity_count, entity_types, evidence_record_count, field_check_count, generated_by, inventory_review_status, parsed_paths, parsed_status, processing_status, raw_status, sample_entity_ids, session_ids, source_chunk_count, source_id, source_matrix_id, source_path, source_title, source_type, trust_level |
 | `datasets/human_review_task_board.jsonl` | 25 | entity_id, field_check_count, generated_by, item_count, needs_llm, primary_input, priority_reason, secondary_input, session_id, source_id, suggested_command, task_id, task_order, task_status, task_type, title, write_command |
 | `datasets/human_review_workbook.jsonl` | 112 | chunk_sample_ids, cleaned_paths, decision_instructions, display_name, entity_id, entity_type, generated_by, llm_skip_reason, needs_llm, parsed_paths, priority, related_action_id, related_packet_id, review_batch, review_bucket, review_decision, review_order, review_status, source_paths, source_refs, workbook_id |
+| `datasets/hybrid_retrieval_eval_questions.jsonl` | 20 | expected_source_refs, expected_source_types, expected_status, notes, query, question_id |
+| `datasets/hybrid_retrieval_eval_results.jsonl` | 20 | decision, expected_source_refs, expected_status, matched_source_refs_at_5, matched_source_refs_at_8, normalized_query, notes, query, question_id, recall_at_5, recall_at_8, reciprocal_rank, result_count, returned_chunk_ids, returned_source_refs, returned_source_types, vector_status |
 | `datasets/lifecycle_inventory.jsonl` | 112 | approved_at, display_name, entity_file, entity_id, entity_type, evidence_index, evidence_record_count, generated_by, lifecycle_id, lifecycle_reason, lifecycle_status, next_action_ids, open_action_count, review_bucket, review_packet_id, review_status, reviewed_by, source_ref_count, source_refs, valid_from, valid_until |
 | `datasets/next_action_queue.jsonl` | 114 | action_id, action_order, action_type, blocking_reason, display_name, entity_id, entity_type, generated_by, needs_llm, priority, related_dataset, review_bucket, scope_id, skip_reason, source_refs, status, suggested_action |
 | `datasets/rag_answer_eval_questions.jsonl` | 20 | expected_source_refs, expected_status, forbidden_terms, must_have_terms, notes, query, question_id |
@@ -109,7 +112,7 @@
 | `datasets/semantic_quality_findings.jsonl` | 16 | field, finding_id, generated_by, lifecycle_status, message, rule_id, severity, subject_id, subject_type, suggested_action |
 | `datasets/source_gap_queue.jsonl` | 0 |  |
 | `datasets/source_processing_status.jsonl` | 54 | case_observation_count, chunk_count, cleaned_status, notes, parseable, parsed_status, path, processing_status, raw_status, source_id, source_type |
-| `datasets/stage_acceptance_results.jsonl` | 34 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
+| `datasets/stage_acceptance_results.jsonl` | 36 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
 
 ## 查询命令
 

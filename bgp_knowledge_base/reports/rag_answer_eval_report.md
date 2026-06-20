@@ -2,7 +2,7 @@
 
 ## 摘要
 
-- 生成时间：2026-06-20T14:25:25
+- 生成时间：2026-06-20T16:57:31
 - DeepSeek API key 配置：否
 - 密钥记录：未写入报告、数据集或仓库。
 - 问题数：20
@@ -26,19 +26,19 @@
 | rag_eval_001_bgp_definition | What is BGP? | answered | answered | pass | 5 |  |
 | rag_eval_002_route_leak_definition | What is a BGP route leak? | answered | answered | pass | 5 |  |
 | rag_eval_003_route_leak_cn | 路由泄露是什么？ | answered | answered | pass | 5 |  |
-| rag_eval_004_youtube_hijack_case | What happened in the YouTube hijack incident? | answered | answered | pass | 4 |  |
-| rag_eval_005_aws_route53_case | AWS Route53 cryptocurrency BGP hijack case | answered | answered | pass | 3 |  |
-| rag_eval_006_cloudflare_verizon_case | Cloudflare Verizon route leak 2019 incident | answered | answered | pass | 2 |  |
+| rag_eval_004_youtube_hijack_case | What happened in the YouTube hijack incident? | answered | answered | pass | 3 |  |
+| rag_eval_005_aws_route53_case | AWS Route53 cryptocurrency BGP hijack case | answered | answered | pass | 1 |  |
+| rag_eval_006_cloudflare_verizon_case | Cloudflare Verizon route leak 2019 incident | answered | answered | pass | 1 |  |
 | rag_eval_007_route_flap | What is route flap in BGP? | answered | answered | pass | 5 |  |
-| rag_eval_008_rpki_validation | What is RPKI validation? | answered | answered | pass | 5 |  |
+| rag_eval_008_rpki_validation | What is RPKI validation? | answered | answered | pass | 4 |  |
 | rag_eval_009_roa | What is a ROA in RPKI? | answered | answered | pass | 5 |  |
-| rag_eval_010_aspa | What is ASPA for routing security? | answered | answered | pass | 4 |  |
-| rag_eval_011_routeviews | What does RouteViews provide for BGP analysis? | answered | answered | pass | 4 |  |
-| rag_eval_012_ripe_ris | What is RIPE RIS raw data used for? | answered | answered | pass | 3 |  |
+| rag_eval_010_aspa | What is ASPA for routing security? | answered | answered | pass | 3 |  |
+| rag_eval_011_routeviews | What does RouteViews provide for BGP analysis? | answered | answered | pass | 3 |  |
+| rag_eval_012_ripe_ris | What is RIPE RIS raw data used for? | answered | answered | pass | 4 |  |
 | rag_eval_013_bgpstream | How is BGPStream used in BGP event analysis? | answered | answered | pass | 4 |  |
 | rag_eval_014_asrank | What does CAIDA ASRank describe? | answered | answered | pass | 1 |  |
-| rag_eval_015_artemis | What does ARTEMIS detect in BGP hijacking? | answered | answered | pass | 3 |  |
-| rag_eval_016_bear | What is BEAR for BGP event analysis? | answered | answered | pass | 4 |  |
+| rag_eval_015_artemis | What does ARTEMIS detect in BGP hijacking? | answered | answered | pass | 4 |  |
+| rag_eval_016_bear | What is BEAR for BGP event analysis? | answered | answered | pass | 3 |  |
 | rag_eval_017_beam | What is BEAM semantics-aware routing anomaly detection? | answered | answered | pass | 5 |  |
 | rag_eval_018_no_evidence_random | zzzzqqqxxxx imaginaryobject quuxword | no_evidence | no_evidence | pass | 0 |  |
 | rag_eval_019_no_evidence_bread | blorfmuffin xylocake narpcrumb | no_evidence | no_evidence | pass | 0 |  |

@@ -16,7 +16,7 @@ last_reviewed: "2026-06-20"
 | 阶段二：生命周期与元数据治理 | 生命周期派生、状态规则和报告。 | 继续只用 `review_status`。 | 已完成较优解。 |
 | 阶段三：语义质量治理 | blocker/warning/info 规则扫描和 findings。 | 人工抽查。 | 已完成较优解。 |
 | 阶段三点五：语义标识前置 | `bgpkb:`、URI 规则、JSON-LD context 和字段映射。 | 只冻结 ID 命名。 | 已完成小步较优解。 |
-| 阶段四：RAG 就绪与混合检索 | 远程 embedding、向量检索、BM25/关键词、元数据索引、融合排序、context pack 和答案评测。 | SQLite/关键词检索、手写 query expansion 和固定 context pack。 | 4.1-4.4 已完成简易到评测闭环；4.5 开始较优解 v1。 |
+| 阶段四：RAG 就绪与混合检索 | 远程 embedding、向量检索、BM25/关键词、元数据索引、融合排序、context pack 和答案评测。 | SQLite/关键词检索、手写 query expansion 和固定 context pack。 | 4.1-4.5 框架已完成；真实 BGE-M3 向量索引待远程 key。 |
 | 阶段五：轻量标准化出口 | JSON-LD、SKOS、PROV-O、RDF 导出和标准化报告。 | JSON-LD context 与少量样例。 | 阶段四稳定后启动。 |
 | 阶段六：知识覆盖扩展 | 系统扩展来源、案例、论文方法和运营实践。 | 按缺口队列补少量高价值主题。 | 阶段四、五稳定后启动。 |
 

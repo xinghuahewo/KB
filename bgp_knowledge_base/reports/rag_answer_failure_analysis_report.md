@@ -2,7 +2,7 @@
 
 ## 摘要
 
-- 生成时间：2026-06-20T14:25:34
+- 生成时间：2026-06-20T16:57:32
 - 输入文件：`datasets/deepseek_rag_answer_eval_results.jsonl`
 - 问题数：20
 - 通过数：20

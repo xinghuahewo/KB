@@ -84,8 +84,8 @@
 | datasets/human_review_handoff.csv | 25 | 同一人工复核交接清单的 CSV 版本 |
 | datasets/glossary.jsonl | 112 | 从 entities 机械派生的 BGP 术语表 |
 | datasets/glossary.csv | 112 | 同一术语表数据的 CSV 版本 |
-| datasets/artifact_manifest.jsonl | 449 | 文件级制品清单，包含大小、行数和 SHA-256 |
-| datasets/artifact_manifest.csv | 449 | 同一制品清单数据的 CSV 版本 |
+| datasets/artifact_manifest.jsonl | 457 | 文件级制品清单，包含大小、行数和 SHA-256 |
+| datasets/artifact_manifest.csv | 457 | 同一制品清单数据的 CSV 版本 |
 
 ## 发布知识库入口
 
