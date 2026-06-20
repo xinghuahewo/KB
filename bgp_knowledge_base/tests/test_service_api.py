@@ -111,6 +111,29 @@ def test_retrieval_api_returns_traceable_search_evidence_and_context_pack():
     assert "answer" not in pack_payload
 
 
+def test_hybrid_api_returns_fused_search_and_context_pack():
+    search = client.get("/api/v1/hybrid/search", params={"q": "route leak", "limit": 3})
+    pack = client.get("/api/v1/hybrid/context-pack", params={"q": "路由泄露", "limit": 3})
+
+    assert search.status_code == 200
+    search_payload = search.json()
+    assert search_payload["results"]
+    assert search_payload["vector_status"] in {"offline_mock", "complete"}
+    assert {
+        "lexical_score",
+        "vector_score",
+        "metadata_boost",
+        "fusion_score",
+        "match_reasons",
+    } <= set(search_payload["results"][0])
+
+    assert pack.status_code == 200
+    pack_payload = pack.json()
+    assert pack_payload["citations"]
+    assert all(item["trusted"] is True for item in pack_payload["results"])
+    assert pack_payload["trusted_chunk_policy"] == "approved_or_linked_to_approved_entity_evidence"
+
+
 def test_rag_answer_api_returns_evidence_when_llm_key_is_missing(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 

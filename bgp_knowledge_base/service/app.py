@@ -120,6 +120,16 @@ def api_retrieval_context_pack(q: str, limit: Limit = 8):
     return repository.retrieval_context_pack(q, limit=limit)
 
 
+@app.get("/api/v1/hybrid/search")
+def api_hybrid_search(q: str, limit: Limit = 20):
+    return repository.hybrid_search(q, limit=limit)
+
+
+@app.get("/api/v1/hybrid/context-pack")
+def api_hybrid_context_pack(q: str, limit: Limit = 8):
+    return repository.hybrid_context_pack(q, limit=limit)
+
+
 @app.post("/api/v1/rag/answer")
 def api_rag_answer(request: RagAnswerRequest):
     return repository.rag_answer_payload(request.query, limit=request.limit)
