@@ -53,6 +53,7 @@ STEPS = [
     ("构建生命周期治理报告", "build_lifecycle_report.py"),
     ("构建语义质量治理报告", "build_semantic_quality_report.py"),
     ("构建 RAG 就绪框架报告", "build_rag_readiness_report.py"),
+    ("运行 RAG 答案质量评测", "run_rag_answer_eval.py"),
     ("构建制品清单", "build_artifact_manifest.py"),
     ("运行质量检查", "quality_check.py"),
 ]

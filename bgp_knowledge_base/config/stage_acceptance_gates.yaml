@@ -325,3 +325,63 @@ stages:
       non_blocking_items:
         - 当前阶段只验收框架，不验收 BGE-M3/Milvus/DeepSeek 的真实召回效果。
         - LLM 候选仍需人工复核后才能进入主实体或关系。
+  - id: phase_4_3_rag_answer_eval_v1
+    name: RAG 答案质量评测 v1
+    acceptance_mode: deterministic_with_effect_review
+    required_files:
+      - docs/stages/phase_4_3_rag_answer_eval_v1.md
+      - datasets/rag_answer_eval_questions.jsonl
+      - datasets/rag_answer_eval_results.jsonl
+      - reports/rag_answer_eval_report.md
+      - scripts/run_rag_answer_eval.py
+      - tests/test_rag_answer_eval_dataset.py
+      - tests/test_rag_answer_eval_script.py
+      - tests/test_rag_retrieval_ranking.py
+    commands:
+      - id: rag_answer_eval
+        name: 运行 RAG 答案质量评测
+        command: python3 scripts/run_rag_answer_eval.py
+      - id: rag_answer_eval_tests
+        name: RAG 答案质量评测测试
+        command: python3 -m pytest tests/test_rag_answer_eval_dataset.py tests/test_rag_answer_eval_script.py tests/test_rag_retrieval_ranking.py -v
+    report_checks:
+      - id: rag_answer_eval_report_summary
+        path: reports/rag_answer_eval_report.md
+        must_contain:
+          - "# 阶段 4.3 RAG 答案评测报告"
+          - "引用覆盖率：100.00%"
+          - "无证据拒答率：100.00%"
+          - "citations 全部来自 context_pack：是"
+          - "## 逐题结果"
+          - "## 需人工复核"
+      - id: pipeline_report
+        path: reports/pipeline_report.md
+        must_contain:
+          - "总体状态：通过"
+          - "运行 RAG 答案质量评测"
+      - id: quality_report
+        path: reports/quality_report.md
+        must_contain:
+          - "JSON 错误数：0"
+          - "Schema 错误数：0"
+          - "制品清单未登记文件数：0"
+    effect_review:
+      one_line: 当前 KB 已具备可复跑的 RAG 答案质量、引用质量和拒答行为评测体系。
+      new_capabilities:
+        - 建立了 20 条固定 RAG 答案评测问题，覆盖概念、异常、数据源、中英文查询和无证据查询。
+        - 建立了答案质量评测脚本，可检查状态、引用、禁用说法、must-have 术语和运行边界。
+        - 建立了答案评测报告，输出引用覆盖率、无证据拒答率、逐题结论和人工复核项。
+        - 为检索排序加入轻量意图权重，使定义、事件和方法类查询更稳定命中对应来源。
+      user_can_now:
+        - 一条命令复跑 RAG 答案质量评测并查看中文报告。
+        - 在没有 API key 时做离线结构检查，在有 API key 时做真实答案评测。
+        - 通过失败检查定位检索、引用或生成边界的问题。
+      downstream_dependencies:
+        - 阶段五可引用评测报告判断 RAG 输出是否适合进入标准化出口样例。
+        - 后续 BGE-M3/Milvus 接入可复用同一评测集比较召回质量。
+        - 后续答案生成策略可复用 must-have、forbidden 和 citation 检查作为回归门禁。
+    human_review_policy:
+      allow_needs_human: true
+      non_blocking_items:
+        - 当前离线结构检查不替代真实 DeepSeek 内容质量评审。
+        - expected_source_refs 只作为召回观察信号，暂不作为阻塞性失败条件。

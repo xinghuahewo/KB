@@ -236,6 +236,18 @@ python3 scripts/run_rag_answer_smoke_test.py
 - `datasets/rag_answer_smoke_test_results.jsonl`
 - `reports/rag_answer_smoke_test_report.md`
 
+阶段 4.3 提供可复跑的 RAG 答案质量评测。无 `DEEPSEEK_API_KEY` 时脚本使用离线结构检查客户端，不调用外部 API；设置密钥后可复用同一评测集做真实答案评测：
+
+```bash
+python3 scripts/run_rag_answer_eval.py
+```
+
+输出：
+
+- `datasets/rag_answer_eval_questions.jsonl`
+- `datasets/rag_answer_eval_results.jsonl`
+- `reports/rag_answer_eval_report.md`
+
 自动化测试：
 
 ```bash

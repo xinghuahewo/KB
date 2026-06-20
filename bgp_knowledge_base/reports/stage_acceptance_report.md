@@ -2,58 +2,46 @@
 
 ## 结论
 
-- 阶段：RAG 就绪框架 v1 (`phase_4_rag_framework_v1`)
+- 阶段：RAG 答案质量评测 v1 (`phase_4_3_rag_answer_eval_v1`)
 - 结论：pass
 - 验收模式：`deterministic_with_effect_review`
-- 生成时间：2026-06-20T11:39:45
+- 生成时间：2026-06-20T11:49:06
 
-当前 KB 已具备不运行模型也可验收的 RAG 框架，真实 DeepSeek、Qwen/vLLM、BGE-M3 和 Milvus 路径保留为显式启用项。
+当前 KB 已具备可复跑的 RAG 答案质量、引用质量和拒答行为评测体系。
 
 ## 交付物验收
 
 | 文件 | 状态 |
 | --- | --- |
-| `docs/stages/phase_4_rag_framework_v1.md` | 通过 |
-| `config/rag_retrieval.yaml` | 通过 |
-| `config/llm_candidate_enrichment.yaml` | 通过 |
-| `schemas/retrieval_result.schema.json` | 通过 |
-| `schemas/context_pack.schema.json` | 通过 |
-| `scripts/build_llm_candidate_enrichment.py` | 通过 |
-| `scripts/build_rag_indexes.py` | 通过 |
-| `scripts/query_rag.py` | 通过 |
-| `scripts/build_rag_readiness_report.py` | 通过 |
-| `published/embedding_manifest.json` | 通过 |
-| `published/rag_mock_vector_index.jsonl` | 通过 |
-| `published/rag_retrieval_index.json` | 通过 |
-| `datasets/chunk_enrichment_candidates.jsonl` | 通过 |
-| `datasets/entity_link_candidates.jsonl` | 通过 |
-| `datasets/rag_query_eval.jsonl` | 通过 |
-| `reports/rag_readiness_report.md` | 通过 |
-| `tests/test_rag_framework_config.py` | 通过 |
-| `tests/test_llm_candidate_enrichment.py` | 通过 |
-| `tests/test_rag_indexes.py` | 通过 |
-| `tests/test_rag_retrieval.py` | 通过 |
+| `docs/stages/phase_4_3_rag_answer_eval_v1.md` | 通过 |
+| `datasets/rag_answer_eval_questions.jsonl` | 通过 |
+| `datasets/rag_answer_eval_results.jsonl` | 通过 |
+| `reports/rag_answer_eval_report.md` | 通过 |
+| `scripts/run_rag_answer_eval.py` | 通过 |
+| `tests/test_rag_answer_eval_dataset.py` | 通过 |
+| `tests/test_rag_answer_eval_script.py` | 通过 |
+| `tests/test_rag_retrieval_ranking.py` | 通过 |
 
 ## 效果验收
 
 ### 新增能力
 
-- 建立了 RAG provider 配置与运行边界，默认离线 mock，真实 provider 默认禁用。
-- 建立了 LLM 候选增强、mock embedding、检索索引、context pack 和 CLI/API 入口。
-- 建立了 route leak 和中文路由泄露等查询验收记录。
-- 将 RAG 框架纳入确定性流水线、数据管理和阶段验收。
+- 建立了 20 条固定 RAG 答案评测问题，覆盖概念、异常、数据源、中英文查询和无证据查询。
+- 建立了答案质量评测脚本，可检查状态、引用、禁用说法、must-have 术语和运行边界。
+- 建立了答案评测报告，输出引用覆盖率、无证据拒答率、逐题结论和人工复核项。
+- 为检索排序加入轻量意图权重，使定义、事件和方法类查询更稳定命中对应来源。
 
 ### 使用者现在能做什么
 
-- 在当前设备不下载模型、不调用 API 的前提下运行 RAG 框架测试。
-- 通过 retrieval API 获取可追溯 search、evidence 和 context pack。
-- 后续在模型设备上用配置显式启用 DeepSeek、Qwen/vLLM、BGE-M3 或 Milvus。
+- 一条命令复跑 RAG 答案质量评测并查看中文报告。
+- 在没有 API key 时做离线结构检查，在有 API key 时做真实答案评测。
+- 通过失败检查定位检索、引用或生成边界的问题。
 
 ### 后续阶段能依赖什么
 
-- 阶段四真实模型评估可以复用同一 provider 与 context pack 契约。
-- 阶段五标准出口可以复用 RAG 返回的稳定 @id 和 citation 结构。
-- 后续问答系统可以基于 context pack 接入答案生成，但阶段四不直接生成答案。
+- 阶段五可引用评测报告判断 RAG 输出是否适合进入标准化出口样例。
+- 后续 BGE-M3/Milvus 接入可复用同一评测集比较召回质量。
+- 后续答案生成策略可复用 must-have、forbidden 和 citation 检查作为回归门禁。
 
 ## 证据验收
 
@@ -61,24 +49,21 @@
 
 | 命令 | 状态 | 摘要 |
 | --- | --- | --- |
-| `python3 scripts/build_llm_candidate_enrichment.py` | 通过 | Provider: mock; candidates require human review; primary entities unchanged |
-| `python3 scripts/build_rag_indexes.py` | 通过 | Wrote published/rag_retrieval_index.json |
-| `python3 scripts/build_rag_readiness_report.py` | 通过 | Wrote datasets/rag_query_eval.jsonl |
-| `python3 -m pytest tests/test_rag_framework_config.py tests/test_llm_candidate_enrichment.py tests/test_rag_indexes.py tests/test_rag_retrieval.py tests/test_rag_readiness_report.py -v` | 通过 | ============================== 10 passed in 0.67s ============================== |
-| `python3 -m pytest tests/test_service_api.py::test_retrieval_api_returns_traceable_search_evidence_and_context_pack -v` | 通过 | ============================== 1 passed in 0.26s =============================== |
+| `python3 scripts/run_rag_answer_eval.py` | 通过 | Wrote reports/rag_answer_eval_report.md |
+| `python3 -m pytest tests/test_rag_answer_eval_dataset.py tests/test_rag_answer_eval_script.py tests/test_rag_retrieval_ranking.py -v` | 通过 | ============================== 5 passed in 0.23s =============================== |
 
 ### 报告检查
 
 | 报告 | 状态 | 缺失项 |
 | --- | --- | --- |
-| `reports/rag_readiness_report.md` | 通过 | 无 |
+| `reports/rag_answer_eval_report.md` | 通过 | 无 |
 | `reports/pipeline_report.md` | 通过 | 无 |
 | `reports/quality_report.md` | 通过 | 无 |
 
 ## 风险与剩余人工事项
 
-- 当前阶段只验收框架，不验收 BGE-M3/Milvus/DeepSeek 的真实召回效果。
-- LLM 候选仍需人工复核后才能进入主实体或关系。
+- 当前离线结构检查不替代真实 DeepSeek 内容质量评审。
+- expected_source_refs 只作为召回观察信号，暂不作为阻塞性失败条件。
 
 ## 建议
 

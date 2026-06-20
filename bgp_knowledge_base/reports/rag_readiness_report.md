@@ -38,11 +38,11 @@
 
 | 查询 | 规范化查询 | 结果数 | Top chunks |
 | --- | --- | ---: | --- |
-| `route leak` | `route leak` | 5 | aws_route53_crypto_hijack_2018_s001_full_005, beam_2024_s003_page_3_003, beam_2024_s004_page_4_002 |
-| `路由泄露` | `路由泄露 route leak route leaks` | 5 | aws_route53_crypto_hijack_2018_s001_full_005, beam_2024_s017_page_17_003, bear_2025_s006_page_6_003 |
-| `prefix hijack` | `prefix hijack` | 5 | beam_2024_s016_page_16_002, bear_2025_s006_page_6_002, bear_2025_s007_page_7_001 |
-| `RPKI invalid` | `RPKI invalid` | 5 | beam_2024_s013_page_13_002, manrs_bgp_2020_review_s001_full_007, bursty_announcements_2019_s004_page_4_002 |
-| `AS_PATH` | `AS_PATH` | 5 | artemis_2018_s007_page_7_002, bear_2025_s003_page_3_001, bear_2025_s005_page_5_001 |
+| `route leak` | `route leak` | 5 | aws_route53_crypto_hijack_2018_s001_full_005, cert_eu_china_telecom_route_leak_2019_s001_page_1_002, china_telecom_europe_route_leak_2019_s001_full_005 |
+| `路由泄露` | `路由泄露 route leak route leaks RFC 7908` | 5 | rfc7908_s003_6_001, rfc9234_s005_3_1_002, rfc9234_s018_8_001 |
+| `prefix hijack` | `prefix hijack` | 5 | practical_defenses_2007_s001_full_001, practical_defenses_2007_s001_full_002, bgp2vec_2020_s002_page_2_003 |
+| `RPKI invalid` | `RPKI invalid resource public key infrastructure route origin validation` | 5 | rfc8210_s002_1_001, rfc8210_s034_10_002, rfc8210_s037_13_001 |
+| `AS_PATH` | `AS_PATH` | 5 | context_2026_as_path_001, artemis_2018_s007_page_7_002, bear_2025_s003_page_3_001 |
 | `MOAS` | `MOAS` | 5 | beam_2024_s017_page_17_002, bgp2vec_2020_s006_page_6_001, artemis_2018_s010_page_10_002 |
 
 ## Context Pack

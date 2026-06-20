@@ -144,6 +144,12 @@ def producer_for(rel):
         return "scripts/build_llm_candidate_enrichment.py"
     if rel.startswith("datasets/rag_query_eval."):
         return "scripts/build_rag_readiness_report.py"
+    if rel.startswith("datasets/rag_answer_eval_questions."):
+        return "manual_eval_dataset"
+    if rel.startswith("datasets/rag_answer_eval_results."):
+        return "scripts/run_rag_answer_eval.py"
+    if rel.startswith("datasets/rag_answer_smoke_test_results."):
+        return "scripts/run_rag_answer_smoke_test.py"
     if rel == "review_inputs/human_review_decisions_template.csv":
         return "scripts/build_human_review_decision_template.py"
     if rel.startswith("review_inputs/human_review_session_decision_templates/"):
@@ -228,6 +234,10 @@ def producer_for(rel):
         return "scripts/build_semantic_identity.py"
     if rel.startswith("reports/rag_readiness_report.md"):
         return "scripts/build_rag_readiness_report.py"
+    if rel.startswith("reports/rag_answer_eval_report.md"):
+        return "scripts/run_rag_answer_eval.py"
+    if rel.startswith("reports/rag_answer_smoke_test_report.md"):
+        return "scripts/run_rag_answer_smoke_test.py"
     if rel.startswith("reports/human_review_session_decision_templates_report.md"):
         return "scripts/build_human_review_session_decision_templates.py"
     if rel.startswith("reports/human_review_session_guides/"):

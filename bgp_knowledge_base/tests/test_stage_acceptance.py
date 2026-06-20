@@ -59,6 +59,20 @@ def test_stage_acceptance_config_registers_phase_4_rag_framework():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_4_3_rag_answer_eval():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_4_3_rag_answer_eval_v1"]
+
+    assert stage["name"] == "RAG 答案质量评测 v1"
+    assert "datasets/rag_answer_eval_questions.jsonl" in stage["required_files"]
+    assert "scripts/run_rag_answer_eval.py" in stage["required_files"]
+    assert "reports/rag_answer_eval_report.md" in stage["required_files"]
+    assert any(command["id"] == "rag_answer_eval" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "scripts/run_stage_acceptance.py", "--stage", "phase_1_data_management_v1"],

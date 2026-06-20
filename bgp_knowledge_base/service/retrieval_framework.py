@@ -64,6 +64,35 @@ def token_set(text):
     return {part.lower() for part in text.replace("/", " ").replace("_", " ").replace("-", " ").split() if part}
 
 
+def query_intent(normalized_query):
+    text = normalized_query.lower()
+    if any(term in text for term in ["incident", "outage", "case", "war story", "youtube", "cloudflare", "verizon", "aws", "facebook"]):
+        return "case"
+    if any(term in text for term in ["rfc", "what is", "definition", "validation", "roa", "rpki", "aspa", "route flap"]):
+        return "standard"
+    if any(term in text for term in ["detect", "detection", "method", "analysis", "artemis", "bear", "beam"]):
+        return "paper"
+    return ""
+
+
+def source_type_bonus(chunk, normalized_query):
+    intent = query_intent(normalized_query)
+    source_type = chunk.get("source_type", "")
+    bonus = 0.0
+    if intent == "case" and source_type == "case_report":
+        bonus += 3.0
+    if intent == "standard" and source_type == "standard":
+        bonus += 3.0
+    if intent == "paper" and source_type == "paper":
+        bonus += 2.0
+    title = chunk.get("title", "").lower()
+    doc_id = chunk.get("doc_id", "").lower()
+    for term in token_set(normalized_query):
+        if len(term) >= 4 and (term in title or term in doc_id):
+            bonus += 0.5
+    return bonus
+
+
 def stable_vector(text, dimensions=32):
     vector = []
     seed = text.encode("utf-8")
@@ -90,7 +119,7 @@ def score_chunk(chunk, normalized_query):
     phrase_bonus = 2 if normalized_query.lower() in haystack else 0
     visible = " ".join([chunk.get("title", ""), chunk.get("content_preview", "")]).lower()
     visible_bonus = sum(1 for term in terms if term.lower() in visible)
-    return float(matches + phrase_bonus + visible_bonus)
+    return float(matches + phrase_bonus + visible_bonus + source_type_bonus(chunk, normalized_query))
 
 
 def search(query, limit=10):

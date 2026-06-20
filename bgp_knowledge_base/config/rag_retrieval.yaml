@@ -54,16 +54,30 @@ query_expansions:
   路由泄露:
     - route leak
     - route leaks
+    - RFC 7908
   前缀劫持:
     - prefix hijack
+    - BGP hijack
   子前缀劫持:
     - subprefix hijack
+    - more-specific prefix hijack
   路由震荡:
     - route flap
+    - route flapping
   起源 AS:
     - origin AS
   AS 路径:
     - AS_PATH
+  RPKI:
+    - resource public key infrastructure
+    - route origin validation
+  ROA:
+    - route origin authorization
+  ASPA:
+    - autonomous system provider authorization
+  劫持:
+    - hijack
+    - BGP hijack
 context_pack:
   max_results: 8
   max_chars: 6000
