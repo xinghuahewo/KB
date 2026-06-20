@@ -13,7 +13,7 @@
 - SQLite integrity_check：ok
 - Published 文件数：17
 - SQLite 表数：30
-- JSONL 数据集数：28
+- JSONL 数据集数：29
 - 查询命令数：23
 - JSON 输出：`published/data_dictionary.json`
 
@@ -78,7 +78,7 @@
 
 | 数据集 | 记录数 | 字段 |
 | --- | ---: | --- |
-| `datasets/artifact_manifest.jsonl` | 437 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
+| `datasets/artifact_manifest.jsonl` | 440 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
 | `datasets/authoritative_source_requirements.jsonl` | 0 |  |
 | `datasets/case_observations.jsonl` | 148 | context, observation_type, review_status, source_id, source_ref, title, value |
 | `datasets/chunk_enrichment_candidates.jsonl` | 25 | candidate_id, chunk_id, evidence_type, generated_by, keywords, provider, review_status, semantic_title, source_ref, summary |
@@ -101,11 +101,12 @@
 | `datasets/human_review_workbook.jsonl` | 112 | chunk_sample_ids, cleaned_paths, decision_instructions, display_name, entity_id, entity_type, generated_by, llm_skip_reason, needs_llm, parsed_paths, priority, related_action_id, related_packet_id, review_batch, review_bucket, review_decision, review_order, review_status, source_paths, source_refs, workbook_id |
 | `datasets/lifecycle_inventory.jsonl` | 112 | approved_at, display_name, entity_file, entity_id, entity_type, evidence_index, evidence_record_count, generated_by, lifecycle_id, lifecycle_reason, lifecycle_status, next_action_ids, open_action_count, review_bucket, review_packet_id, review_status, reviewed_by, source_ref_count, source_refs, valid_from, valid_until |
 | `datasets/next_action_queue.jsonl` | 114 | action_id, action_order, action_type, blocking_reason, display_name, entity_id, entity_type, generated_by, needs_llm, priority, related_dataset, review_bucket, scope_id, skip_reason, source_refs, status, suggested_action |
+| `datasets/rag_answer_smoke_test_results.jsonl` | 3 | answer_preview, answer_status, citation_count, citations, error_code, generated, guardrails, model, model_provider, query, result_count |
 | `datasets/rag_query_eval.jsonl` | 6 | generated_by, has_traceable_result, normalized_query, query, result_count, top_chunk_ids |
 | `datasets/semantic_quality_findings.jsonl` | 16 | field, finding_id, generated_by, lifecycle_status, message, rule_id, severity, subject_id, subject_type, suggested_action |
 | `datasets/source_gap_queue.jsonl` | 0 |  |
 | `datasets/source_processing_status.jsonl` | 54 | case_observation_count, chunk_count, cleaned_status, notes, parseable, parsed_status, path, processing_status, raw_status, source_id, source_type |
-| `datasets/stage_acceptance_results.jsonl` | 27 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
+| `datasets/stage_acceptance_results.jsonl` | 29 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
 
 ## 查询命令
 

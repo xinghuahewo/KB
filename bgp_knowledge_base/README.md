@@ -224,6 +224,18 @@ curl -X POST http://127.0.0.1:8000/api/v1/rag/answer \
   -d '{"query":"route leak","limit":3}'
 ```
 
+阶段 4.2 可用真实 DeepSeek API 做冒烟验证。该脚本只从环境变量读取密钥，不把密钥写入报告或数据集：
+
+```bash
+export DEEPSEEK_API_KEY="你的 DeepSeek API key"
+python3 scripts/run_rag_answer_smoke_test.py
+```
+
+输出：
+
+- `datasets/rag_answer_smoke_test_results.jsonl`
+- `reports/rag_answer_smoke_test_report.md`
+
 自动化测试：
 
 ```bash
