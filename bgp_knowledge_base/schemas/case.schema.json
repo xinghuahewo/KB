@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Case",
+  "type": "object",
+  "required": ["id", "entity_type", "name", "event_type", "date", "source_refs"],
+  "properties": {
+    "id": {"type": "string"},
+    "entity_type": {"const": "Case"},
+    "name": {"type": "string"},
+    "event_type": {"type": "string"},
+    "date": {"type": "string"},
+    "involved_ases": {"type": "array"},
+    "affected_prefixes": {"type": "array", "items": {"type": "string"}},
+    "summary": {"type": "string"},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}

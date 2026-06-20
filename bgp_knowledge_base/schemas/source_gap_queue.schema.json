@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceGapQueueItem",
+  "type": "object",
+  "required": [
+    "gap_id",
+    "source_id",
+    "source_type",
+    "processing_status",
+    "gap_type",
+    "suggested_action",
+    "generated_by"
+  ],
+  "properties": {
+    "gap_id": {"type": "string"},
+    "source_id": {"type": "string"},
+    "source_type": {"type": "string"},
+    "path": {"type": "string"},
+    "raw_status": {"type": "string"},
+    "parseable": {"type": "boolean"},
+    "parsed_status": {"type": "string"},
+    "cleaned_status": {"type": "string"},
+    "chunk_count": {"type": "integer"},
+    "case_observation_count": {"type": "integer"},
+    "processing_status": {"type": "string"},
+    "gap_type": {
+      "enum": [
+        "unarchived_source",
+        "unsupported_format",
+        "missing_raw_file",
+        "incomplete_parse_or_chunk"
+      ]
+    },
+    "suggested_action": {
+      "enum": [
+        "archive_source",
+        "add_pdf_text_extractor",
+        "fix_missing_raw_path",
+        "decide_yaml_or_api_schema_policy",
+        "inspect_parse_output"
+      ]
+    },
+    "notes": {"type": "string"},
+    "generated_by": {"type": "string"}
+  }
+}

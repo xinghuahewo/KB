@@ -1,0 +1,64 @@
+{
+  "type": "object",
+  "required": [
+    "session_item_id",
+    "session_id",
+    "session_order",
+    "within_session_order",
+    "global_review_order",
+    "entity_id",
+    "entity_type",
+    "display_name",
+    "review_batch",
+    "review_bucket",
+    "review_status",
+    "review_decision",
+    "application_status",
+    "queue_status",
+    "source_refs",
+    "cleaned_paths",
+    "parsed_paths",
+    "top_extract_ids",
+    "top_chunk_ids",
+    "top_match_scores",
+    "decision_input_path",
+    "next_step",
+    "needs_llm",
+    "generated_by"
+  ],
+  "properties": {
+    "session_item_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "session_order": {"type": "integer"},
+    "within_session_order": {"type": "integer"},
+    "global_review_order": {"type": "integer"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "review_batch": {"type": "string"},
+    "review_bucket": {"type": "string"},
+    "review_status": {"type": "string"},
+    "review_decision": {
+      "type": "string",
+      "enum": ["unreviewed", "approved", "rejected", "needs_source", "needs_semantic_review"]
+    },
+    "application_status": {
+      "type": "string",
+      "enum": ["no_op", "ready_to_apply", "manual_followup", "blocked_by_llm", "blocked_invalid_entity"]
+    },
+    "queue_status": {
+      "type": "string",
+      "enum": ["awaiting_human_review", "ready_to_apply", "manual_followup", "blocked_by_llm"]
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "cleaned_paths": {"type": "array", "items": {"type": "string"}},
+    "parsed_paths": {"type": "array", "items": {"type": "string"}},
+    "top_extract_ids": {"type": "array", "items": {"type": "string"}},
+    "top_chunk_ids": {"type": "array", "items": {"type": "string"}},
+    "top_match_scores": {"type": "array", "items": {"type": "integer"}},
+    "decision_input_path": {"type": "string"},
+    "next_step": {"type": "string"},
+    "needs_llm": {"type": "boolean"},
+    "generated_by": {"type": "string", "const": "scripts/build_human_review_session_queue.py"}
+  }
+}

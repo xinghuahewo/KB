@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContextPack",
+  "type": "object",
+  "required": [
+    "query",
+    "results",
+    "citations",
+    "excluded_by_policy"
+  ],
+  "properties": {
+    "query": {"type": "string"},
+    "normalized_query": {"type": "string"},
+    "results": {
+      "type": "array",
+      "items": {"$ref": "retrieval_result.schema.json"}
+    },
+    "citations": {"type": "array", "items": {"type": "object"}},
+    "excluded_by_policy": {"type": "array", "items": {"type": "object"}},
+    "generated_by": {"type": "string"}
+  }
+}

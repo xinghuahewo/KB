@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "required": [
+    "preview_id",
+    "record_type",
+    "run_mode",
+    "application_status",
+    "can_apply",
+    "needs_llm",
+    "count",
+    "message",
+    "generated_by"
+  ],
+  "properties": {
+    "preview_id": {"type": "string"},
+    "record_type": {
+      "type": "string",
+      "enum": ["summary", "skipped_status", "update_candidate", "updated_entity", "unchanged_entity", "missing_entity"]
+    },
+    "run_mode": {"type": "string", "enum": ["dry_run", "write"]},
+    "entity_id": {"type": "string"},
+    "entity_file": {"type": "string"},
+    "from_status": {"type": "string"},
+    "to_status": {"type": "string"},
+    "application_status": {"type": "string"},
+    "can_apply": {"type": "boolean"},
+    "needs_llm": {"type": "boolean"},
+    "count": {"type": "integer"},
+    "message": {"type": "string"},
+    "generated_by": {"type": "string", "const": "scripts/apply_human_review_decisions.py"}
+  }
+}

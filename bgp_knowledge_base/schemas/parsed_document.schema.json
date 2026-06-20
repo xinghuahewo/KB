@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ParsedDocument",
+  "type": "object",
+  "required": [
+    "doc_id",
+    "source_path",
+    "source_format",
+    "title",
+    "sections"
+  ],
+  "properties": {
+    "doc_id": {"type": "string"},
+    "source_path": {"type": "string"},
+    "source_format": {"enum": ["txt", "html", "pdf", "yaml"]},
+    "title": {"type": "string"},
+    "sections": {"type": "array", "items": {"type": "object"}}
+  }
+}

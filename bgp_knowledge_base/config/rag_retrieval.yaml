@@ -1,0 +1,68 @@
+version: rag_retrieval_v1
+default_mode: offline_framework
+trusted_collection:
+  lifecycle_status:
+    - approved
+  exclude_lifecycle_status:
+    - deprecated
+    - archived
+  exclude_semantic_blocker: true
+embedding:
+  default_provider: deterministic_mock
+  providers:
+    deterministic_mock:
+      enabled: true
+      dimensions: 32
+      downloads_model: false
+      requires_network: false
+    bge_m3:
+      enabled: false
+      model: BAAI/bge-m3
+      device: cpu
+      use_fp16: false
+      max_length: 8192
+      outputs:
+        dense: true
+        sparse: true
+        colbert: false
+vector_store:
+  default_provider: mock_jsonl
+  providers:
+    mock_jsonl:
+      enabled: true
+      path: published/rag_mock_vector_index.jsonl
+    milvus_lite:
+      enabled: false
+      uri: published/rag_milvus.db
+      collection: bgp_chunks
+    milvus_standalone:
+      enabled: false
+      uri: http://localhost:19530
+      collection: bgp_chunks
+lexical_fallback:
+  provider: sqlite_fts5
+  enabled: true
+query_expansions:
+  路由泄露:
+    - route leak
+    - route leaks
+  前缀劫持:
+    - prefix hijack
+  子前缀劫持:
+    - subprefix hijack
+  路由震荡:
+    - route flap
+  起源 AS:
+    - origin AS
+  AS 路径:
+    - AS_PATH
+context_pack:
+  max_results: 8
+  max_chars: 6000
+  generates_final_answer: false
+generated_policy:
+  embedding_manifest_path: published/embedding_manifest.json
+  vector_index_path: published/rag_mock_vector_index.jsonl
+  retrieval_index_path: published/rag_retrieval_index.json
+  eval_path: datasets/rag_query_eval.jsonl
+  report_path: reports/rag_readiness_report.md

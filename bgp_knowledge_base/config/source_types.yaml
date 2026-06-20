@@ -1,0 +1,22 @@
+standard:
+  description: "RFC, IETF draft, protocol standard"
+  default_trust_level: high
+paper:
+  description: "Academic paper"
+  default_trust_level: medium
+data_doc:
+  description: "Data source documentation"
+  default_trust_level: high
+tool_doc:
+  description: "Tool documentation"
+  default_trust_level: high
+case_report:
+  description: "BGP incident report"
+  default_trust_level: medium
+blog:
+  description: "Technical blog"
+  default_trust_level: low
+manual_note:
+  description: "Human-written note"
+  default_trust_level: internal
+

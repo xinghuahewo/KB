@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <!-- SCROLL DOWN FOR MARKDOWN DOCUMENT -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RouteViews API Documentation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link href="https://cdn.datatables.net/2.1.3/css/dataTables.dataTables.min.css" rel="stylesheet" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="icon" href="https://assets.routeviews.org/logos/png/transparent-background/tab-logo.png" />
+    <link rel="apple-touch-icon" href="https://assets.routeviews.org/logos/png/transparent-background/tab-logo.png" />
+    <meta name="msapplication-TileImage" content="https://assets.routeviews.org/logos/png/transparent-background/tab-logo.png" />
+    <style>
+body {
+  padding-top: 0px !important;
+}
+    </style>
+  </head>
+
+  <body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.datatables.net/2.1.3/js/dataTables.min.js" crossorigin="anonymous"></script>
+
+<nav class="navbar navbar-expand-md bg-body-tertiary">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="https://www.routeviews.org/routeviews/">
+      <img src="https://api.routeviews.org/docs/RV-logo-new2-150px.png" alt="RouteViews logo" width="30" height="30">
+    </a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarText" aria-controls="navbarText" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarText">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link" href="/">API Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link active" href="/docs">Documentation</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/guest/">Playground</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/member-area/">Member area</a>
+        </li>
+      </ul>
+
+      <span class="navbar-text">
+        Version: v0.10.2-129-g07aea9e
+      </span>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid">
+
+    <!-- Thanks to https://lbesson.bitbucket.io/md/ for the Markdown to HTML script -->
+
+    <xmp theme="bootstrap-responsive">
+
+
+# RouteViews API Documentation
+
+## Table of Contents
+
+* [Introduction](#introduction)
+* [Access](#access)
+* [End points not discoverable from API root](#undiscoverable)
+  * [`/meta/collectors`](#meta_collectors) - metadata about RouteViews BGP collectors and their data availability
+  * [`/asn/`*asn*](#asn) - query routes originated by an Autonomous System
+  * [`/prefix/`*prefix*](#prefix) - query a route (or its parent) in the RIB
+  * [`/rib/collectors`](#rib_collectors) - get list of collectors for which we have current RIB information
+  * [`/rib/peers`](#rib_peers) - near realtime information about peers talking to our collectors
+  * [`/rib/prefixes-from-peer`](#rib_prefixes_from_peer) - network prefixes learned from a specific peer on a given collector
+  * [`/rib/adjacent-asn`](#rib_adjacent_asn) - list of peers providing prefixes learned directly from an ASN
+  * [RPKI query](#rpki) - query validation state for a prefix or for an ASN
+* [End points discoverable from API root](#discoverable)
+  * [collector](#collector) - a list of RouteViews Collectors in operation
+  * [peer](#peer) - individual peer listings
+  * [peering](#peering) - peering statistics per peer/collector
+  * [timeseries](#timeseries) - peering counts over time
+  * [rirtimeseries](#rirtimeseries) - rir grouped peering counts over time
+* Appendices
+  * [Author Goals](#author)
+
+## <a id="introduction"></a> Introduction
+
+Welcome to the RouteViews API reference guide.  This guide documents
+the access details of our API, and gives examples of common use cases.
+
+The RouteViews API is intended for network operators and researchers
+who need to make regular access to _current_ RouteViews data as part of
+their monitoring of the global routing system. The API is not intended
+for deep historical queries; the [MRT archive](https://archive.routeviews.org)
+combined with tools from [BGPKIT](https://bgpkit.com/parser) and
+[CAIDA](https://bgpstream.caida.org/) are recommended for this use case.
+
+Historically the RouteViews collectors have offered command line
+access for network operators to make quick checks about BGP
+announcements and general reachability information.  However, with the
+continue growth of the Internet, and the ever increasing size of both
+the IPv4 and IPv6 routing tables, this direct command line access is
+putting an increasing burden on the RouteViews collector
+infrastructure.  The API replaces this regular (automated) access that
+many operators and researchers use, and supplements the BGP UPDATES
+and RIB dumps that are stored on our BGP data archive at
+https://archive.routeviews.org.
+
+Currently, the API gives access to a subset of the RouteViews
+global collector infrastructure, using the latest data as seen at the
+following exchanges:
+
+Exchange | collector
+---------|-----------
+AMS-IX Amsterdam, Netherlands   | amsix.ams.routeviews.org
+LINX, London, United Kingdom     | route-views.linx.routeviews.org
+NAPAfrica, Johannesburg, South Africa | route-views.napafrica.routeviews.org
+Equinix SG1, Singapore, Singapore | route-views.sg.routeviews.org
+Equinix SYD1, Sydney, Australia | route-views.sydney.routeviews.org
+IX.br (PTT.br), São Paulo, Brazil | ix-br2.gru.routeviews.org
+Multi-hop at U of Oregon | route-views3.routeviews.org
+Multi-hop at U of Oregon | route-views4.routeviews.org
+Multi-hop at U of Oregon | route-views5.routeviews.org
+Multi-hop at U of Oregon | route-views6.routeviews.org
+
+We will add more exchanges as the infrastructure that supports the API is scaled up.
+
+## <a id="access"></a> Access
+
+The API can be accessed without authentication as a guest user,
+with severe rate limits to the usage (currently 1 API call per second).
+
+In order to relax these limits, the API users must authenticate themselves via the API key mechanism.
+[The API key management](https://api.routeviews.org/member-area/key-management)
+is available to any verified user authenticated through [PeeringDB](https://www.peeringdb.com/).
+
+The HTTP header to use for passing API keys is `Api-Key`, for example:
+
+```sh
+curl -L -s 'Api-Key: BAD_KEY_.SOME-LONG-NONSENSICAL-STRING-111' "https://api.routeviews.org/rib/collectors"
+```
+
+Rate limit for valid keys is 10 API calls per second.
+
+Supplying a non-existing key returns an error.
+Supplying no key at all is allowed, but, as mentioned above, with severe rate limits.
+
+## <a id="undiscoverable"></a> Endpoints currently not included in the Django testing playground
+
+There are several endpoints not currently discoverable from the API root in the Django testing playground at https://api.routeviews.org/guest/.
+These endpoints provide access to various types of data including collector metadata,
+near realtime RIB data (the same data that is streamed via our Kafka feed), and RPKI validation information.
+
+### <a id="meta_collectors"></a>Collectors Metadata
+
+The collectors metadata endpoint provides comprehensive information about all RouteViews BGP collectors,
+including their data availability periods, dump schedules, and access URLs for both RIB and UPDATE data.
+
+```sh
+curl -L -s "https://api.routeviews.org/meta/collectors" | jq .
+```
+
+which gives a response like this:
+
+```json
+{
+  "time": 1755770842,
+  "timeISO8601": "2025-08-21T10:07:22Z",
+  "type": "meta",
+  "error": null,
+  "data": {
+    "collectors": {
+      "route-views.eqix": {
+        "project": "routeviews",
+        "baseURL": "https://archive.routeviews.org/route-views.eqix/bgpdata/",
+        "kafkaTopics": "^routeviews\\.eqix\\.([^.]+)\\.bmp_raw$",
+        "dataTypes": {
+          "ribs": {
+            "dumpPeriod": 7200,
+            "dumpDuration": 120,
+            "oldestDumpTime": "1084802340",
+            "oldestDumpTimeISO8601": "2004-05-17T13:59:00Z",
+            "latestDumpTime": "1755770400",
+            "latestDumpTimeISO8601": "2025-08-21T10:00:00Z",
+            "latestDumpFile": "https://archive.routeviews.org/route-views.eqix/bgpdata/2025.08/RIBS/rib.20250821.1000.bz2"
+          },
+          "updates": {
+            "dumpPeriod": 900,
+            "dumpDuration": 900,
+            "oldestDumpTime": "1084802340",
+            "oldestDumpTimeISO8601": "2004-05-17T13:59:00Z",
+            "latestDumpTime": "1755769500",
+            "latestDumpTimeISO8601": "2025-08-21T09:45:00Z",
+            "latestDumpFile": "https://archive.routeviews.org/route-views.eqix/bgpdata/2025.08/UPDATES/updates.20250821.0945.bz2"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+The response includes metadata for all active RouteViews collectors. Each collector entry provides:
+
+- **project**: Always "routeviews" for RouteViews collectors
+- **baseURL**: Direct URL to the collector's archive directory
+- **kafkaTopics**: Regular expression pattern for Kafka topic names streaming this collector's data
+- **dataTypes**: Information about available data types:
+  - **ribs**: Routing Information Base dumps
+    - **dumpPeriod**: Time between dumps in seconds (7200 = 2 hours)
+    - **dumpDuration**: Expected dump duration in seconds (120 = 2 minutes)
+    - **oldestDumpTime**: Unix timestamp of oldest available RIB dump
+    - **latestDumpTime**: Unix timestamp of most recent RIB dump
+    - **latestDumpFile**: Direct download URL for latest RIB dump
+  - **updates**: BGP UPDATE message dumps
+    - **dumpPeriod**: Time between dumps in seconds (900 = 15 minutes)
+    - **dumpDuration**: Expected dump duration in seconds (900 = 15 minutes)
+    - **oldestDumpTime**: Unix timestamp of oldest available UPDATE dump
+    - **latestDumpTime**: Unix timestamp of most recent UPDATE dump
+    - **latestDumpFile**: Direct download URL for latest UPDATE dump
+
+This metadata is updated every 2 minutes and reflects the current state of data availability across all
+RouteViews collectors.
+Historical data availability varies by collector, with some collectors like `route-views.eqix` having data back to 2004.
+
+### <a id="asn"></a>Autonomous System Number
+
+To find out all the routes originated by an Autonomous System, the following
+syntax is used (using AS4608 as an example):
+
+```sh
+curl -L -s  "https://api.routeviews.org/asn/4608" | jq .
+```
+
+which gives a response like this:
+
+```json
+[
+  "103.0.0.0/16",
+  "202.12.29.0/24",
+  "203.119.76.0/23",
+  "203.119.76.0/24",
+  "203.119.77.0/24",
+  "203.119.100.0/22",
+  "203.119.104.0/21",
+  "203.133.248.0/23",
+  "203.133.248.0/24",
+  "203.133.249.0/24",
+  "2001:dc0:2000::/35",
+  "2001:dc0:a000::/35",
+  "2001:dc0:e000::/35",
+  "2001:dd8:8::/48",
+  "2001:dd8:9::/48",
+  "2001:dd8:a::/48",
+  "2001:dd8:b::/48",
+  "2001:dd8:c::/48",
+  "2001:dd8:d::/48",
+  "2001:dd8:f::/48",
+  "2401:2000::/32",
+  "2401:2000:6000::/35",
+  "2408:2000::/24"
+]
+```
+
+It is possible to request routes of a certain address family.
+For this, use the `af` parameter, which can take the following values: `4`, `6`, `IPv4`, `IPv6`,
+for example:
+
+```sh
+curl -L -s  "https://api.routeviews.org/asn/4608?af=4" | jq .
+```
+
+resulting in
+
+```json
+[
+  "103.0.0.0/16",
+  "202.12.29.0/24",
+  "203.119.76.0/23",
+  "203.119.76.0/24",
+  "203.119.77.0/24",
+  "203.119.100.0/22",
+  "203.119.104.0/21",
+  "203.133.248.0/23",
+  "203.133.248.0/24",
+  "203.133.249.0/24"
+]
+```
+
+and
+
+```sh
+curl -L -s  "https://api.routeviews.org/asn/4608?af=6" | jq .
+```
+
+resulting in
+
+```json
+[
+  "2001:dc0:2000::/35",
+  "2001:dc0:a000::/35",
+  "2001:dc0:e000::/35",
+  "2001:dd8:8::/48",
+  "2001:dd8:9::/48",
+  "2001:dd8:a::/48",
+  "2001:dd8:b::/48",
+  "2001:dd8:c::/48",
+  "2001:dd8:d::/48",
+  "2001:dd8:f::/48",
+  "2401:2000::/32",
+  "2401:2000:6000::/35",
+  "2408:2000::/24"
+]
+```
+
+### <a id="prefix"></a>Prefix
+
+To find out about a prefix (or its closest match/parent) in the RIB, the following
+syntax is used (using 128.223.51.103/32 as an example):
+
+```sh
+curl -L -s  "https://api.routeviews.org/prefix/128.223.51.103/32" | jq
+```
+
+which produces the response:
+
+```json
+[
+  {
+    "prefix": "128.223.0.0/16",
+    "origin_asn": 3582,
+    "rpki_state": "not-found",
+    "rpki_roas": null,
+    "reporting_peers": [
+      {
+        "peer_asn": 267613,
+        "peer_addr": "195.66.226.39",
+        "collector": "route-views.linx",
+        "as_path": "267613 52320 6461 11164 3701 3582 3582 3582 3582 3582 3582",
+        "communities": "5469:11000 5469:10850 5469:2200",
+        "timestamp": "2024-07-09T10:00:06Z"
+      },
+      {
+        "peer_asn": 1031,
+        "peer_addr": "195.66.231.48",
+        "collector": "route-views.linx",
+        "as_path": "6447 1031 174 3701 3701 3701 3701 3582 3582 3582 3582 3582 3582",
+        "communities": "1031:701 1031:800 1031:802",
+        "timestamp": "2024-07-12T02:47:21Z"
+      },
+...
+      {
+        "peer_asn": 34177,
+        "peer_addr": "80.249.210.38",
+        "collector": "route-views.amsix",
+        "as_path": "6447 34177 3356 3701 3701 3701 3701 3701 3582 3582 3582 3582 3582 3582",
+        "communities": "",
+        "timestamp": "2024-07-13T10:49:43Z"
+      }
+    ]
+  }
+]
+```
+
+This lists every single instance of the prefix via every path
+on every collector supported by this API. The `/prefix` call returns
+ALL matching prefixes, with the results grouped by
+prefix+origin_asn, and sorted by the same combination key, with
+the longest match first.
+
+It is possible to suppress this behavior by adding a `?strict-match=yes` parameter.
+If specified, only exact prefix matches will be returned.
+
+The same query syntax is used for IPv6 (we don't require the request
+to specify which address family):
+
+```sh
+curl -L -s  "https://api.routeviews.org/prefix/2001:468:d01:33::80df:3367/128" | jq
+```
+
+which produces:
+
+```json
+[
+  {
+    "prefix": "2001:468:d01::/48",
+    "origin_asn": 3582,
+    "rpki_state": "not-found",
+    "rpki_roas": null,
+    "reporting_peers": [
+      {
+        "peer_asn": 18106,
+        "peer_addr": "2001:d98::19",
+        "collector": "route-views6",
+        "as_path": "18106 3701 3582 3582 3582 3582 3582 3582",
+        "communities": "33108:3000",
+        "timestamp": "2024-07-09T10:00:00Z"
+      },
+      {
+        "peer_asn": 20912,
+        "peer_addr": "2001:40d0::1e",
+        "collector": "route-views6",
+        "as_path": "6447 20912 6939 3701 3582 3582 3582 3582 3582 3582",
+        "communities": "",
+        "timestamp": "2024-07-12T02:32:57Z"
+      },
+...
+  },
+  {
+    "prefix": "2001:468:d00::/40",
+    "origin_asn": 4600,
+    "rpki_state": "not-found",
+    "rpki_roas": null,
+    "reporting_peers": [
+      {
+        "peer_asn": 41805,
+        "peer_addr": "2001:7f8:1::a504:1805:1",
+        "collector": "route-views.amsix",
+        "as_path": "6447 3257 174 53013 52840 13786 6939 2152 2153 4600",
+        "communities": "3257:56601 3257:30516 3257:8838 3257:56600 3257:50003",
+        "timestamp": "2024-07-13T09:34:37Z"
+      },
+...
+    ]
+  },
+  {
+    "prefix": "::/0",
+    "origin_asn": 18106,
+    "rpki_state": "not-found",
+    "rpki_roas": null,
+    "reporting_peers": [
+      {
+        "peer_asn": 53767,
+        "peer_addr": "2605:9d00::2",
+        "collector": "route-views6",
+        "as_path": "18106",
+        "communities": "",
+        "timestamp": "2024-07-09T10:00:00Z"
+      }
+    ]
+  }
+]
+```
+
+Note the hierachy here:
+
+1. We looked up 2001:468:d01:33::80df:3367/128
+2. This /128 is a subnet of 2001:468:d01::/48 which is announced by AS3582.
+3. 2001:468:d01::/48 is a subnet of 2001:468:d00::/40 which is originated by AS4600
+4. And because AS18106 is sending RouteViews the IPv6 default route, it is a parent of 2001:468:d00::/40 and is also included in the list.
+5. Note that 2001:468::/32 is an assigment by ARIN, but the /32 is not announced to the global routing table.
+
+### <a id="rib_collectors"></a> `/rib/collectors`
+
+To get a list of collectors for which the API has current RIB information (see `/prefix` and `/asn` above),
+the following syntax is used:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/collectors" | jq .
+```
+
+which produces the response:
+
+```json
+[
+  "amsix.ams",
+  "ix-br2.gru",
+  "route-views.linx",
+  "route-views.napafrica",
+  "route-views.sg",
+  "route-views.sydney",
+  "route-views3",
+  "route-views4",
+  "route-views5",
+  "route-views6"
+]
+```
+
+### <a id="rib_peers"></a> `/rib/peers`
+
+To get near-realtime information about peers talking to our collectors,
+the following syntax is used:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/peers" | jq .
+```
+
+which produces the response:
+
+```json
+[
+  {
+    "asn": 209,
+    "addr": "205.171.3.54",
+    "collector": "route-views3",
+    "prefix_count": 963519
+  },
+  {
+    "asn": 209,
+    "addr": "205.171.8.123",
+    "collector": "route-views3",
+    "prefix_count": 963486
+  },
+  {
+    "asn": 209,
+    "addr": "205.171.200.245",
+    "collector": "route-views3",
+    "prefix_count": 963502
+  },
+  {
+    "asn": 209,
+    "addr": "2001:428::205:171:8:75",
+    "collector": "route-views6",
+    "prefix_count": 202262
+  },
+
+...
+
+  {
+    "asn": 396390,
+    "addr": "2001:468:2900::2",
+    "collector": "route-views3",
+    "prefix_count": 6089
+  },
+  {
+    "asn": 398465,
+    "addr": "195.66.227.122",
+    "collector": "route-views.linx",
+    "prefix_count": 946706
+  },
+  {
+    "asn": 398465,
+    "addr": "45.127.173.76",
+    "collector": "route-views.sydney",
+    "prefix_count": 989887
+  },
+  {
+    "asn": 398465,
+    "addr": "2001:de8:6::39:8465:1",
+    "collector": "route-views.sydney",
+    "prefix_count": 215404
+  }
+]
+```
+
+The output is sorted first by ASN, then by collector name, and finally by the peer IP address.
+There is a number of filters available, supplied by the following optional parameters:
+
+- `af` can take the following values: `4`, `6`, `IPv4`, `IPv6`, and filters by address family;
+- `asn` filters by AS number;
+- `collector` filters by collector name.
+
+More examples:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/peers?asn=4775" | jq .
+```
+
+```json
+[
+  {
+    "asn": 4775,
+    "addr": "195.66.227.151",
+    "collector": "route-views.linx",
+    "prefix_count": 1014
+  },
+  {
+    "asn": 4775,
+    "addr": "27.111.228.226",
+    "collector": "route-views.sg",
+    "prefix_count": 1011
+  },
+  {
+    "asn": 4775,
+    "addr": "2001:de8:4::4775:1",
+    "collector": "route-views.sg",
+    "prefix_count": 344
+  }
+]
+```
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/peers?asn=4775&af=4" | jq .
+```
+
+```json
+[
+  {
+    "asn": 4775,
+    "addr": "195.66.227.151",
+    "collector": "route-views.linx",
+    "prefix_count": 1014
+  },
+  {
+    "asn": 4775,
+    "addr": "27.111.228.226",
+    "collector": "route-views.sg",
+    "prefix_count": 1011
+  }
+]
+```
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/peers?asn=4775&collector=route-views.sg" | jq .
+```
+
+```json
+[
+  {
+    "asn": 4775,
+    "addr": "27.111.228.226",
+    "collector": "route-views.sg",
+    "prefix_count": 1011
+  },
+  {
+    "asn": 4775,
+    "addr": "2001:de8:4::4775:1",
+    "collector": "route-views.sg",
+    "prefix_count": 344
+  }
+]
+```
+
+```sh
+curl -L -s  "https://api.routeviews.org/rib/peers?asn=4775&collector=route-views.sg&af=6" | jq .
+```
+
+```json
+[
+  {
+    "asn": 4775,
+    "addr": "2001:de8:4::4775:1",
+    "collector": "route-views.sg",
+    "prefix_count": 344
+  }
+]
+```
+
+If you are interested in the peering history, please see [below](#discoverable) 
+
+### <a id="rib_prefixes_from_peer"></a> `/rib/prefixes-from-peer/`*`COLLECTOR`*`/`*`PEER-ASN`*`/`*`PEER-IP`*
+
+This endpoint allows you to retrieve a list of network prefixes learned
+from a specific BGP peer on a given RouteViews collector, identified by
+the collector name, the peer's Autonomous System Number (ASN), and IP
+address. This data is part of our near real-time RIB (Routing
+Information Base) information.
+
+**Path Parameters:**
+
+* *`COLLECTOR`*: The name of the RouteViews collector (e.g., `route-views3`, `ix-br2.gru`). Use the `/rib/collectors` endpoint to discover available collectors.
+
+* *`PEER-ASN`*: The Autonomous System Number of the BGP peer (e.g., `209`).
+
+* *`PEER-IP`*: The IP address of the BGP peer (e.g., `2001:428::205:171:8:123`).
+
+**Optional Query Parameters:**
+
+* `limit`: (integer) Specifies the maximum number of prefixes to return in a single response.
+    * If the user is authenticated, the default is 1000, and the maximum is 10000.
+    * If the user is not authenticated, the default is 100, and the maximum is 1000.
+    * If the provided limit is invalid (e.g., less than or equal to 0, or greater than the allowed maximum), it will be adjusted to the respective maximum limit.
+* `start_after`: (string, e.g., "2001:db8::/32") Used for pagination. It retrieves prefixes that lexically follow the specified prefix. This value is typically obtained from the `next` URL field in a previous response.
+* `regex`: (string) Filters prefixes based on their AS path using Cisco IOS-style regular expressions. For example:
+    * `_64500_` matches if AS 64500 is present anywhere in the AS path.
+    * `^64500_` matches if AS 64500 is the first AS in the path string (immediately following the reporting peer).
+    * `_64500$` matches if AS 64500 is the origin AS (the last AS in the path).
+* `community`: (string, may be specified multiple times) Filters prefixes to include only those that contain *all* specified BGP communities. The match is a substring search within the prefix's community string for each provided community value. For example, `community=65000:100&community=65000:200`.
+
+**Output Fields:**
+
+The response is a JSON object with the following fields:
+
+* `next`: (string or null) A URL string pointing to the next page of results if the number of available prefixes exceeds the `limit`. It is `null` if there are no more results.
+* `count`: (integer) The number of prefixes included in the `results` array for the current response.
+* `results`: (array) An array of prefix information objects. Each object contains:
+    * `prefix`: (string) The network prefix (e.g., "10.0.0.0/8").
+    * `origin_asn`: (integer) The ASN that originated the prefix, derived from the last AS in the AS path.
+    * `as_path`: (string) The BGP AS path as a space-separated string of ASNs.
+    * `communities`: (string) A string representation of the BGP communities associated with the prefix.
+    * `timestamp`: (string) The UTC timestamp in RFC3339 format (e.g., "2024-07-15T10:30:00Z") indicating when the prefix information was observed.
+
+**Examples**
+
+**Example 1:** Request (Basic with Limit):
+
+To get up to 2 prefixes learned from peer AS 209 at IP address 2001:428::205:171:8:123:
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?limit=2" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?limit=2&start_after=2001%3A200%3A%3A%2F32",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "2001:4:112::/48",
+      "origin_asn": 112,
+      "as_path": "209 3356 13335 112",
+      "communities": "3356:575 3356:601 209:888 3356:22 3356:100 3356:3 3356:123 209:88 3356:2050 3356:903",
+      "timestamp": "2025-05-22T04:27:14Z"
+    },
+    {
+      "prefix": "2001:200::/32",
+      "origin_asn": 2500,
+      "as_path": "209 3356 2914 2500 2500",
+      "communities": "3356:575 3356:601 209:888 3356:86 3356:22 3356:3 3356:12192 209:88 3356:666 3356:2050 3356:901",
+      "timestamp": "2025-05-22T04:27:14Z"
+    }
+  ]
+}
+```
+
+**Example 2:** Filtering with regex for AS path:
+
+To get prefixes from peer AS 148968 (IP 45.127.172.67) where the AS path contains the sequence 1299 7545 (limit to 2 results for brevity):
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views.sydney/148968/45.127.172.67?regex=_1299_7545_&limit=2" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views.sydney/148968/45.127.172.67?limit=2&regex=_1299_7545_&start_after=1.0.5.0%2F24",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "1.0.4.0/24",
+      "origin_asn": 38803,
+      "as_path": "148968 1299 7545 38803",
+      "communities": "",
+      "timestamp": "2025-05-22T12:38:24Z"
+    },
+    {
+      "prefix": "1.0.5.0/24",
+      "origin_asn": 38803,
+      "as_path": "148968 1299 7545 38803",
+      "communities": "",
+      "timestamp": "2025-05-22T12:38:24Z"
+    }
+  ]
+}
+```
+
+**Example 3:** Filtering with a single `community`:
+
+To get prefixes from peer AS 209 (IP 2001:428::205:171:8:123) that have the community "3356:901" (limit to 2 results for brevity):
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356:901&limit=2" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356%3A901&limit=2&start_after=2001%3A200%3A900%3A%3A%2F40",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "2001:200::/32",
+      "origin_asn": 2500,
+      "as_path": "209 3356 2914 2500 2500",
+      "communities": "3356:575 3356:601 209:888 3356:86 3356:22 3356:3 3356:12192 209:88 3356:666 3356:2050 3356:901",
+      "timestamp": "2025-05-22T04:27:14Z"
+    },
+    {
+      "prefix": "2001:200:900::/40",
+      "origin_asn": 7660,
+      "as_path": "209 3356 2516 7660 7660 7660",
+      "communities": "3356:575 209:888 3356:22 3356:100 3356:3 3356:123 3356:2003 209:88 3356:901",
+      "timestamp": "2025-05-22T16:00:25Z"
+    }
+  ]
+}
+```
+
+**Example 4:** Filtering with multiple `community` values (AND logic):
+
+To get prefixes from peer AS 209 (IP 2001:428::205:171:8:123) that have both "3356:901" AND "209:88" communities (limit to 2 results for brevity):
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356:901&community=209:88&limit=2" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356%3A901&community=209%3A88&limit=2&start_after=2001%3A200%3A900%3A%3A%2F40",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "2001:200::/32",
+      "origin_asn": 2500,
+      "as_path": "209 3356 2914 2500 2500",
+      "communities": "3356:575 3356:601 209:888 3356:86 3356:22 3356:3 3356:12192 209:88 3356:666 3356:2050 3356:901",
+      "timestamp": "2025-05-22T04:27:14Z"
+    },
+    {
+      "prefix": "2001:200:900::/40",
+      "origin_asn": 7660,
+      "as_path": "209 3356 2516 7660 7660 7660",
+      "communities": "3356:575 209:888 3356:22 3356:100 3356:3 3356:123 3356:2003 209:88 3356:901",
+      "timestamp": "2025-05-22T16:00:25Z"
+    }
+  ]
+}
+```
+
+**Example 5:** Combining `community` and `regex` filters:
+
+To get prefixes from peer AS 209 (IP 2001:428::205:171:8:123) with community "3356:901" AND where AS path contains AS 7660 (limit to 2 results for brevity):
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356:901&regex=_7660_&limit=2" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views6/209/2001:428::205:171:8:123?community=3356%3A901&limit=2&regex=_7660_&start_after=2001%3A200%3Ae000%3A%3A%2F35",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "2001:200:900::/40",
+      "origin_asn": 7660,
+      "as_path": "209 3356 2516 7660 7660 7660",
+      "communities": "3356:575 209:888 3356:22 3356:100 3356:3 3356:123 3356:2003 209:88 3356:901",
+      "timestamp": "2025-05-22T16:00:25Z"
+    },
+    {
+      "prefix": "2001:200:e000::/35",
+      "origin_asn": 7660,
+      "as_path": "209 3356 2516 7660 7660 7660",
+      "communities": "3356:575 209:888 3356:22 3356:100 3356:3 3356:123 3356:2003 209:88 3356:901",
+      "timestamp": "2025-05-22T16:00:25Z"
+    }
+  ]
+}
+```
+
+**Example 6:** Using `start_after` for pagination:
+
+While `start_after` is usually taken from the next field of a previous response, you can use it directly.
+To get prefixes from peer AS 148968 (IP 45.127.172.67) starting after "200.22.177.0/24" (limit to 2 results for brevity):
+
+```sh
+curl -L -s "https://api.routeviews.org/rib/prefixes-from-peer/route-views.sydney/148968/45.127.172.67?limit=2&start_after=200.22.177.0%2F24" | jq .
+```
+
+```json
+{
+  "next": "/rib/prefixes-from-peer/route-views.sydney/148968/45.127.172.67?limit=2&start_after=200.23.1.0%2F24",
+  "count": 2,
+  "results": [
+    {
+      "prefix": "200.23.0.0/23",
+      "origin_asn": 397239,
+      "as_path": "148968 16552 12008 397239",
+      "communities": "",
+      "timestamp": "2025-05-22T12:47:04Z"
+    },
+    {
+      "prefix": "200.23.1.0/24",
+      "origin_asn": 28498,
+      "as_path": "148968 6939 32098 28495 28498",
+      "communities": "",
+      "timestamp": "2025-05-22T12:47:04Z"
+    }
+  ]
+}
+```
+
+### <a id="rib_adjacent_asn"></a> `/rib/adjacent-asn/`*`ASN`*`
+
+This endpoint returns a list of peers connected to RouteViews collectors
+that provide at least one prefix learned directly from the specified
+asn. This behavior is equivalent to using the Cisco-style regular
+expression (^{asn}_) to match routes whose AS path starts with the
+requested asn.
+
+**Path Parameters:**
+
+* *`ASN`*: The ASN to query.
+
+**Optional Query Parameters:**
+
+* `af`: Filter by address family:
+    * 4 or IPv4: IPv4 peers only
+    * 6 or IPv6: IPv6 peers only
+* `collector`: Specify a particular RouteViews collector to filter results.
+
+**Response Structure**
+
+The response is a JSON array of peer objects, identical in structure to
+the [`/rib/peers`](#rib_peers) endpoint, containing:
+
+* `asn`: Peer ASN
+* `addr`: IP address of the peer
+* `collector`: RouteViews collector where the peer is located
+* `prefix_count`: Number of prefixes learned directly from the specified ASN observed from this peer
+
+**Examples**
+
+**Example 1**: AS44869 (no routes observed)
+
+```sh
+curl -L -s https://api.routeviews.org/rib/adjacent-asn/44869 | jq .
+```
+
+```json
+[]
+```
+
+No peers are currently providing prefixes learned directly from AS44869.
+
+**Example 2**: AS1299 (full BGP table)
+
+```sh
+curl -L -s https://api.routeviews.org/rib/adjacent-asn/1299 | jq .
+```
+
+```json
+[
+  {
+    "asn": 1299,
+    "addr": "62.115.129.134",
+    "collector": "route-views4",
+    "prefix_count": 956373
+  },
+  {
+    "asn": 1299,
+    "addr": "2001:2034:0:139::1",
+    "collector": "route-views4",
+    "prefix_count": 210523
+  }
+]
+```
+
+Peers from AS1299 are providing full IPv4 (~955k prefixes) and IPv6 (~210k prefixes) BGP tables.
+
+**Example 3**: AS7594 (full table and limited routes via route servers)
+
+```sh
+curl -L -s https://api.routeviews.org/rib/adjacent-asn/7594 | jq .
+```
+
+```json
+[
+  {
+    "asn": 7594,
+    "addr": "45.127.173.66",
+    "collector": "route-views.sydney",
+    "prefix_count": 983449
+  },
+  {
+    "asn": 7594,
+    "addr": "2001:de8:6::7594:1",
+    "collector": "route-views.sydney",
+    "prefix_count": 214911
+  },
+  {
+    "asn": 24115,
+    "addr": "45.127.172.122",
+    "collector": "route-views.sydney",
+    "prefix_count": 62
+  },
+  {
+    "asn": 24115,
+    "addr": "45.127.172.123",
+    "collector": "route-views.sydney",
+    "prefix_count": 62
+  }
+]
+```
+
+AS7594 provides a full BGP table (~983k IPv4 and ~215k IPv6 prefixes).
+Additionally, limited prefixes (62 each) from AS7594 are observed via peers with ASN 24115,
+indicating these peers are likely route servers.
+
+**Notes**
+
+* `prefix_count` specifically counts prefixes learned directly from the requested asn only, not the total number of prefixes announced by the peer.
+* Peers with very high prefix counts (e.g., >900k for IPv4 and >200k for IPv6) typically provide full Internet routing tables.
+* Differences between requested ASN and peer ASN commonly indicate a route-server peer.
+
+
+### <a id="rpki"></a> RPKI
+
+The API can also provide the validation state of any specific prefix or
+for all the prefixes originated by an ASN. The RPKI validation information
+is from the point of view of `frr.routeviews.org` which receives two views
+of the full IPv4 & IPv6 BGP tables from the University of Oregon, and
+receives validation information from two validators ([NLnetLabs Routinator
+3000](https://www.nlnetlabs.nl/projects/routing/routinator/) and
+[RPKI-client/StayRTR](https://github.com/bgp/stayrtr/).
+ 
+This data will give you the global aggregated RPKI information and can be used to determine if you managed to create ROAs for all your prefixes originated in your ASN and whether these are correct.  The data are collected from frr.routeviews.org every two hours.
+
+If you are more interested in chasing or monitoring of potential hijacks, we recommend the near real-time data in the /prefix end-point.  The output of the /prefix call does contain the RPKI state as well.  Note that the RPKI validators are the same for both data sets.  It is just a question of where the prefixes are collected and validated.
+
+To query the validation state of any single prefix in the RKPI endpoint, use this syntax:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rpki?prefix=43.224.43.0/24" | jq .
+```
+
+which gives this response:
+
+```json
+{
+  "43.224.43.0/24": {
+    "asn": [
+      {
+        "45558": "invalid"
+      }
+    ],
+    "timestamp": "2024-07-13T04:07:01.653+00:00"
+  }
+}
+```
+
+showing that this particular prefix is _invalid_.
+
+Here is an example of a prefix with validation state _notfound_:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rpki?prefix=2001:44b8::/32" | jq .
+```
+
+giving a result of:
+
+```json
+{
+  "2001:44b8::/32": {
+    "asn": [
+      {
+        "4739": "notfound"
+      }
+    ],
+    "timestamp": "2024-07-13T10:07:01.848+00:00"
+  }
+}
+```
+
+And finally here is an example of a prefix with validation state
+_valid_:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rpki?prefix=1.1.1.0/24" | jq .
+```
+
+giving a result of:
+
+```json
+{
+  "1.1.1.0/24": {
+    "asn": [
+      {
+        "13335": "valid"
+      }
+    ],
+    "timestamp": "2024-07-13T10:07:01.848+00:00"
+  }
+}
+```
+
+To find out the validation state of prefixes originated by any specific
+autonomous system, the following syntax is used:
+
+```sh
+curl -L -s  "https://api.routeviews.org/rpki?asn=44869" | jq .
+```
+
+which produces the following output:
+
+```json
+{
+  "44869": {
+    "prefix": [
+      {
+        "5.103.0.0/16": "valid"
+      },
+      {
+        "5.186.0.0/16": "valid"
+      },
+      {
+        "37.122.240.0/21": "valid"
+      },
+      {
+        "46.21.32.0/20": "valid"
+      },
+      {
+        "77.33.0.0/16": "valid"
+      },
+      {
+        "78.143.64.0/18": "valid"
+      },
+      {
+        "80.71.64.0/19": "valid"
+      },
+      {
+        "80.208.0.0/17": "valid"
+      },
+      {
+        "80.209.0.0/17": "valid"
+      },
+      {
+        "87.104.0.0/18": "valid"
+      },
+      {
+        "89.239.192.0/18": "valid"
+      },
+      {
+        "212.178.160.0/19": "valid"
+      },
+      {
+        "2a02:17c0::/32": "valid"
+      }
+    ],
+    "timestamp": "2024-07-13T04:07:01.653+00:00"
+  }
+}
+```
+
+## <a id=discoverable></a>Endpoints discoverable from API root
+
+The following table lists the API Root Options (all discoverable from the
+API root).
+
+| Term | Explanation |
+|---|---|
+| [collector](#collector) | a list of RouteViews Collectors in operation | 
+| [peer](#peer) | individual peer listings  |
+| [peering](#peering) | peering statistics per peer/collector | 
+| [timeseries](#timeseries) | peering counts over time| 
+| [rirtimeseries](#rirtimeseries) | rir grouped peering counts over time | 
+
+These endpoints provide historical data and time series with timestamps. These data are updated once every 24 hours.
+
+Please Note: Output is paginated. (**TODO**: Is there a way to get all peers in one req, or if we aren't doing that?)  Links are provided for the next and previous page in the output. Using any other query field appears to not paginate the response (or I have not hit the limit for pagination in my testing) 
+
+### Request
+
+```sh
+curl -L -s  "https://api.routeviews.org/peer/?page=4" | jq .
+```
+
+### Response
+
+```json
+{
+  "count": 1435,
+  "next": "https://api.routeviews.org/peer/?page=5",
+  "previous": "https://api.routeviews.org/peer/?page=3",
+  "results": [
+    {
+      "url": "https://api.routeviews.org/peer/301/",
+      "name": "EDGEUNO SAS, CO",
+      "ip": "206.126.238.207",
+      "asn": "7195",
+      "rir": "lacnic",
+      "country_code": "CO"
+    },
+```
+
+## <a id="collector"></a> collector Schema: 
+
+operationId: listCollectors
+
+| Name | Description | Example | 
+|---|---|---|
+| url | link to collector by 'id' | https://api.routeviews.org/collector/44/ | 
+| name | name of the collector | pitmx.qro |
+| label | label used on collector | pitmx.qro | 
+| type | Routing Daemon in service (FRR/Quagga/Cisco) | FRR | 
+| lat | latitude | 20.56710440 | 
+| lng | longitude | -100.25827800 |
+| country | ISO-3166 country code  | MX | 
+| rir_region | RIR region (AFRINIC/APNIC/ARIN/LACNIC/RIPE NCC) | LACNIC | 
+| ipv4 | peering interface IPv4 address | 200.23.206.183 | 
+| ipv6 | peering interface IPv6 address | 2803:3440:9025::6447:1 |
+| bmp | running bmp (0 &#124; 1) | 1 | 
+| ix_speed | Speed of the peering interface | 10000 |
+| installed | date of installation | 2024-02-23T22:15:00Z | 
+| removed | date of decommissioning | null | 
+| scamper | is participating in scamper (0 &#124; 1) | 1 | 
+
+### Collector example Queries 
+
+Example: List all FRR collectors in the LACNIC Region
+
+#### Request
+
+```sh
+curl -L -s  "https://api.routeviews.org/collector/?rir_region=LACNIC&type=frr" | jq .
+```
+
+#### Response
+
+```json
+{
+  "count": 7,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "url": "https://api.routeviews.org/collector/2/",
+      "name": "route-views.chile",
+      "label": "chile",
+      "type": "FRR",
+      "lat": "-33.43970500",
+      "lng": "-70.64541600",
+      "country": "CL",
+      "rir_region": "LACNIC",
+      "ipv4": "200.16.114.60",
+      "ipv6": "2001:1398:32:177::60",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2018-01-31T20:00:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/8/",
+      "name": "route-views2.saopaulo",
+      "label": "saopaulo2",
+      "type": "FRR",
+      "lat": "-23.54598800",
+      "lng": "-46.63583600",
+      "country": "BR",
+      "rir_region": "LACNIC",
+      "ipv4": "187.16.219.166",
+      "ipv6": "2001:12f8::219:166",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2018-04-25T18:00:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/9/",
+      "name": "route-views.rio",
+      "label": "rio",
+      "type": "FRR",
+      "lat": "-22.95172800",
+      "lng": "-43.21047600",
+      "country": "BR",
+      "rir_region": "LACNIC",
+      "ipv4": "45.6.52.213",
+      "ipv6": "2001:12f8:0:2::213",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2019-05-31T21:34:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/10/",
+      "name": "route-views.fortaleza",
+      "label": "fortaleza",
+      "type": "FRR",
+      "lat": "-3.73478700",
+      "lng": "-38.45800800",
+      "country": "BR",
+      "rir_region": "LACNIC",
+      "ipv4": "200.219.146.184",
+      "ipv6": "2001:12f8:0:9::184",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2019-05-31T21:44:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/35/",
+      "name": "route-views.peru",
+      "label": "peru",
+      "type": "FRR",
+      "lat": "-12.12544000",
+      "lng": "-76.97743200",
+      "country": "PE",
+      "rir_region": "LACNIC",
+      "ipv4": "45.183.47.201",
+      "ipv6": "2803:cd60:6411:5::ab",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2021-06-23T05:30:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/42/",
+      "name": "pit.scl",
+      "label": "pit.scl",
+      "type": "FRR",
+      "lat": "-33.44748700",
+      "lng": "-70.67367600",
+      "country": "CL",
+      "rir_region": "LACNIC",
+      "ipv4": "45.68.17.253",
+      "ipv6": "2801:14:9000::6447:1",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 10000,
+      "multihop": 0,
+      "installed": "2023-08-31T23:45:00Z",
+      "removed": null,
+      "scamper": 0
+    },
+    {
+      "url": "https://api.routeviews.org/collector/44/",
+      "name": "pitmx.qro",
+      "label": "pitmx.qro",
+      "type": "FRR",
+      "lat": "20.56710440",
+      "lng": "-100.25827800",
+      "country": "MX",
+      "rir_region": "LACNIC",
+      "ipv4": "200.23.206.183",
+      "ipv6": "2803:3440:9025::6447:1",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 10000,
+      "multihop": 0,
+      "installed": "2024-02-23T22:15:00Z",
+      "removed": null,
+      "scamper": 0
+    }
+  ]
+}
+```
+Example : List all collectors in a country (NL)
+
+#### Request
+
+```sh
+curl -L -s  "https://api.routeviews.org/collector/?country=NL" | jq .
+```
+
+#### Response
+
+```json
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "url": "https://api.routeviews.org/collector/11/",
+      "name": "route-views.amsix",
+      "label": "amsix",
+      "type": "FRR",
+      "lat": "52.36060700",
+      "lng": "4.89814300",
+      "country": "NL",
+      "rir_region": "RIPE NCC",
+      "ipv4": "80.249.214.5",
+      "ipv6": "2001:7F8:1::A500:6447:1",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 1000,
+      "multihop": 0,
+      "installed": "2018-07-11T23:19:00Z",
+      "removed": null,
+      "scamper": 1
+    },
+    {
+      "url": "https://api.routeviews.org/collector/43/",
+      "name": "amsix.ams",
+      "label": "amsix.ams",
+      "type": "FRR",
+      "lat": "52.36060700",
+      "lng": "4.89814300",
+      "country": "NL",
+      "rir_region": "RIPE NCC",
+      "ipv4": "80.249.213.84",
+      "ipv6": "2001:7f8:1::a500:6447:2",
+      "bmp": 1,
+      "rpki": 1,
+      "ix_speed": 100,
+      "multihop": 0,
+      "installed": "2024-02-22T23:20:00Z",
+      "removed": null,
+      "scamper": 0
+    }
+  ]
+}
+```
+
+## <a id="peer"></a> peer Schema: 
+
+ operationId: listPeers
+
+| Name | Description | Example | 
+|---|---|---|
+| url | url pointing to specific peer id | https://api.routeviews.org/peer/1/ | 
+| name | Description of the peer | DCMSB-AS-AP DE CIX MALAYSIA SDN. BHD., MY |
+| ip | IP Address (IPv4 or IPv6 address) | 103.119.232.252 |
+| asn | The ASN of the peer | 38175
+| rir | The RIR region that the peer is in | apnic | 
+| country_code | ISO-3166 country code | MY |  
+
+
+Example : List all peers for a given ASN (2914) 
+
+#### Request
+
+```sh
+curl -L -s  "https://api.routeviews.org/peer/?asn=2914" | jq .
+```
+
+#### Response
+
+```json
+{
+  "count": 8,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "url": "https://api.routeviews.org/peer/1038/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "129.250.1.248",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/46/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "129.250.1.71",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/441/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "195.66.224.138",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/1072/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "2001:418:0:1000::f000",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/1053/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "2001:418:0:1000::f003",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/305/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "2001:504:0:2::2914:1",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/486/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "2001:7f8:4::b62:1",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    },
+    {
+      "url": "https://api.routeviews.org/peer/270/",
+      "name": "NTT-LTD-2914, US",
+      "ip": "206.126.236.12",
+      "asn": "2914",
+      "rir": "arin",
+      "country_code": "US"
+    }
+  ]
+}
+```
+
+## <a id="peering"></a> peering Schema
+
+ operationId: listPeerings
+
+| Name | Description | Example |
+|---|---|---|
+| url | link to specific entry by id |  https://api.routeviews.org/peering/44/ | 
+| prefix_count | number of prefixes received | 940830 | 
+| date | date of last measurement | 2024-01-11T00:00:00Z |
+| coverage | **CHECK THIS, APPEARS TO BE A % of high tide of prefix count** | 0.821557 | 
+| collector | link to specific collector by id | https://api.routeviews.org/collector/3/ | 
+| peer | links top specific peer by id | https://api.routeviews.org/peer/44/ | 
+
+only the general peering/ and peering/{id} are currently supported
+
+## <a id="timeseries"></a>timeseries Schema:
+
+operationId: retrieveTimeseries
+
+| Name | Description | Example |
+|---|---|---|
+| url | unique id link for timeseries | https://api.routeviews.org/timeseries/4/ | 
+| collector | name of collector | route-views2 |
+| date | date of measurement | 2001-10-28T08:28:08Z |
+| ipv4_peer_count | number of IPv4 peers | 17 | 
+| ipv4_rib_count | number of prefixes in rib | 3256816 | 
+| ipv6_peer_count | number of IPv4 peers | 0 | 
+| ipv6_rib_count | number of prefixes in rib | 0 | 
+| ipv4_prefix_count | number of routes in fib | 107469 | 
+| ipv6_prefix_count | number of routes in fib | 0 | 
+
+Looks like we can't search on the collector name, not implemented (might be deliberate) 
+
+#### Request
+
+```sh
+curl -L -s  "https://api.routeviews.org/timeseries/?collector=route-views2"
+```
+
+#### Response
+
+```json
+{
+  "collector": [
+    "Select a valid choice. That choice is not one of the available choices."
+  ]
+}
+```
+
+## <a id="rirtimeseries"></a> rirtimeseries schema: 
+
+operationID: retrieveRirTimeseries
+
+| Name | Description | Example |
+|---|---|---|
+| url | unique id for record | https://api.routeviews.org/rirtimeseries/2/
+| collector | name of collector | route-views2 |
+| date | date/time for record | 2001-10-26T23:48:06Z | 
+| afrinic_v4_peer_count | IPv4 RIR peer count | 0 
+| afrinic_v6_peer_count | IPv6 RIR peer count | 0 
+| arin_v4_peer_count | IPv4 RIR peer count | 14 
+| arin_v6_peer_count | IPv6 RIR peer count | 0 
+| apnic_v4_peer_count | IPv4 RIR peer count | 0 
+| apnic_v6_peer_count | IPv6 RIR peer count | 0 
+| lacnic_v4_peer_count | IPv4 RIR peer count | 0 
+| lacnic_v6_peer_count | IPv6 RIR peer count | 0 
+| ripencc_v4_peer_count | IPv4 RIR peer count | 3 
+| ripencc_v6_peer_count | IPv6 RIR peer count | 0 
+
+I cannot query for collector here currently.
+
+## Appendices
+
+### <a id="author"></a>Goals for the author
+
+* start out with basic testing and descriptions for the API (using the schema in the repo for guidance)
+* document any potential gotchas
+* don't hammer the API just yet
+* offer suggestions where appropriate
+* 'prettify' this into static documentation
+
+</xmp>
+
+</div>
+
+    <!--    <script type="text/javascript" src="//lbesson.bitbucket.io/md/strapdown.min.js?nonnavbar=y"></script> -->
+    <!-- <script type="text/javascript" src="https://cdn.rawgit.com/Naereen/StrapDown.js/master/strapdown.min.js?nonnavbar=y"></script> -->
+    <script type="text/javascript" src="js/strapdown.min.js?nonnavbar=y"></script>
+
+  </body>
+</html>

@@ -1,0 +1,77 @@
+version: lifecycle_metadata_v1
+generated_policy:
+  report_path: reports/lifecycle_report.md
+  inventory_path: datasets/lifecycle_inventory.jsonl
+states:
+  - id: draft
+    name: 草稿
+    description: 缺少来源、证据或复核包，尚不能进入正式复核。
+  - id: candidate
+    name: 候选
+    description: 已有来源和证据线索，等待人工复核或补充。
+  - id: reviewed
+    name: 已复核
+    description: 已完成一定复核，但尚未满足批准或发布依赖条件。
+  - id: approved
+    name: 已批准
+    description: 已批准进入知识库主视图，可被服务、检索和下游出口依赖。
+  - id: deprecated
+    name: 已弃用
+    description: 保留用于兼容或历史解释，但不建议新流程继续依赖。
+  - id: archived
+    name: 已归档
+    description: 历史归档，不进入默认活跃视图。
+metadata_fields:
+  - entity_id
+  - entity_type
+  - display_name
+  - review_status
+  - lifecycle_status
+  - lifecycle_reason
+  - source_refs
+  - source_ref_count
+  - evidence_index
+  - evidence_record_count
+  - review_packet
+  - review_packet_id
+  - review_bucket
+  - next_action
+  - next_action_ids
+  - reviewed_by
+  - approved_at
+  - valid_from
+  - valid_until
+derivation_rules:
+  - id: explicit_override
+    priority: 1
+    description: 实体级 status_overrides 优先于自动推导。
+  - id: approved_with_evidence
+    priority: 2
+    description: review_status=approved 且存在证据索引记录时推导为 approved。
+  - id: approved_without_evidence
+    priority: 3
+    description: review_status=approved 但缺少证据索引时推导为 reviewed 并报告质量提示。
+  - id: pending_with_review_context
+    priority: 4
+    description: pending 实体若已有复核包、来源引用或打开行动项，推导为 candidate。
+  - id: missing_review_context
+    priority: 5
+    description: 缺少来源引用或复核上下文时推导为 draft。
+quality_rules:
+  - id: lifecycle_status_required
+    severity: error
+    description: 每个实体必须能推导出 lifecycle_status。
+  - id: approved_requires_review_evidence
+    severity: error
+    description: approved 生命周期实体必须具备可追踪证据记录。
+  - id: deprecated_or_archived_reference_warning
+    severity: warning
+    description: deprecated 或 archived 实体若仍被活跃关系引用，需要报告提示。
+  - id: expired_validity_requires_action
+    severity: warning
+    description: valid_until 已过期实体必须存在后续行动项或降级状态。
+  - id: review_lifecycle_consistency
+    severity: error
+    description: review_status 与 lifecycle_status 不应互相冲突。
+status_overrides: []
+validity_overrides: []

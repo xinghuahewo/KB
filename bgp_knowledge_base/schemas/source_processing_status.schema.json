@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SourceProcessingStatus",
+  "type": "object",
+  "required": [
+    "source_id",
+    "source_type",
+    "raw_status",
+    "parseable",
+    "parsed_status",
+    "cleaned_status",
+    "chunk_count",
+    "case_observation_count",
+    "processing_status"
+  ],
+  "properties": {
+    "source_id": {"type": "string"},
+    "source_type": {"type": "string"},
+    "path": {"type": "string"},
+    "raw_status": {"enum": ["archived", "unarchived", "external_note", "missing"]},
+    "parseable": {"type": "boolean"},
+    "parsed_status": {"enum": ["present", "missing", "not_applicable"]},
+    "cleaned_status": {"enum": ["present", "missing", "not_applicable"]},
+    "chunk_count": {"type": "integer"},
+    "case_observation_count": {"type": "integer"},
+    "processing_status": {
+      "enum": [
+        "complete_deterministic",
+        "raw_only_unparseable",
+        "unarchived",
+        "manual_note",
+        "incomplete"
+      ]
+    },
+    "notes": {"type": "string"}
+  }
+}

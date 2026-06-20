@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <!--[if lt IE 9]><script src='//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.0/html5shiv.min.js'></script><![endif] -->
+  <title>AS Relationships - CAIDA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="twitter:card" content="summary_large_image"/>
+        <meta name="twitter:image" content="https://www.caida.org/caida-card.png"/>
+  <meta name="twitter:title" content="AS Relationships" />
+  <meta name="twitter:site" content="@caidaorg" />
+  <meta name="twitter:description" content="Accurate knowledge of AS business relationships is relevant to both technical and economic aspects of the Internet&rsquo;s inter-domain structure. The ability to infer AS relationships aids in understanding and modeling the forces that drive the evolution of the Internet topology and hierarchy." />
+  <meta property="og:title" content="AS Relationships" />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://www.caida.org/catalog/datasets/as-relationships/" /><meta property="og:image" content="https://www.caida.org/caida-card.png"/>
+  <meta property="og:site_name" content="CAIDA" />
+  <meta property="article:published_time" content="2013-11-06T01:09:53+00:00" />
+  <meta property="article:modified_time" content="2020-04-27T16:50:03+00:00" />
+
+  <meta property="og:description" content="Accurate knowledge of AS business relationships is relevant to both technical and economic aspects of the Internet&rsquo;s inter-domain structure. The ability to infer AS relationships aids in understanding and modeling the forces that drive the evolution of the Internet topology and hierarchy." />
+  <meta name="description" content="Accurate knowledge of AS business relationships is relevant to both technical and economic aspects of the Internet&rsquo;s inter-domain structure. The ability to infer AS relationships aids in understanding and modeling the forces that drive the evolution of the Internet topology and hierarchy." />  
+  <link rel="icon" href="https://www.caida.org/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="https://www.caida.org/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://www.caida.org/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://www.caida.org/favicon-16x16.png">
+  <link rel="manifest" href="https://www.caida.org/site.webmanifest">
+  <link rel="mask-icon" href="https://www.caida.org/safari-pinned-tab.svg" color="#e37d35">
+  <meta name="msapplication-TileColor" content="#2b5797">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js" integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
+  <script>
+    $( document ).ready(function() {    
+      breadcrumbTogglesWidth();
+    });
+  </script>
+    <link rel="stylesheet" href="/css/style.min.da01d1eaae71817be35431102c06f998eb70150c3391220c96789570f2a7e453.css">
+    <link rel="stylesheet" media="print" href="/css/print.min.e06ff4650f1106985b266c1236ea916037463bce127016b8741f19876c259e22.css">
+    
+    <style>
+li:target{ background-color: rgba(0, 127, 255, 0.133); }
+</style>
+</head>
+
+<body class='page page-default-single'>
+  <a href="#main-content" class="sr-only">Skip to main content</a>
+  <nav id="main-menu-mobile" class="main-menu-mobile overflow-auto">
+  <ul>
+    <li class="menu-item-resource catalog">       
+      <a href="https://catalog.caida.org/"><span>Resource Catalog</span></a>
+        <a class="subsection" href="https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20"><span>Datasets</span></a>
+        <a class="subsection" href="https://catalog.caida.org/search?query=types=presentation%20links=tag:caida%20"><span>Media / Presentations</span></a>
+        <a class="subsection" href="https://catalog.caida.org/search?query=types=paper%20links=tag:caida%20"><span>Papers</span></a>
+        <a class="subsection" href="https://catalog.caida.org/search?query=types=recipe%20"><span>Recipes</span></a>
+        <a class="subsection" href="https://catalog.caida.org/search?query=types=software%20"><span>Software / Tools</span></a>
+    </li>
+    <li class="menu-item-about">       
+      <a href="/about/"><span>About</span></a>
+        <a class="subsection" href="/about/supporting/"><span>Supporting</span></a>
+        <a class="subsection" href="/about/donate/"><span>Donate</span></a>
+        <a class="subsection" href="/about/sponsors/"><span>Sponsors</span></a>
+        <a class="subsection" href="/about/jobs/"><span>Jobs at CAIDA</span></a>
+        <a class="subsection" href="/about/annualreports/"><span>Annual Reports</span></a>
+        <a class="subsection" href="/about/progplan/"><span>Program Plan</span></a>
+        <a class="subsection" href="/about/legal/"><span>Legal Agreements</span></a>
+        <a class="subsection" href="/about/sso/"><span>Single Sign-On</span></a>
+        <a class="subsection" href="/staff/"><span>Staff</span></a>
+        <a class="subsection" href="https://blog.caida.org/"><span>Blog</span></a>
+        <a class="subsection" href="/about/contactinfo/"><span>Contact Us</span></a>
+    </li>
+    <li class="menu-item-workshops">
+        <a href="/workshops/"><span>Workshops</span></a>
+    </li>
+    <li class="menu-item-projects">
+        <a href="/projects/"><span>Projects</span></a>
+    </li>
+    <li class="menu-item-funding">
+        <a href="/funding/"><span>Funding</span></a>
+    </li>
+  </ul>
+</nav>
+  <div class="wrapper">
+    <header>
+    <div class='header'>
+  <div class="container">
+    
+    <div class="logo">
+      
+      <a href="https://www.caida.org/"><img alt="CAIDA home" src="/images/caida.png" title="CAIDA - Center for Applied Internet Data Analysis" /></a>
+    </div>
+    <div class="logo-mobile">
+      <a href="https://www.caida.org/"><img alt="CAIDA home" src="/images/caida_mobile.png" title="CAIDA - Center for Applied Internet Data Analysis" /></a>
+    </div>
+    <div class="d-none d-print-block p-2"><h1 class="text-light">AS Relationships</h1></div>
+    <nav id="main-menu" class="main-menu" aria-label="Main">
+    <div class="btn-group">
+       
+        <a href="https://catalog.caida.org/" class="btn btn-light btn-md dropdown-toggle minw " aria-haspopup="true" aria-expanded="false" role="button" ><span class="d-lg-none">Catalog</span><span class="d-none d-lg-block">Resource Catalog</span><span class="sr-only" data-toggle="dropdown"> Toggle Dropdown</span></a>
+        <div class="dropdown-menu">
+            
+              <div class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20">Datasets</a>
+                <div class="dropdown-menu">
+                    <a class="dropdown-item" href="/catalog/datasets/overview/">Overview table</a>
+                </div>
+              </div>
+            
+            
+              <div class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="https://catalog.caida.org/search?query=types=presentation%20links=tag:caida%20">Media / Presentations</a>
+                <div class="dropdown-menu">
+                    <a class="dropdown-item" href="https://www.caida.org/catalog/media/posters/">Posters</a>
+                    <a class="dropdown-item" href="https://www.caida.org/catalog/media/visualizations/">Visualizations</a>
+                </div>
+              </div>
+            
+            
+              <div class="dropdown-submenu">
+                <a class="dropdown-item dropdown-toggle" href="https://catalog.caida.org/search?query=types=paper%20links=tag:caida%20">Papers</a>
+                <div class="dropdown-menu">
+                    <a class="dropdown-item" href="https://catalog.caida.org/search?query=types=paper%20!links=tag:caida%20links=tag:used_caida_data%20">External papers</a>
+                    <a class="dropdown-item" href="https://www.caida.org/catalog/datasets/publications/report-publication/">Report new publication</a>
+                </div>
+              </div>
+            
+            
+              <a class="dropdown-item solo" href="https://catalog.caida.org/search?query=types=recipe%20">Recipes</a>
+            
+              <a class="dropdown-item solo" href="https://catalog.caida.org/search?query=types=software%20">Software / Tools</a>
+        </div>
+      
+    </div>
+    <div class="btn-group">
+       
+        <a href="/about/" class="btn btn-light btn-md dropdown-toggle minw " aria-haspopup="true" aria-expanded="false" role="button" ><span class="d-lg-none">About</span><span class="d-none d-lg-block">About</span><span class="sr-only" data-toggle="dropdown"> Toggle Dropdown</span></a>
+        <div class="dropdown-menu">
+            
+              <a class="dropdown-item solo" href="/about/supporting/">Supporting</a>
+            
+              <a class="dropdown-item solo" href="/about/donate/">Donate</a>
+            
+              <a class="dropdown-item solo" href="/about/sponsors/">Sponsors</a>
+            
+              <a class="dropdown-item solo" href="/about/jobs/">Jobs at CAIDA</a>
+            
+              <a class="dropdown-item solo" href="/about/annualreports/">Annual Reports</a>
+            
+              <a class="dropdown-item solo" href="/about/progplan/">Program Plan</a>
+            
+              <a class="dropdown-item solo" href="/about/legal/">Legal Agreements</a>
+            
+              <a class="dropdown-item solo" href="/about/sso/">Single Sign-On</a>
+            
+              <a class="dropdown-item solo" href="/staff/">Staff</a>
+            
+              <a class="dropdown-item solo" href="https://blog.caida.org/">Blog</a>
+            
+              <a class="dropdown-item solo" href="/about/contactinfo/">Contact Us</a>
+        </div>
+      
+    </div>
+    <div class="btn-group">
+      
+        <a href="/workshops/" class="btn btn-light btn-md dropdown-toggle minw " aria-haspopup="true" aria-expanded="false" role="button" >Workshops<span class="sr-only" data-toggle="dropdown"> Toggle Dropdown</span></a>
+          
+        <div class="dropdown-menu">
+  
+  <a class="dropdown-item wkshp" href="/workshops/?workshopserieslisting=GMI&show_all=1" title="GMI3S">GMI Meetings</a>
+      <a class="dropdown-item solo wkshp" href="/workshops/training/2606/" title="ESCALATE Training Program (ETP)">ETP</a>
+      <a class="dropdown-item solo wkshp" href="/workshops/aims/2602/" title="AIMS-19 Workshop">AIMS-19</a>
+      <a class="dropdown-item solo wkshp" href="/workshops/aims/2509/" title="AIMS-18 (GMI-AIMS-6) Workshop">AIMS-18 (GMI-AIMS-6)</a>
+      <a class="dropdown-item solo wkshp" href="/workshops/aims/2502/" title="AIMS-17 (GMI-AIMS-5) Workshop">AIMS-17 (GMI-AIMS-5)</a>
+      <a class="dropdown-item solo wkshp" href="/workshops/aims/2305/" title="AIMS 2023">AIMS 2023</a>
+        </div>
+      
+    </div>
+    <div class="btn-group">
+      
+        <a href="/projects/" class="btn btn-light btn-md dropdown-toggle minw " aria-haspopup="true" aria-expanded="false" role="button" >Projects<span class="sr-only" data-toggle="dropdown"> Toggle Dropdown</span></a>
+          
+        <div class="dropdown-menu">
+  
+          <a class="dropdown-item solo" href="/projects/escalate/" title="Engaging Scholars in Cybersecurity Analysis: A Laboratory for Teaching and Education">ESCALATE</a>
+          <a class="dropdown-item solo" href="/projects/rootbeer/" title="Routing Operations Observational Technology: Building to Enable Education and Research">ROOTBEER</a>
+          <a class="dropdown-item solo" href="/projects/starnova/" title="Scalable Technology to Accelerate Research Network Operations Vulnerability Alerts">STARNOVA</a>
+          <a class="dropdown-item solo" href="/projects/avoid/" title="Automated Verification Of Internet Data-paths for 5G">AVOID</a>
+          <a class="dropdown-item solo" href="/projects/rabbits/" title="A Toolkit for Reproducible Assessment of Broadband Internet Topology and Speed">RABBITS</a>
+          <a class="dropdown-item solo" href="/projects/cloudbottlenecks/" title="Detection and Analysis of Infrastructure Bottlenecks in a Cloud-Centric Internet">Cloud Bottlenecks</a>
+          <a class="dropdown-item solo" href="/projects/spoofer/" title="Spoofer">Spoofer</a>
+          <a class="dropdown-item solo" href="/projects/cloudtrace/" title="Cloudtrace">Cloudtrace</a>
+          <a class="dropdown-item solo" href="/projects/network_telescope/" title="Network Telescope">Network Telescope</a>
+          <a class="dropdown-item solo" href="/projects/as-core/" title="AS Core Visualization">AS Core Visualization</a>
+          <a class="dropdown-item solo" href="/projects/ark/" title="Archipelago Measurement Infrastructure">Ark</a>
+        </div>
+      
+    </div>
+    <div class="btn-group">
+      
+        <a href="/funding/" class="btn btn-light btn-md dropdown-toggle minw " aria-haspopup="true" aria-expanded="false" role="button" >Funding<span class="sr-only" data-toggle="dropdown"> Toggle Dropdown</span></a>
+          
+        <div class="dropdown-menu">
+  
+          <a class="dropdown-item solo" href="/funding/cns-ivoyager/" title=" Internet Voyager for Gathering Cyber Threat Intelligence">iVoyager</a>
+          <a class="dropdown-item solo" href="/funding/cici-canis/" title="Curated AI-ready Network telescope datasets for Internet Security">CANIS</a>
+          <a class="dropdown-item solo" href="/funding/cici-rootbeer/" title="Routing Operations Observational Technology: Building to Enable Education and Research">ROOTBEER</a>
+          <a class="dropdown-item solo" href="/funding/cybertraining-escalate/" title="Engaging Scholars in Cybersecurity Analysis: A Laboratory for Teaching and Education">ESCALATE</a>
+          <a class="dropdown-item solo" href="/funding/eager-idsu/" title="Applying NAIRR Pilot Resources to Infer Data Set Utility">IDSU</a>
+          <a class="dropdown-item solo" href="/funding/cns-rabbits/" title="A measurement toolkit for Reproducible Assessment of BroadBand Internet Topology and Speed">RABBITS</a>
+          <a class="dropdown-item solo" href="/funding/cici-starnova/" title="Scalable Technology to Accelerate Research Network Operations Vulnerability Alerts">STARNOVA</a>
+          <a class="dropdown-item solo" href="/funding/cns-cloudbottlenecks/" title="Detection and Analysis of Infrastructure Bottlenecks in a Cloud-Centric Internet">Cloud Bottlenecks</a>
+          <a class="dropdown-item solo" href="/funding/ccri-ilands/" title="Integrated Library for Advancing Network Data Science">ILANDS</a>
+        </div>
+      
+    </div>
+</nav>
+
+<div id="searchbox" class="d-none d-xl-block d-print-none">
+  <form method="GET" action="https://duckduckgo.com/" id="ddgform-main" class="form-inline my-2 my-xl-0">
+    <div class="input-group">
+      <input name="q" id="ddg-xl-search" value="" class="form-control" type="search" placeholder="Search CAIDA" aria-label="Search">
+      <input name="sites" value="www.caida.org" type="hidden">
+      <span class="input-group-append">
+        <button class="btn btn-outline-light ddg-search-button" aria-label="Search" title="Search within CAIDA pages" type="submit">
+            <i class="fa fa-search fa-2x"></i>
+        </button>
+      </span>
+    </div>   
+  </form>
+</div>
+
+
+    <div class="d-xl-none d-print-none">
+      <button class="btn d-inline d-xl-none btn-outline-light" aria-label="Search" data-toggle="collapse" data-target="#mobilesearch"><i class="fa fa-search"></i></button>
+      
+<button id="toggle-main-menu-mobile" class="btn hamburger hamburger--spin" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="main-menu-mobile">
+  <span class="hamburger-box">
+    <span class="hamburger-inner"></span>
+  </span>
+</button>
+
+    </div>
+  </div>
+</div>
+<div class="container d-print-none" data-id="mobilesearch">
+  <div class="row">
+    <div id="mobilesearch" class="col-12 collapse bg-primary ">
+      <form method="GET" action="https://duckduckgo.com/" id="ddgform-mobile" class="my-2 my-xl-0">
+        <div class="input-group d-xl-none">
+          <input name="q" id="ddg-collapse-search" value="" class="form-control" type="search" placeholder="Search CAIDA" aria-label="Search">
+          <input name="sites" value="www.caida.org" type="hidden">         
+          <span class="input-group-append">
+            <button class="btn btn-success ddg-search-button" aria-label="Search" type="submit">
+                Search
+            </button>
+          </span>
+        </div>        
+      </form>
+    </div>
+  </div>
+</div>
+<div class="container">
+<ul class="breadcrumb">
+  
+<li class="breadcrumb-item"><a href="/">CAIDA</a>
+</li>
+<li class="breadcrumb-item"><a href="https://catalog.caida.org/">Catalog</a>
+</li>
+<li class="breadcrumb-item active"><a href="https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20as%20relationships">AS Relationships</a>
+</li>
+</ul></div>
+
+    </header>
+
+    <div class="pt-2 pt-md-3 pb-3 pb-md-6" data-id="sidebarcontainer" id="sidebarcontainer">
+        <div class="row">
+          <aside class="col-12 order-1 col-lg-3 col-xxl-2 mb-3"  id="asidebar">
+            <div class="sticky-top mw-50 sidebar ">
+              
+
+<div class="docs-menu">
+  <h5 id="onthispage">On this page</h5><div id="pagetoc"></div> 
+
+</div>  
+  
+            </div>
+          </aside>
+          <main id="main-content" class="col-12 order-12 col-lg-9 col-xxl-10">
+
+<h1 class="title d-print-none">AS Relationships</h1>
+
+<div class="content ">
+    <div class="hrwrap">    
+    Accurate knowledge of AS business relationships is relevant to both
+technical and economic aspects of the Internet's inter-domain
+structure. Firstly, AS relationships determine routing policies that
+introduce a non-trivial set of constraints to paths over which
+Internet traffic can flow. This has implications for network     
+robustness, traffic engineering, macroscopic topology measurement
+strategies, and other research and operational considerations.
+Secondly, macroscopic analysis of AS relationships not only yields
+insight into the economic underpinnings of business realities in the
+current Internet, it also provides a solid validation framework for 
+economy-based modeling of Internet topology evolution. Indeed, the
+Internet AS-level topology and its evolutionary dynamics are
+consequences of business decisions that Internet players make.
+Therefore, the ability to infer AS relationships is a promising
+tool for understanding and modeling the economic forces
+that drive the evolution of the Internet topology and its hierarchy.    
+
+    </div>
+    <nav class="navbar navbar-expand navbar-dark bg-light rounded" id="page-menu">
+      <div class="d-lg-flex flex-grow-1 justify-content-md-center">
+        <ul class="navbar-nav flex-wrap">
+            
+<li class="nav-item btn btn-info rounded"><a class="nav-link show" href="/catalog/datasets/request_user_info_forms/as_relationships">Download AS Relationships Dataset</a>
+            </li>
+
+            
+<li class="nav-item btn btn-info rounded"><a class="nav-link show" href="https://asrank.caida.org/">AS Rank</a>
+            </li>
+
+        </ul>
+      </div>
+    </nav>
+    <hr /><h2>Background</h2>
+<p>
+The Internet is composed of thousands of ISPs that operate individual
+parts of the Internet infrastructure. ISPs engage in both formal and
+informal relationships to collectively and ubiquitously route traffic
+in the Internet. These relationships are usually realized in the form
+of business agreements that translate into engineering constraints on
+traffic flows within and across individual networks participating in
+the global Internet routing system.
+</p>
+<p>
+Accurate data on the structure of actual relationships among ASes is
+required for many research efforts concerned with performance,
+robustness, and evolution of the global Internet. Examples of both
+research and operational tasks that cannot neglect AS relationships
+include:
+</p><p>
+<ul>
+<li> realistic simulations trying to model path inflation effects caused by routing policies; </li>
+<li> understanding how packets are routed in the Internet and how to optimize Internet paths by analyzing existing deficiencies; </li>
+<li> development of more scalable interdomain routing protocols and architectures, like <i>HLP</i>, that take into account the structure of AS relationships to optimize their performance; </li>
+<li> evaluating how AS relationships affect the evolution of the Internet infrastructure and constructing economy-based models of the global Internet growth; </li>
+<li> analysis of the spectrum of BGP configuration scenarios in order to develop more expressive routing protocols and configuration languages; </li>
+<li> inference of AS paths in the Internet; </li>
+<li> modeling the structure of routing tables and developing synthetic routing tables needed for simulations of routing table lookup algorithms; </li>
+<li> development of better topology generators that account for the topological idiosyncrasies associated with AS relationships; </li>
+<li> selection of data centers for server replicas by measuring the origin 
+of traffic to existing servers and evaluating connectivity and AS relationships of candidate data centers; and </li>
+<li> selection of peers or upstream providers based on connectivity and AS relationships of candidate ISPs.</li>
+</ul>
+</p>
+  <div style="width:455px;" class="float-right asrank-image">
+    <img src="images/pyramid.png" width="453" height="218" alt="Graph of ASes, showing the different types of relationships that can exist between ASes." />
+      <p>
+  <b>figure 1.</b> Types of AS relationships. The ASes at the bottom of
+  the graph, D, E, and F, are customers of those above. ISPs in
+  the middle, B and C, are both providers of ASes below and
+  customers of ISPs above. ISPs B and C are also peers of each
+  other. ISP A at the top is a provider to B and C and a customer
+  of no one.
+      </p>
+    </div>
+    <p>
+      Although business agreements between ISPs can be complicated, the original
+      model introduced by Gao <a href="#ref_GAO"><sup>1</sup></a> abstracts
+    business relationships into the following three most common types: </p>
+    <ol>
+      <li>customer-to-provider (<em>c2p</em>) (or if looked at from the opposite direction, provider-to-customer <em>p2c</em>),</li>
+      <li>peer-to-peer (<em>p2p</em>), and</li>
+      <li>sibling-to-sibling (<em>s2s</em>)</li>
+    </ol>
+    <p>
+      The justification for this classification is that an AS must buy
+      transit services for any traffic destined to parts of the Internet
+      that this AS neither owns nor can reach through its customers. In
+      Figure 1, arrow directions reflect flows of money -- ASes at
+      lower levels are <em>customers</em> who
+      pay ISPs (<em>providers</em>) at higher levels in exchange for
+      access to the rest of the Internet, also known as <em>transit</em>.
+      We refer to links between a customer and a provider as <b><em>
+      c2p</em> (<em>p2c</em>) links</b>.
+      In Figure 1, D-&gt;B, E-&gt;B, F-&gt;C, B-&gt;A, and C-&gt;A are
+      c2p links.
+    </p>
+    <p>
+      A <b><em>p2p</em> link</b> connects two ISPs who have
+      agreed to exchange traffic on a quid pro quo basis. Peers should exchange
+      traffic only between each other and each other's customers. Peering
+      allows growing ISPs to save money on transit costs they would
+      otherwise have to pay to deliver traffic to/from their customers.
+      In Figure 2, B-C is a p2p link, unidirectional since
+      neither B nor C pays the other for the traffic they exchange.
+    </p>
+    <p>
+      An <b><em>s2s</em> link</b> connects two ASes
+      with a common administrative boundary.  Such links usually
+      appear as a result of mergers and acquisitions, or under certain
+      network management scenarios.
+    </p>
+    <div style="width:530px;" class="float-right asrank-image">
+      <img src="images/valid-invalid-paths.png" width="530" height="277" alt="Examples of paths through a graph of ASes." />
+  <p>
+    <b>figure 2.</b> The top two paths 1 and 2 are valid, while the bottom two
+    3 and 4 are invalid.
+  </p>
+    </div>
+      <p>
+  We use the notion of money transfers between ASes to define
+  <em>valid</em> and <em>invalid</em>
+  AS paths. A <b>valid path</b> between source
+  and destination ASes is one in which for <em>every</em>
+  ISP providing transit (a transit provider), there exists a customer
+  immediately adjacent to the ISP in the AS path.
+  An <b>invalid path</b> has at least one transit provider
+  not paid by a neighbor in the path.
+      </p>
+      <p>
+  In figure 2 the top two examples are valid paths, while the bottom
+  two are invalid. In Example 1 the transit providers are A, B, and
+  C. ISPs B and C pay to A, D pays to B, and F pays to C. In Example
+  2 the transit providers are B and C, and they are paid by D and F,
+  respectively. In contrast, in Example 3 the transit provider is B,
+  but not only does no one pay B, but B itself pays both A and Z.
+  Example 4 also illustrates a situation where nobody pays transit
+  provider B.
+      </p>
+      <p>
+  In other words, a valid path must have the following <em>
+  valid path pattern</em>: zero or more c2p links,
+  followed by zero or one p2p link, followed by zero or more p2c
+  links. In addition, s2s links can appear in any number anywhere in
+  the path.
+      </p>
+      <h3>History of inference algorithms</h3>
+      <p>
+  Gao's<a href="#ref_GAO"><sup>1</sup></a> pioneering work
+  inspired many researchers to seek
+  approaches to inferring ISP business relationships using information
+  from publicly available BGP routing tables. Gao used the concept
+  of valid paths as the basis for her inference heuristic and identified
+  the "top" provider in a given path based on AS degree (the number of
+  ASes with observed connectivity to a given AS).
+      </p>
+      <p>
+  Subramanian <em>et al.</em><a href="#ref_SARK"><sup>2</sup></a>
+  provided a more elegant mathematical formulation based on the
+  concept of valid paths, but they simplified the problem by not
+  inferring s2s links. Using maximization of valid paths as an objective,
+  they formulated the AS relationship inference problem as a
+  combinatorial optimization problem: given an undirected
+  graph <em>G</em> derived from a set of BGP paths
+  <em>P</em>, assign the edge type (c2p or p2p)
+  to every edge in <em>G</em> such that the total
+  number of valid paths in <em>P</em> is maximized.
+  They called the problem the <b>type-of-relationship (ToR) problem</b>,
+  conjectured that it is NP-complete, and provided a heuristic solution.
+      </p>
+      <p>
+  Di Battista <em>et al.</em><a href="#ref_DPP"><sup>3</sup></a> and independently
+  Erlebach <em>et al.</em><a href="#ref_EHS"><sup>4</sup></a> proved that the
+  ToR problem is indeed NP-complete. The latter proved also that it is even
+  harder, APX-complete. More importantly for practical purposes, both
+  studies demonstrated that p2p links <em>cannot</em>
+  be inferred in the ToR problem formulation, and they developed mathematically
+  rigorous approximate solutions to the ToR problem but inferred
+  only c2p and p2c links.  No technique thus far reliably identifies
+  p2p links.
+      </p>
+      <p>
+  Dimitropoulos, <em>et al.</em><a href="#ref_DKH1"><sup>6</sup></a>
+  identified still other issues with the ToR formulation, like the random
+  breaking of ties which can yield obviously incorrect inferences,
+  e.g., well-known large providers are inferred as customers
+  of small ASes. In the first paper<a href="#ref_DKH1"><sup>6</sup></a>
+  we handled this issue with multiobjective optimization techniques
+  that incorporated AS degree into the inference. In a subsequent
+  paper<a href="#ref_DKH2"><sup>7</sup></a> we introduced improved
+  algorithms that determine not only c2p but also p2p links (for
+  those we can detect from BGP data). These improvements achieved
+  more accurate AS relationship inferences,
+  which we demonstrate against ground truth for a set of ASes.
+  Benjamin Hummel and Sven Kosub
+  <a href="#ref_BS"><sup>8</sup></a> introduced the idea that
+  the resulting graph should be acyclic, i.e. should contain no cycles,
+  and presented a new algorithm that does the assignment and reduces
+  the number of cycles.  Our current technique creates no cycles,
+  but at the cost of "valid" (valley-free) paths in the graph.
+  M. Luckie et al.<a href="#ref_ACV"><sup>9</sup></a> dropped the
+  valley-free assumption and instead
+  relied on three assumptions about the Internet's inter-domain structure:
+  (1) an AS enters into a provider relationship to become globally reachable;
+  and (2) there exists a peering clique of ASes at the top of the hierarchy,
+  and (3) there is no cycle of p2c links.
+      </p>
+    <h3>
+      <a name="customer-cone">Customer Cone</a>
+    </h3>
+    <p>
+      One metric of the resulting AS relationship graph that allows comparison
+      across ASes is the <b>customer cone</b> -- the set of ASes, IPv4
+      prefixes, or IPv4 addresses that can be
+      reached from a given AS following only customer links.
+    </p>
+    <p>
+      Looking specifically at the <b>AS customer cone</b>,
+      we define an AS <i>A</i>'s <b>AS customer cone</b>
+      as the AS <i>A</i> itself plus all the ASes that can be reached
+      from <i>A</i> following only p2c links <b>in BGP paths we observed</b>.
+      In other words, <i>A</i>'s customer cone contains <i>A</i>, plus <i>A</i>'s
+      customers, plus its customers' customers, and so on.
+    </p>
+    <p>
+      Each AS announces a set of IPv4 prefixes.  Each IPv4 prefix represents a
+      set of contiguous IPv4 addresses which are routed as a unit.  Prefixes can
+      be nested, with the most specific prefix used for routing over less
+      specific prefixes.  To find the set of prefixes which are reachable in
+      AS <i>A</i>'s <b>IPv4 prefix customer cone</b> create the union of prefixe
+      announced by all ASes found in AS <i>A</i>'s <b>AS customer cone</b>.
+      AS <i>A</i>'s <b>IPv4 address customer cone</b> is the set of addresses
+      covered by AS <i>A</i>'s <b>IPv4 prefix customer cone</b>.
+      Prefixes overlap, which represent a set of IPv4 addresses.
+    </p>
+      <p>
+  The size of the
+  customer cone of an AS reflects the number of other elements (ASes,
+  IPv4 prefixes, or IPv4 addresses) found in it's set.  An AS in the customer
+  cone is assumed to pay, directly or indirectly, for transit, and provides a
+  coarse metric of the size or influence of an AS in the routing system.
+      </p>
+      <div style="width:200px;" class="float-right asrank-image">
+  <img style="width:200px" src="images/customer-cones.png" />
+    <a name="fig3"><b>figure 3.</b>  This graph shows the respective cone sizes for each AS in the graph.</a>
+      </div>
+      <p>figure 3 depicts several AS customer cones, ASes <b>D, E, F
+  </b>, and <b>I</b> all sit at the bottom of the hierarchy
+  and so only have a single AS in their cone. <b>H</b> ranks
+  a little bit higher with 2 ASes.  Both <b>C</b> and <b>B</b>
+  tie with 3 ASes.  Note that <b>B</b> and <b>C</b> both have
+  <b>E</b> in their respective cones.  <b>A</b> is ranked at the top
+  of the hierarchy with 6 ASes in its customer cone.
+      </p>
+      <p>
+  ASes with large customer cones play an important role
+  in the Internet's capital and governance structure. At the top of
+  this hierarchy are ISPs commonly known as Tier-1 ISPs, which
+  do not pay for transit to upstream providers at all; instead they
+  peer with each other to provide connectivity to all
+  destinations in the Internet. At the bottom of the hierarchy are
+  customer ASes who do not have their own customers and pay
+  providers to reach all destinations in the Internet.
+      </p>
+      <p>
+  We define <b>peering cone size ratio</b> as the ratio in
+  customer cone sizes of a pair of ASes if they (hypothetically) peered.
+  Similar customer cone sizes will have this ratio closer to 100,
+  also an indication the ASes have more incentive to peer.
+  The closer this ratio is to zero, the larger the difference in
+  customer cone sizes, and the less incentive the larger provider
+      will have to peer with the smaller.</p>
+      <p>
+  If a given link (AS relationship) is currently a customer link
+  and changes to a peering link, then the provider-turned-peer's customer
+  cone will likely shrink, because the cone will lose any customer ASes
+  that the given AS used to access through that customer-turned-peer.
+  The customer-turned-peer's cone size will not change since the
+  provider-turned-peer is not included in the customer cone.
+  To compare magnitude of differences, the <b> peering cone size ratio</b>
+  always uses the larger customer cone as the denominator.
+  For example, for AS pair S and N, with customer cone sizes
+  C(S) and C(N), respectively , if C'(S) and C'(N) were
+  their respective customer cone sizes if S and N became
+  p2p peers (with other links unchanged),
+  then the <b>peering cone size ratio </b> is C'(N)/C'(S)
+  if C'(S) > C'(N), otherwise C'(S)/C'(N).
+      </p>
+      <div style="width:600px;" class="float-right asrank-image">
+  <img style="width:600px" src="images/customer-to-peer.png" />
+    <span style="font-size:-1"> <b> figure 4. </b>
+    shows the effect on customer cones of changing the relationship of <b>A</b> to <b>B</b>
+    from its current one to a peering relationship.
+    </span>
+      </div>
+      <p>
+  figure 4 illustrates how different relationships affect the customer cone sizes
+  of AS <b>A</b> and <b>B</b>.  If the original graph had <b>B</b> as a
+  customer of <b>A</b> then <b>A</b>'s
+  cone contains 7 ASes: <b>A,B,C,D,E,F,G</b>.  <b>B</b>'s cone
+  contains three ASes:<b>B,F,G</b>.  If the link between <b>A</b> and
+  <b>B</b> is changed to a peering link, <b>A</b> loses customers
+  <b>B</b> and <b>G</b>, which it had access to exclusively through
+  its customer relationship with <b>B</b>.  <b>A</b>'s cone does not
+  lose <b>F</b>, since it can still reach it through its customer
+  relationship with <b>C</b>. <b>A</b>'s cone size thus shrinks to 4
+  ASes:<b>A,C,D,F</b>.  Since AS <b>B</b> did not previously reach
+  any customers through <b>A</b>, its customer cone is unaffected by
+      this change.</p>
+      <br clear="both" />
+<h2 id="geographic">Geographic Footprint</h2>
+<p> 
+ISPs maintain a set of points-of-presence (PoPs) -- locations
+where ISPs have routers/servers and related equipment/personnel --
+across the world. The refer to the set of these PoP locations as the
+ISP's <b> geographic footprint </b>. Geographic footprint is an
+important part of peer selection, as an ISP can only peer with other
+ISPs at locations where both ISPs have a PoP.
+</p>
+<p> 
+To infer an ISP's geographic footprint, we start with the set of
+prefixes in the BGP tables from the <a
+href="http://www.routeviews.org/"> Route Views </a> project routeview2 node
+and <a href="http://www.ripe.net/"> RIPE NCC's </a>
+rcc12 node.  We then break down these prefixes into the smallest set of
+IP addresses which <a
+href="http://www.digitalelement.com/our_technology/our_technology.html">
+Netacuity </a> maps to the same geographic location. We set
+this as the lower bound on the number of metro areas in which the
+ISP has presence.
+</p>
+<h2 id="caveats">Caveats and Limitations</h2>
+<p>
+  Although we know of no more rigorous empirical analysis of
+  macroscopic Internet topology enriched with AS relationships, we
+  recognize that resource limitations constrain the quality of the
+  science we can do.
+</p>
+<ul>
+<li>
+AS relationships are more complex than allowed for in our approach.
+The semantics of routing relationships between the same two ASes
+can differ by peering location or even by prefix; our model
+oversimplifies these cases by assigning a single relationship to
+each pair of ASes.
+  </li>
+<li>
+  A truly accurate picture of the Internet topology would require
+  collection of data from every AS, while our automated ranking
+  procedure is limited to the measurement points publicly available
+  at Route Views.
+  </li>
+<li>
+  As in all analyses of massive datasets, our heuristics have a
+  number of associated external parameters. We fine tune the values
+  of these parameters based on our pre-existing (but limited) notion
+  of the correct answer as well as experience with the algorithm
+  that suggests auspicious ranges.
+  </li>
+</ul>
+<p>
+More monitor points, more probing, cross-correlative analysis in
+conjunction with other sources of data, and more powerful data
+processing techniques to support larger topology samples would
+improve the integrity and utility of the relationship-based AS
+ranking.
+</p>
+<h2><a name="annotatedlinks">Inferred AS Relationships Dataset</a></h2>
+<p>
+CAIDA provides two AS Relationship datasets: serial-1 and serial-2.
+The 'serial-1' directory contains AS relationships inferred from BGP 
+using a method similar to the method described in 
+"<a href="https://catalog.caida.org/paper/2013_asrank/">AS 
+Relationships, Customer Cones, and Validation</a>".
+Serial-2 adds links inferred from BGP communities using
+the method described in 
+"<a href="https://catalog.caida.org/paper/2013_inferring_multilateral_peering/">Inferring
+Multilateral Peering</a>"
+and traceroute.
+</p><p>
+Serial-1 data is available from 1998 to present, with one file created per
+month.
+Each file contains a full AS graph derived from RouteViews and RIPE
+RIS BGP table snapshots taken at 24-hour intervals over a 5-day
+period.
+The AS relationships available are customer-provider (and
+provider-customer in the opposite direction), and peer-to-peer.
+See the README in the Serial-1 data directory for details of the file
+formats.
+</p><p>
+<div style="margin-left:2em;margin-right:10em">
+    The general serial-1 procedure for creating a file is as follows:
+    <ol>
+    <li> Extract and clean AS paths from the BGP table snapshots.</li>
+    <li> Infer the ASes that form a clique of transit-free networks at the
+      top of the AS topology (Tier-1 ASes), or use a supplied list of these
+      ASes.</li>
+    <li> Break AS paths into triplets, and use these triplets to infer
+      customer-provider relationships.</li>
+    <li> Infer peer-to-peer relationships for links that the previous
+      step did not annotate with a customer-provider relationship.</li>
+    </ol>
+</div>
+</p><p>
+Serial-2 Data is available from October 2015 to present, with one file
+created per month. In addition to the links from the serial-1 graph, we add 
+AS links inferred from BGP communities collected from IX looking
+glass servers collected in a single day and traceroute data collected on
+the same day from CAIDA's ark monitors.
+</p><p>
+To do this we first infer which AS owns each router independent of the          
+interface addresses observed at that router. The ownership inferences           
+are based on IP-to-AS mapping derived from public BGP data, list of             
+peering prefixes from PeeringDB, and the previously inferred business AS        
+relationships. Then we convert the observed IP path into an AS path             
+using the router ownership information (rather than mapping each                
+observed IP to AS directly) and retain the first AS link in the                 
+resulting path for the AS graph.  
+</p><p>
+Links discovered in this way are assumed to be peering links, since
+customer provider links are normally visible in the Routeviews BGP tables.
+<div style="margin-left:2em;margin-right:10em">
+    The general serial-2 procedure for creating a file is as follows:
+    <ol>
+    <li> Collect BGP communites from IX looking glass servers.</li>
+    <li> Infer peering links between pairs of AS which accept routes from
+   each other.</li>
+    <li> Collect archived BGP data from Routeviews and RIPE RIS.</li>
+    <li> Infer peering links at points in the observed AS paths that cross an 
+   known IX.</li>
+    <li> Collect traceroutes from ark monitors.</li>
+    <li> Convert the IP path to AS path using inferred ownership and
+   keep the first AS link in the path.</li>
+    <li> Merge all newly inferred links to the serial-1 graph as peering
+   links</li>
+    </ol>
+</div>
+</p><p>
+<a name="annotatedlinkspapers">
+For details of the algorithms used to infer AS relationships, see the
+following papers:</a>
+<ul>
+<li><a href="https://catalog.caida.org/paper/2007_as_relationships_inference/">AS Relationships: Inference and Validation</a></li>
+<li><a href="https://catalog.caida.org/paper/2005_asrelationships/">Inferring AS Relationships: Dead End or Lively Beginning?</a></li>
+<li><a href="https://catalog.caida.org/paper/2013_inferring_multilateral_peering/">Inferring Multilateral Peering</a></li>
+<li><a href="https://catalog.caida.org/paper/2013_asrank/">AS Relationships, Customer Cones, and Validation</a></li>
+<li><a href="https://catalog.caida.org/paper/2014_inferring_complex_as_relationships/">Inferring Complex AS Relationships</a></li>
+<li><a href="https://catalog.caida.org/paper/2015_ipv6_as_relationships/">IPv6 AS Relationships, Cliques, and Congruence</a></li>
+</ul>
+</p><p>
+For more information, email <a href="mailto:topology-info@caida.org" aria-label="Email topology-info@caida.org">topology-info@caida.org</a>.
+</p><p>
+<h3>Acceptable Use Agreement</h3>
+<p>
+<b>Please read the terms of the <a href="/about/legal/aua/public_aua">CAIDA Acceptable Use Agreement (AUA) for Publicy Accessible Datasets</a> below:</b><br />
+
+
+
+
+  <iframe style="width:100%;max-width:120rem;height:20rem;background-color:#eee;border:1px solid black" src="/about/legal/aua/caida_pub_aua.html"></iframe>
+</p>
+<p>
+When referencing this data (as required by the AUA), please use:
+    <blockquote>
+    The CAIDA AS Relationships Dataset, &lt;<i>date range used</i>&gt;<br ></textarea>
+    https://www.caida.org/catalog/datasets/as-relationships/
+    </blockquote>
+<b>You are required to <a href="/catalog/datasets/publications/report-publication">report your publications</a></b> using this dataset to CAIDA.
+</p>
+<h3>Data Access</h3>
+<ul>
+<li><a href="/catalog/datasets/request_user_info_forms/as_relationships">Access</a> the publicly available CAIDA AS Relationships Dataset</li>
+</ul>
+</p>
+<h2>Related Work</h2>
+<p>
+  <ul>
+<li><b>AS Rank:</b> AS relationships are used to determine the ranking of ASes based on
+    the size of customer cones.  The rankings are available through
+    the <a href="https://asrank.caida.org/">AS Rank web application</a>.</li>
+    <li>The paper <a href="https://catalog.caida.org/paper/2013_asrank/">AS Relationships, Customer Cones, and Validation</a> further describes the concepts covered on this page.</li>
+<li>In the paper <a href="https://catalog.caida.org/paper/2006_revealingas/">
+    Revealing the Autonomous System Taxonomy: The Machine Learning Approach</a>,
+    AS relationships play an important role in classification of
+    ASes into the following broad categories: large ISPs, small ISPs, customer networks, university networks,
+    Internet exchange points, and network information centers.
+    An empirical AS taxonomy based on these categories is available for download at
+    the <a href="/catalog/datasets/as-taxonomy/">
+Autonomous System Taxonomy Repository</a> page.</li>
+<li>In the paper <a href="https://catalog.caida.org/paper/2019_stable_practical_as_relationship/">Stable and Practical AS Relationship Inference with ProbLink</a>, a probabilistic AS relationship inference algorithm called ProbLink  was explored to overcome the challenges in inferring hard links, such as non-valley-free routing, limited visibility, and non-conventional peering practices.</li>
+</ul>
+</p>
+<hr/>
+<h2>
+<a name="references">References</a>
+</h2>
+<ol style="list-style-position: inside; padding-left: 0;">
+  <li id="ref_GAO">L. Gao, <a href="http://portal.acm.org/citation.cfm?id=504616">
+    <span class="reftitle">On Inferring Autonomous System Relationships in
+the Internet</span></a>,
+    IEEE/ACM Transactions on Networking, December 2001.
+  </li>
+  <li id="ref_SARK">L. Subramanian, S. Agarwal, J. Rexford, and R. H. Katz,
+    <a href="http://ieeexplore.ieee.org/xpls/abs_all.jsp?isnumber=21922&amp;arnumber=1019307">
+    <span class="reftitle">Characterizing the Internet Hierarchy from
+Multiple Vantage
+        Points</span></a>,
+    IEEE INFOCOM, 2002.
+  </li>
+  <li id="ref_DPP">G. Di Battista, M. Patrignani, and M. Pizzonia,
+    <a href="http://www.ieee-infocom.org/2003/papers/04_04.PDF">
+    <span class="reftitle">Computing the Types of the Relationships between
+Autonomous
+    Systems</span></a>,
+    IEEE INFOCOM, 2003.
+  </li>
+  <li id="ref_EHS">T. Erlebach, A. Hall, and T. Schank,
+    <a href="https://www.researchgate.net/publication/2528202_Classifying_Customer-Provider_Relationships_in_the_Internet">
+    <span class="reftitle">Classifying Customer-Provider Relationships in the
+Internet</span></a>,
+    Proceedings of the IASTED International Conference on
+    Communications and Computer Networks (CCN), 2002.
+  </li>
+  <li id="ref_XG">J. Xia and L. Gao,
+    <a href="http://rio.ecs.umass.edu/mnilpub/papers/jxia-globecom04.pdf">
+    <span class="reftitle">On the Evaluation of AS Relationship
+Inferences</span></a>,
+    IEEE Globecom, 2004.
+  </li>
+  <li id="ref_DKH1">X. Dimitropoulos, D. Krioukov, B. Huffaker, kc claffy, and G.
+Riley,
+    <a
+href="https://catalog.caida.org/paper/2005_asrelationships/">
+    <span class="reftitle">Inferring AS Relationships: Dead End or Lively
+Beginning</span></a>,
+    International Workshop on Efficient and Experimental Algorithms (WEA),
+2005.
+  </li>
+  <li id="ref_DKH2">X. Dimitropoulos, D. Krioukov, M. Fomenkov, B. Huffaker, Y. Hyun,
+    kc claffy, and G. Riley,
+    <a href="https://catalog.caida.org/paper/2006_as_relationships_inference/">
+    <span class="reftitle">AS Relationships: Inference and Validation</span></a>,
+    ACM SIGCOMM Computer Communication Review (CCR), v.37, n.1, pp.29-40,
+    2007.
+  </li>
+  <li id="ref_BS">B. Hummel and S. Kosub
+    <a href="https://www.semanticscholar.org/paper/Acyclic-type-of-relationship-problems-on-the-an-Hummel-Kosub/79816d8a1611c1ece2d560e38fc9b51d39128639">
+    <span class="reftitle">Acyclic Type-of-Relationship Problems on the
+    Internet: An Experimental Analysis </span></a>,
+    In Proceedings of the 7th ACM SIGCOMM Internet Measurement Conference
+    (IMC'2007), pages 221-226. ACM Press, New York, NY, 2007.
+  </li>
+  <li id="ref_ACV">M. Luckie, B. Huffaker, k. claffy, A. Dhamdhere, and V. Giotsas,
+    <a href="https://catalog.caida.org/paper/2013_asrank/">
+    <span class="reftitle">AS Relationships, Customer Cones, and Validation
+    </span></a>,
+    in Internet Measurement Conference (IMC), Oct 2013, pp. 243--256.
+  </li>
+</ol>
+
+</div>
+<h2 class="mt-2">Related Objects</h2>
+    See <a class="bold" href="https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20as%20relationships">https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20as%20relationships</a> to explore related objects to this document in the CAIDA Resource Catalog.
+    <br><a href="https://catalog.caida.org/search?query=types=dataset%20links=tag:caida%20as%20relationships"><button type="button" class="btn btn-info mt-2">Go to Resource Catalog entry</button></a>
+          </main>
+        </div>
+      </div>
+
+</div>
+<footer class="d-print-none">
+  
+
+<div class="text-center d-print-none" id="lastmod">
+  <div class="d-flex justify-content-center text-muted">
+    <div><small>
+      <i class="fa fa-clock-o"></i> <strong>Published</strong>
+      <time datetime="2013-11-06T01:09:53&#43;00:00">November 6, 2013</time>
+    </small></div>
+    <div class="mx-3">
+      <div class="ml-2"><small>
+      <i class="fa fa-edit"></i> <strong>Last Modified</strong> <time datetime="2020-04-27T16:50:03&#43;00:00">April 27, 2020</time>
+      </small></div>
+    </div>
+  </div>
+  
+</div>
+  
+  <div class="sub-footer">
+  <div class="container">
+    <div class="row">
+      <div class="col-2 col-md-1">
+        
+      </div>
+      <div class="col-8">
+        <div class="sub-footer-inner">
+          <ul>
+            <li><span class="d-none d-md-inline">Center&nbsp;for Applied Internet&nbsp;Data&nbsp;Analysis</span><span class="d-md-none">CAIDA</span> based at the <a href="//www.sdsc.edu/">University&nbsp;of&nbsp;California's San&nbsp;Diego&nbsp;Supercomputer&nbsp;Center</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-2 col-md-3">
+        <div class="sub-footer-inner">
+          <a class="text-nowrap" href="/about/accessibility/">Accessibility</a><span class="d-none d-md-inline">&nbsp;&middot;&nbsp;</span><a class="text-nowrap" href="/about/legal/privacy/">Privacy</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  
+
+  
+  <script>
+    function renderSidebar(){
+      if(window.innerWidth >= 1920){
+
+        $("#sidebarcontainer").removeClass("container");
+        $("#sidebarcontainer").addClass("container-fluid");
+        $("#asidebar").addClass("");
+        $("#asidebar").addClass("col-xxxl-1");
+        
+        
+        let main_width = $(".breadcrumb").width();
+        $("main").css({"max-width": main_width});
+        
+        
+        let marg_size = $(".breadcrumb")[0].getBoundingClientRect().x - $("aside")[0].getBoundingClientRect().width-10;
+        $("#asidebar").css({"margin-left":marg_size+"px"});
+        
+
+        $("#sidebarcontainer").css({"opacity":"1"});
+
+      } else {
+
+        $("#sidebarcontainer").removeClass("container-fluid");
+        $("#asidebar").removeClass("text-right");
+        $("#asidebar").css({"margin-left":""});
+        $("main").css({"max-width": ""});
+
+        $("#sidebarcontainer").addClass("container");
+        $("#sidebarcontainer").css({"opacity":"1"});
+
+      }
+    }
+
+    renderSidebar();
+
+     
+    $(window).resize(renderSidebar);
+    
+  </script>
+  <noscript>
+    <style>#sidebarcontainer { opacity: 1; }#asidebar { opacity: 0; }</style>
+  </noscript>
+  <script src="/js/global.min.1f64802bc7967b386fabd27cd4670551139b2f82a90436bf5c8725da770e6bb3.js"></script>
+
+  <script src="/c2supportfiles/awstats_misc_tracker.js" ></script>
+  <noscript><img src="/c2supportfiles/awstats_misc_tracker.js?nojs=y" height="0" width="0" style="display: none; border: 0;" alt="" /></noscript>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GJW4XFS0MC"></script>
+  <script>
+  function isDoNotTrackEnabled() {
+    if (typeof window === 'undefined') return false
+    const { doNotTrack, navigator } = window
+    const dnt = (doNotTrack || navigator.doNotTrack || navigator.msDoNotTrack || msTracking())
+    if (!dnt) return false
+    if (dnt === true || dnt === 1 || dnt === 'yes' || (typeof dnt === 'string' && dnt.charAt(0) === '1')) {
+      return true
+    }
+    return false
+  }
+
+  function msTracking() {
+    const { external } = window
+    return 'msTrackingProtectionEnabled' in external &&
+    typeof external.msTrackingProtectionEnabled === 'function' &&
+    window.external.msTrackingProtectionEnabled()
+  }
+
+  if (!isDoNotTrackEnabled()) {
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-GJW4XFS0MC', { 'anonymize_ip': false, cookie_flags: 'SameSite=None;Secure' });
+  }
+  </script>
+  
+  
+  
+</footer>
+</body>
+
+</html>

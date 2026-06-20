@@ -1,0 +1,65 @@
+version: semantic_identity_v1
+namespace:
+  prefix: bgpkb
+  vocab_uri: https://w3id.org/bgpkb/vocab#
+  base_uri: https://w3id.org/bgpkb/resource/
+generated_policy:
+  context_path: published/jsonld_context.json
+  id_map_path: published/semantic_id_map.jsonl
+  report_path: reports/semantic_identity_report.md
+uri_patterns:
+  entity: https://w3id.org/bgpkb/resource/entity/{id}
+  source: https://w3id.org/bgpkb/resource/source/{id}
+  chunk: https://w3id.org/bgpkb/resource/chunk/{id}
+  relationship: https://w3id.org/bgpkb/resource/relationship/{id}
+  evidence: https://w3id.org/bgpkb/resource/evidence/{id}
+jsonld_types:
+  entity: bgpkb:Entity
+  source: bgpkb:Source
+  chunk: bgpkb:Chunk
+  relationship: bgpkb:Relationship
+  evidence: bgpkb:Evidence
+field_mappings:
+  id:
+    jsonld: "@id"
+    description: 本地稳定标识映射为 JSON-LD @id。
+  entity_type:
+    jsonld: "@type"
+    description: 实体类型映射为 JSON-LD @type 或 bgpkb 自定义类型。
+  name:
+    skos: skos:prefLabel
+    description: 名称映射为 SKOS 首选标签。
+  aliases:
+    skos: skos:altLabel
+    description: 别名映射为 SKOS 备用标签集合。
+  definition:
+    skos: skos:definition
+    description: 定义映射为 SKOS 定义。
+  description:
+    skos: skos:definition
+    description: 描述类字段在轻量出口中先映射为 SKOS 定义。
+  source_refs:
+    prov: prov:wasDerivedFrom
+    description: 来源引用映射为 PROV-O 派生来源。
+  generated_by:
+    prov: prov:wasGeneratedBy
+    description: 生成脚本映射为 PROV-O 生成活动来源。
+  review_status:
+    jsonld: bgpkb:reviewStatus
+    description: 复核状态保留为项目自定义治理字段。
+  lifecycle_status:
+    jsonld: bgpkb:lifecycleStatus
+    description: 生命周期状态保留为项目自定义治理字段。
+  chunk_id:
+    jsonld: bgpkb:chunkId
+    description: chunk 本地 ID 映射为项目自定义字段。
+  source_ref:
+    prov: prov:atLocation
+    description: chunk 或证据中的原始来源位置映射为 PROV-O 位置提示。
+downstream_boundary:
+  preserves_primary_formats: true
+  changes_existing_jsonl: false
+  approves_pending_entities: false
+  intended_for:
+    - 阶段四 RAG context pack 稳定引用 @id。
+    - 阶段五 JSON-LD、SKOS、PROV-O 和 RDF 出口继续扩展。

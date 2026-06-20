@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RetrievalResult",
+  "type": "object",
+  "required": [
+    "@id",
+    "chunk_id",
+    "source_ref",
+    "review_status",
+    "retrieval_method",
+    "score"
+  ],
+  "properties": {
+    "@id": {"type": "string"},
+    "chunk_id": {"type": "string"},
+    "doc_id": {"type": "string"},
+    "title": {"type": "string"},
+    "source_type": {"type": "string"},
+    "chunk_type": {"type": "string"},
+    "source_ref": {"type": "string"},
+    "review_status": {"type": "string"},
+    "lifecycle_status": {"type": "string"},
+    "retrieval_method": {"type": "string"},
+    "score": {"type": "number"},
+    "content_preview": {"type": "string"}
+  }
+}

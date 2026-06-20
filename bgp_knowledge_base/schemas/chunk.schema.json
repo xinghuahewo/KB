@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chunk",
+  "type": "object",
+  "required": ["chunk_id", "doc_id", "source_type", "chunk_type", "topics", "content", "source_ref", "review_status"],
+  "properties": {
+    "chunk_id": {"type": "string"},
+    "doc_id": {"type": "string"},
+    "source_type": {"type": "string"},
+    "title": {"type": "string"},
+    "section_path": {"type": "array", "items": {"type": "string"}},
+    "chunk_type": {"type": "string"},
+    "topics": {"type": "array", "items": {"type": "string"}},
+    "content": {"type": "string"},
+    "entities": {"type": "array", "items": {"type": "string"}},
+    "source_ref": {"type": "string"},
+    "language": {"type": "string"},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}
+

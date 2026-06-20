@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NextAction",
+  "type": "object",
+  "required": [
+    "action_id",
+    "action_order",
+    "priority",
+    "action_type",
+    "status",
+    "scope_id",
+    "display_name",
+    "review_bucket",
+    "related_dataset",
+    "blocking_reason",
+    "suggested_action",
+    "needs_llm",
+    "generated_by"
+  ],
+  "properties": {
+    "action_id": {"type": "string"},
+    "action_order": {"type": "integer"},
+    "priority": {"type": "integer"},
+    "action_type": {
+      "enum": [
+        "authoritative_source_intake",
+        "entity_human_review",
+        "semantic_task_skipped"
+      ]
+    },
+    "status": {"enum": ["open", "skipped_by_policy"]},
+    "scope_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "review_bucket": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "related_dataset": {"type": "string"},
+    "blocking_reason": {"type": "string"},
+    "suggested_action": {"type": "string"},
+    "needs_llm": {"type": "boolean"},
+    "skip_reason": {"type": "string"},
+    "generated_by": {"type": "string"}
+  }
+}

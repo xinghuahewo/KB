@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EntityReviewQueueItem",
+  "type": "object",
+  "required": [
+    "queue_id",
+    "entity_id",
+    "entity_type",
+    "name",
+    "review_status",
+    "source_refs",
+    "source_ref_count",
+    "source_processing_statuses",
+    "suggested_action",
+    "generated_by"
+  ],
+  "properties": {
+    "queue_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "name": {"type": "string"},
+    "review_status": {"enum": ["pending", "approved", "rejected"]},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "source_ref_count": {"type": "integer"},
+    "source_processing_statuses": {"type": "array", "items": {"type": "string"}},
+    "blocked_source_refs": {"type": "array", "items": {"type": "string"}},
+    "suggested_action": {
+      "enum": [
+        "human_review_ready",
+        "resolve_source_gaps_first",
+        "add_source_refs_before_review"
+      ]
+    },
+    "generated_by": {"type": "string"}
+  }
+}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}搜索 · BGP 知识库服务{% endblock %}
+{% block content %}
+<section class="page-head">
+  <h1>搜索</h1>
+  <form class="searchbar compact" action="/search" method="get">
+    <input name="q" type="search" value="{{ query }}" placeholder="输入关键词" aria-label="搜索">
+    <button type="submit">搜索</button>
+  </form>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>实体结果</h2>
+    <ul class="item-list">
+      {% for item in entity_results %}
+      <li>
+        <a href="/entities/{{ item.entity_id }}">{{ item.name }}</a>
+        <span>{{ item.entity_type }} · {{ item.review_status }}</span>
+      </li>
+      {% else %}
+      <li><span>暂无实体结果</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="panel">
+    <h2>Chunk 结果</h2>
+    <ul class="chunk-list">
+      {% for item in chunk_results %}
+      <li>
+        <strong>{{ item.title }}</strong>
+        <span>{{ item.chunk_id }} · {{ item.source_type }}</span>
+        <p>{{ item.content_preview }}</p>
+      </li>
+      {% else %}
+      <li><span>暂无 chunk 结果</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

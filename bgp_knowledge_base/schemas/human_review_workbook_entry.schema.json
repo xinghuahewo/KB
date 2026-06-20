@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "required": [
+    "workbook_id",
+    "review_order",
+    "review_batch",
+    "priority",
+    "entity_id",
+    "entity_type",
+    "display_name",
+    "review_status",
+    "review_bucket",
+    "review_decision",
+    "source_refs",
+    "source_paths",
+    "parsed_paths",
+    "cleaned_paths",
+    "chunk_sample_ids",
+    "related_packet_id",
+    "related_action_id",
+    "needs_llm",
+    "llm_skip_reason",
+    "decision_instructions",
+    "generated_by"
+  ],
+  "properties": {
+    "workbook_id": {"type": "string"},
+    "review_order": {"type": "integer"},
+    "review_batch": {"type": "string"},
+    "priority": {"type": "integer"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "review_status": {"type": "string"},
+    "review_bucket": {"type": "string"},
+    "review_decision": {
+      "type": "string",
+      "enum": ["unreviewed", "approved", "rejected", "needs_source", "needs_semantic_review"]
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "source_paths": {"type": "array", "items": {"type": "string"}},
+    "parsed_paths": {"type": "array", "items": {"type": "string"}},
+    "cleaned_paths": {"type": "array", "items": {"type": "string"}},
+    "chunk_sample_ids": {"type": "array", "items": {"type": "string"}},
+    "related_packet_id": {"type": "string"},
+    "related_action_id": {"type": "string"},
+    "needs_llm": {"type": "boolean"},
+    "llm_skip_reason": {"type": "string"},
+    "decision_instructions": {"type": "string"},
+    "generated_by": {"type": "string", "const": "scripts/build_human_review_workbook.py"}
+  }
+}

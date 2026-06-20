@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}BGP 知识库服务 · 总览{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">只读知识服务</p>
+    <h1>BGP 知识库</h1>
+    <p class="lede">基于已发布 SQLite 包提供实体、来源、证据、关系和复核进度查询。</p>
+  </div>
+  <form class="searchbar" action="/search" method="get">
+    <input name="q" type="search" placeholder="搜索 route leak、RPKI、AS_PATH..." aria-label="搜索">
+    <button type="submit">搜索</button>
+  </form>
+</section>
+
+<section class="metric-grid" aria-label="知识库统计">
+  <div class="metric"><span>来源</span><strong>{{ stats.sources }}</strong></div>
+  <div class="metric"><span>实体</span><strong>{{ stats.entities }}</strong></div>
+  <div class="metric"><span>Chunks</span><strong>{{ stats.chunks }}</strong></div>
+  <div class="metric"><span>关系</span><strong>{{ stats.relationships }}</strong></div>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>复核进度</h2>
+    {% if progress %}
+    <dl class="detail-list">
+      <dt>完成率</dt><dd>{{ progress.completion_percent }}%</dd>
+      <dt>实体数</dt><dd>{{ progress.entity_count }}</dd>
+      <dt>Pending</dt><dd>{{ progress.pending_count }}</dd>
+      <dt>LLM 阻塞</dt><dd>{{ progress.blocked_by_llm_count }}</dd>
+    </dl>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <h2>开放行动</h2>
+    <ul class="item-list">
+      {% for action in open_actions %}
+      <li>
+        <a href="/entities/{{ action.entity_id }}">{{ action.display_name }}</a>
+        <span>{{ action.action_type }} · P{{ action.priority }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}

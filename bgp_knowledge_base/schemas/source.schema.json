@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source",
+  "type": "object",
+  "required": ["source_id", "title", "source_type", "trust_level", "review_status"],
+  "properties": {
+    "source_id": {"type": "string"},
+    "title": {"type": "string"},
+    "source_type": {"type": "string"},
+    "domain": {"type": "string"},
+    "url": {"type": "string"},
+    "path": {"type": "string"},
+    "trust_level": {"enum": ["high", "medium", "low", "internal"]},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}
