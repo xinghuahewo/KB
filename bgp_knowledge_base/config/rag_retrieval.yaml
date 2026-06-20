@@ -8,7 +8,8 @@ trusted_collection:
     - archived
   exclude_semantic_blocker: true
 embedding:
-  default_provider: deterministic_mock
+  default_provider: siliconflow_bge_m3
+  offline_fallback_provider: deterministic_mock
   local_model_enabled: false
   providers:
     deterministic_mock:
@@ -16,12 +17,53 @@ embedding:
       dimensions: 32
       downloads_model: false
       requires_network: false
-    bge_m3:
+      runs_on_current_device: false
+    siliconflow_bge_m3:
+      enabled: true
+      model: BAAI/bge-m3
+      base_url: https://api.siliconflow.cn/v1/embeddings
+      base_url_env: SILICONFLOW_BASE_URL
+      api_key_env: SILICONFLOW_API_KEY
+      timeout_seconds: 30
+      batch_size: 32
+      payload_style: openai_compatible
+      downloads_model: false
+      requires_network: true
+      runs_on_current_device: false
+    aliyun_eas_bge_m3:
+      enabled: true
+      model: BAAI/bge-m3
+      endpoint_env: ALIYUN_BGE_M3_ENDPOINT
+      api_key_env: ALIYUN_BGE_M3_API_KEY
+      timeout_seconds: 30
+      batch_size: 32
+      payload_style: eas_dense
+      downloads_model: false
+      requires_network: true
+      runs_on_current_device: false
+    local_bge_m3:
       enabled: false
       model: BAAI/bge-m3
       device: cpu
       use_fp16: false
       max_length: 8192
+      downloads_model: true
+      requires_network: false
+      runs_on_current_device: true
+      outputs:
+        dense: true
+        sparse: true
+        colbert: false
+    bge_m3:
+      enabled: false
+      model: BAAI/bge-m3
+      deprecated_alias_for: local_bge_m3
+      device: cpu
+      use_fp16: false
+      max_length: 8192
+      downloads_model: true
+      requires_network: false
+      runs_on_current_device: true
       outputs:
         dense: true
         sparse: true
