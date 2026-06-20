@@ -5,7 +5,7 @@
 - 阶段：RAG 就绪框架 v1 (`phase_4_rag_framework_v1`)
 - 结论：pass
 - 验收模式：`deterministic_with_effect_review`
-- 生成时间：2026-06-19T21:21:07
+- 生成时间：2026-06-20T11:33:14
 
 当前 KB 已具备不运行模型也可验收的 RAG 框架，真实 DeepSeek、Qwen/vLLM、BGE-M3 和 Milvus 路径保留为显式启用项。
 
@@ -64,8 +64,8 @@
 | `python3 scripts/build_llm_candidate_enrichment.py` | 通过 | Provider: mock; candidates require human review; primary entities unchanged |
 | `python3 scripts/build_rag_indexes.py` | 通过 | Wrote published/rag_retrieval_index.json |
 | `python3 scripts/build_rag_readiness_report.py` | 通过 | Wrote datasets/rag_query_eval.jsonl |
-| `python3 -m pytest tests/test_rag_framework_config.py tests/test_llm_candidate_enrichment.py tests/test_rag_indexes.py tests/test_rag_retrieval.py tests/test_rag_readiness_report.py -v` | 通过 | ============================== 10 passed in 0.60s ============================== |
-| `python3 -m pytest tests/test_service_api.py::test_retrieval_api_returns_traceable_search_evidence_and_context_pack -v` | 通过 | ============================== 1 passed in 0.25s =============================== |
+| `python3 -m pytest tests/test_rag_framework_config.py tests/test_llm_candidate_enrichment.py tests/test_rag_indexes.py tests/test_rag_retrieval.py tests/test_rag_readiness_report.py -v` | 通过 | ============================== 10 passed in 0.64s ============================== |
+| `python3 -m pytest tests/test_service_api.py::test_retrieval_api_returns_traceable_search_evidence_and_context_pack -v` | 通过 | ============================== 1 passed in 0.26s =============================== |
 
 ### 报告检查
 

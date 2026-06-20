@@ -2,7 +2,7 @@
 
 ## 摘要
 
-- 运行时间：2026-06-19T21:21:05
+- 运行时间：2026-06-20T11:33:12
 - 工作目录：`/Users/botongwu/Desktop/DB/bgp_knowledge_base`
 - 步骤数：45
 - 总体状态：通过
@@ -11,13 +11,13 @@
 
 | 步骤 | 脚本 | 状态 | 耗时秒 |
 | --- | --- | --- | ---: |
-| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 26.32 |
+| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 27.87 |
 | 构建知识片段 | `scripts/build_chunks.py` | 通过 | 0.18 |
-| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.03 |
+| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.04 |
 | 构建来源处理状态 | `scripts/build_source_processing_status.py` | 通过 | 0.03 |
 | 构建来源缺口队列 | `scripts/build_source_gap_queue.py` | 通过 | 0.02 |
 | 构建实体复核队列 | `scripts/build_entity_review_queue.py` | 通过 | 0.02 |
-| 构建实体来源证据索引 | `scripts/build_entity_source_evidence.py` | 通过 | 0.30 |
+| 构建实体来源证据索引 | `scripts/build_entity_source_evidence.py` | 通过 | 0.32 |
 | 构建实体人工复核包 | `scripts/build_entity_review_packets.py` | 通过 | 0.02 |
 | 构建权威来源补充需求 | `scripts/build_authoritative_source_requirements.py` | 通过 | 0.02 |
 | 构建下一步行动队列 | `scripts/build_next_action_queue.py` | 通过 | 0.02 |
@@ -27,7 +27,7 @@
 | 构建人工复核决策输入模板 | `scripts/build_human_review_decision_template.py` | 通过 | 0.02 |
 | 校验人工复核决策输入 | `scripts/build_human_review_input_validation.py` | 通过 | 0.02 |
 | 审计人工复核决策 | `scripts/build_human_review_decision_audit.py` | 通过 | 0.02 |
-| 预览人工复核决策应用 | `scripts/apply_human_review_decisions.py` | 通过 | 0.02 |
+| 预览人工复核决策应用 | `scripts/apply_human_review_decisions.py` | 通过 | 0.06 |
 | 构建人工复核进度 | `scripts/build_human_review_progress.py` | 通过 | 0.02 |
 | 构建人工复核证据摘录 | `scripts/build_human_review_evidence_extracts.py` | 通过 | 0.10 |
 | 构建人工复核会话队列 | `scripts/build_human_review_session_queue.py` | 通过 | 0.03 |
@@ -37,25 +37,25 @@
 | 构建人工复核任务板 | `scripts/build_human_review_task_board.py` | 通过 | 0.02 |
 | 构建人工复核交接清单 | `scripts/build_human_review_handoff.py` | 通过 | 0.02 |
 | 构建人工复核会话决策模板 | `scripts/build_human_review_session_decision_templates.py` | 通过 | 0.02 |
-| 构建人工复核会话指南 | `scripts/build_human_review_session_guides.py` | 通过 | 0.02 |
+| 构建人工复核会话指南 | `scripts/build_human_review_session_guides.py` | 通过 | 0.03 |
 | 构建人工复核指南 | `scripts/build_human_review_guides.py` | 通过 | 0.02 |
 | 构建术语表 | `scripts/build_glossary.py` | 通过 | 0.02 |
 | 构建发布知识库 | `scripts/build_published_knowledge_base.py` | 通过 | 0.09 |
-| 构建语义标识前置层 | `scripts/build_semantic_identity.py` | 通过 | 0.05 |
+| 构建语义标识前置层 | `scripts/build_semantic_identity.py` | 通过 | 0.06 |
 | 构建 LLM 候选增强框架 | `scripts/build_llm_candidate_enrichment.py` | 通过 | 0.04 |
-| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.11 |
-| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.16 |
-| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.67 |
+| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.13 |
+| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.18 |
+| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.71 |
 | 校验发布完整性 | `scripts/build_published_integrity_report.py` | 通过 | 0.07 |
 | 构建知识库就绪度报告 | `scripts/build_readiness_report.py` | 通过 | 0.02 |
-| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 0.70 |
+| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 0.74 |
 | 构建覆盖报告 | `scripts/build_coverage_report.py` | 通过 | 0.07 |
 | 构建数据管理能力报告 | `scripts/build_data_management_report.py` | 通过 | 0.04 |
-| 构建生命周期治理报告 | `scripts/build_lifecycle_report.py` | 通过 | 0.03 |
-| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.03 |
-| 构建 RAG 就绪框架报告 | `scripts/build_rag_readiness_report.py` | 通过 | 0.17 |
-| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 3.99 |
-| 运行质量检查 | `scripts/quality_check.py` | 通过 | 4.26 |
+| 构建生命周期治理报告 | `scripts/build_lifecycle_report.py` | 通过 | 0.04 |
+| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.04 |
+| 构建 RAG 就绪框架报告 | `scripts/build_rag_readiness_report.py` | 通过 | 0.18 |
+| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 4.23 |
+| 运行质量检查 | `scripts/quality_check.py` | 通过 | 4.59 |
 
 ## 输出详情
 

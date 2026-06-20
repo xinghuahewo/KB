@@ -4,11 +4,17 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 
 from . import database, repository
 
 
 Limit = Annotated[int, Query(ge=1, le=100)]
+
+
+class RagAnswerRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    limit: int = Field(8, ge=1, le=20)
 
 app = FastAPI(
     title="BGP 知识库服务",
@@ -112,6 +118,11 @@ def api_retrieval_evidence(entity_id: str):
 @app.get("/api/v1/retrieval/context-pack")
 def api_retrieval_context_pack(q: str, limit: Limit = 8):
     return repository.retrieval_context_pack(q, limit=limit)
+
+
+@app.post("/api/v1/rag/answer")
+def api_rag_answer(request: RagAnswerRequest):
+    return repository.rag_answer_payload(request.query, limit=request.limit)
 
 
 @app.get("/", response_class=HTMLResponse)

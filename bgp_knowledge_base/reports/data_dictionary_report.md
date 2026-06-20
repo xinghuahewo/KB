@@ -105,7 +105,7 @@
 | `datasets/semantic_quality_findings.jsonl` | 16 | field, finding_id, generated_by, lifecycle_status, message, rule_id, severity, subject_id, subject_type, suggested_action |
 | `datasets/source_gap_queue.jsonl` | 0 |  |
 | `datasets/source_processing_status.jsonl` | 54 | case_observation_count, chunk_count, cleaned_status, notes, parseable, parsed_status, path, processing_status, raw_status, source_id, source_type |
-| `datasets/stage_acceptance_results.jsonl` | 23 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
+| `datasets/stage_acceptance_results.jsonl` | 27 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
 
 ## 查询命令
 

@@ -111,6 +111,21 @@ def test_retrieval_api_returns_traceable_search_evidence_and_context_pack():
     assert "answer" not in pack_payload
 
 
+def test_rag_answer_api_returns_evidence_when_llm_key_is_missing(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    response = client.post("/api/v1/rag/answer", json={"query": "route leak", "limit": 3})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "route leak"
+    assert payload["answer_status"] == "llm_unavailable"
+    assert payload["generated"] is False
+    assert payload["citations"]
+    assert payload["context_pack"]["results"]
+    assert payload["guardrails"]["local_model_enabled"] is False
+
+
 def test_html_pages_render_search_and_entity_detail():
     home = client.get("/")
     search = client.get("/search", params={"q": "route leak"})

@@ -292,7 +292,7 @@ def write_csv(records):
         "generated_by",
     ]
     with CSV_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         for record in records:
             writer.writerow(record)

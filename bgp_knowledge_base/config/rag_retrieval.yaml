@@ -9,6 +9,7 @@ trusted_collection:
   exclude_semantic_blocker: true
 embedding:
   default_provider: deterministic_mock
+  local_model_enabled: false
   providers:
     deterministic_mock:
       enabled: true
@@ -25,6 +26,13 @@ embedding:
         dense: true
         sparse: true
         colbert: false
+    qwen_embedding:
+      enabled: false
+      model: Qwen/Qwen3-Embedding
+      reserved_for: future_remote_or_deployment_stage
+      runs_on_current_device: false
+      downloads_model: false
+      requires_network: false
 vector_store:
   default_provider: mock_jsonl
   providers:

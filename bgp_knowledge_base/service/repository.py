@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from . import retrieval_framework
+from . import rag_answer, retrieval_framework
 
 
 def rows_to_dicts(rows):
@@ -355,3 +355,7 @@ def retrieval_evidence(entity_id):
 
 def retrieval_context_pack(query, limit=8):
     return retrieval_framework.context_pack(query, limit=limit)
+
+
+def rag_answer_payload(query, limit=8):
+    return rag_answer.answer_question(query, limit=limit)

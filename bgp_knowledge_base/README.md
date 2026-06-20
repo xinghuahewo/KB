@@ -219,6 +219,9 @@ curl http://127.0.0.1:8000/api/v1/entities/anomaly_route_leak
 curl "http://127.0.0.1:8000/api/v1/search/entities?q=RPKI&limit=5"
 curl "http://127.0.0.1:8000/api/v1/search/chunks?q=route%20leak&limit=5"
 curl "http://127.0.0.1:8000/api/v1/actions?needs_llm=true&limit=5"
+curl -X POST http://127.0.0.1:8000/api/v1/rag/answer \
+  -H "Content-Type: application/json" \
+  -d '{"query":"route leak","limit":3}'
 ```
 
 自动化测试：
@@ -230,8 +233,20 @@ pytest tests -v
 当前服务边界：
 
 - 只读访问 SQLite，缺失数据库时通过 `/health` 和 API 错误返回清晰状态。
-- 不提供编辑、审批、写入、导出、RAG、embedding、向量索引或权限系统。
+- 阶段 4.1 提供 `POST /api/v1/rag/answer`，只做检索、context pack 和可追溯答案编排。
+- DeepSeek API 只从环境变量 `DEEPSEEK_API_KEY` 读取密钥；仓库只提供 `.env.example`，不保存真实密钥。
+- 当前设备不运行本地模型；`config/rag_retrieval.yaml` 中 `embedding.local_model_enabled=false`，Qwen embedding 只预留后续部署字段。
+- LLM 不可用或没有证据时不会编造答案，会返回检索证据、引用和失败状态。
+- 不提供编辑、审批、写入、导出、权限系统或知识库自动改写能力。
 - API 返回结构尽量贴近 `scripts/query_knowledge_base.py` 的 JSON 输出，方便后续迁移和集成。
+
+阶段 4.1 RAG Answer API 最小响应字段：
+
+- `answer_status`：`answered`、`llm_unavailable` 或 `no_evidence`。
+- `generated`：是否由 LLM 生成最终答案。
+- `citations`：生成或兜底响应所依据的来源引用。
+- `context_pack`：检索命中的 chunk、引用和策略排除项。
+- `guardrails`：只读、引用必需、本地模型禁用和禁止写回等边界。
 
 ## 数据管理体系
 
