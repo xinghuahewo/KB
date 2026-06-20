@@ -385,3 +385,66 @@ stages:
       non_blocking_items:
         - 当前离线结构检查不替代真实 DeepSeek 内容质量评审。
         - expected_source_refs 只作为召回观察信号，暂不作为阻塞性失败条件。
+  - id: phase_4_4_deepseek_eval_analysis_v1
+    name: DeepSeek 批量评测与失败分析 v1
+    acceptance_mode: deterministic_with_effect_review
+    required_files:
+      - docs/stages/phase_4_4_deepseek_eval_analysis_v1.md
+      - scripts/run_deepseek_rag_answer_eval.py
+      - scripts/build_rag_answer_failure_analysis.py
+      - datasets/deepseek_rag_answer_eval_results.jsonl
+      - reports/deepseek_rag_answer_eval_report.md
+      - reports/rag_answer_failure_analysis_report.md
+      - tests/test_deepseek_eval_analysis.py
+    commands:
+      - id: rag_answer_failure_analysis
+        name: 构建 RAG 答案失败样本分析
+        command: python3 scripts/build_rag_answer_failure_analysis.py
+      - id: deepseek_eval_analysis_tests
+        name: DeepSeek 批量评测与失败分析测试
+        command: python3 -m pytest tests/test_deepseek_eval_analysis.py -v
+    report_checks:
+      - id: deepseek_eval_report_summary
+        path: reports/deepseek_rag_answer_eval_report.md
+        must_contain:
+          - "# 阶段 4.4 DeepSeek 真实批量评测报告"
+          - "密钥记录：未写入报告、数据集或仓库。"
+          - "引用覆盖率"
+          - "无证据拒答率"
+      - id: failure_analysis_report_summary
+        path: reports/rag_answer_failure_analysis_report.md
+        must_contain:
+          - "# 阶段 4.4 RAG 答案失败样本分析报告"
+          - "## 失败检查分布"
+          - "## 失败样本"
+          - "密钥记录：未读取、未写入、未报告。"
+      - id: pipeline_report
+        path: reports/pipeline_report.md
+        must_contain:
+          - "总体状态：通过"
+          - "构建 RAG 答案失败样本分析"
+      - id: quality_report
+        path: reports/quality_report.md
+        must_contain:
+          - "JSON 错误数：0"
+          - "Schema 错误数：0"
+          - "制品清单未登记文件数：0"
+    effect_review:
+      one_line: 当前 KB 已具备真实 DeepSeek 批量评测记录，并能离线分析失败样本。
+      new_capabilities:
+        - 建立了真实 DeepSeek 批量评测脚本，复用阶段 4.3 固定评测集。
+        - 建立了独立真实评测产物，避免被离线结构评测覆盖。
+        - 建立了失败样本分析报告，可按失败检查和状态迁移聚合问题。
+      user_can_now:
+        - 使用环境变量运行真实 DeepSeek 批量评测。
+        - 在没有 API key 的环境中复跑失败样本分析。
+        - 快速定位真实模型回答里的引用、拒答或术语约束问题。
+      downstream_dependencies:
+        - 后续提示词优化可以直接基于失败检查分布调整。
+        - 后续 BGE-M3/Milvus 召回评估可以复用同一真实评测结果格式。
+        - 阶段五可选择通过样本作为标准化出口示例。
+    human_review_policy:
+      allow_needs_human: true
+      non_blocking_items:
+        - 真实 DeepSeek 输出仍需人工抽样判断语义准确性。
+        - 当前失败分析基于自动检查项，不替代专家评审。

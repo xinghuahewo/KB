@@ -148,6 +148,8 @@ def producer_for(rel):
         return "manual_eval_dataset"
     if rel.startswith("datasets/rag_answer_eval_results."):
         return "scripts/run_rag_answer_eval.py"
+    if rel.startswith("datasets/deepseek_rag_answer_eval_results."):
+        return "scripts/run_deepseek_rag_answer_eval.py"
     if rel.startswith("datasets/rag_answer_smoke_test_results."):
         return "scripts/run_rag_answer_smoke_test.py"
     if rel == "review_inputs/human_review_decisions_template.csv":
@@ -236,6 +238,10 @@ def producer_for(rel):
         return "scripts/build_rag_readiness_report.py"
     if rel.startswith("reports/rag_answer_eval_report.md"):
         return "scripts/run_rag_answer_eval.py"
+    if rel.startswith("reports/deepseek_rag_answer_eval_report.md"):
+        return "scripts/run_deepseek_rag_answer_eval.py"
+    if rel.startswith("reports/rag_answer_failure_analysis_report.md"):
+        return "scripts/build_rag_answer_failure_analysis.py"
     if rel.startswith("reports/rag_answer_smoke_test_report.md"):
         return "scripts/run_rag_answer_smoke_test.py"
     if rel.startswith("reports/human_review_session_decision_templates_report.md"):

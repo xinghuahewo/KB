@@ -13,7 +13,7 @@
 - SQLite integrity_check：ok
 - Published 文件数：17
 - SQLite 表数：30
-- JSONL 数据集数：31
+- JSONL 数据集数：32
 - 查询命令数：23
 - JSON 输出：`published/data_dictionary.json`
 
@@ -24,7 +24,7 @@
 | `published/README.md` | 2601 | 发布入口说明。 |  |
 | `published/bgp_knowledge_base.sqlite` | 12963840 | 本地 SQL 查询入口。 |  |
 | `published/chunk_catalog.jsonl` | 1438186 | chunk 目录，包含 chunk 元数据、预览和所在文件。 | chunk_file, chunk_id, chunk_type, content_chars, content_preview, doc_id, language, review_status, section_path, source_ref, source_type, title, topics |
-| `published/data_dictionary.json` | 99662 | 本数据字典的机器可读版本。 |  |
+| `published/data_dictionary.json` | 100512 | 本数据字典的机器可读版本。 |  |
 | `published/embedding_manifest.json` | 401 | 阶段四 RAG 框架的 embedding 覆盖、provider 和边界摘要。 |  |
 | `published/entity_catalog.jsonl` | 121250 | 实体目录，包含实体 payload、来源、证据和复核桶。 | aliases, case_observation_count, category, chunk_count, entity_file, entity_id, entity_payload, entity_type, evidence_record_count, name, review_bucket, review_status, source_ref_count, source_refs |
 | `published/integrity_summary.json` | 8950 | 发布完整性 gate 的机器可读摘要。 |  |
@@ -78,10 +78,11 @@
 
 | 数据集 | 记录数 | 字段 |
 | --- | ---: | --- |
-| `datasets/artifact_manifest.jsonl` | 444 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
+| `datasets/artifact_manifest.jsonl` | 449 | artifact_group, artifact_path, extension, generated_by, is_binary, line_count, sha256, size_bytes |
 | `datasets/authoritative_source_requirements.jsonl` | 0 |  |
 | `datasets/case_observations.jsonl` | 148 | context, observation_type, review_status, source_id, source_ref, title, value |
 | `datasets/chunk_enrichment_candidates.jsonl` | 25 | candidate_id, chunk_id, evidence_type, generated_by, keywords, provider, review_status, semantic_title, source_ref, summary |
+| `datasets/deepseek_rag_answer_eval_results.jsonl` | 20 | answer_preview, answer_status, citation_count, citations_from_context_pack, decision, expected_source_refs, expected_status, failed_checks, forbidden_terms_hit, generated, guardrails, matched_expected_source_refs, model, model_provider, must_have_terms_missing, query, question_id |
 | `datasets/entity_link_candidates.jsonl` | 25 | candidate_id, chunk_id, confidence, entity_id, generated_by, provider, review_status, source_ref |
 | `datasets/entity_review_packets.jsonl` | 112 | case_observation_count, chunk_sample_ids, cleaned_paths, display_name, entity_id, entity_payload, entity_type, evidence_record_count, generated_by, manual_note_source_count, non_manual_source_count, packet_id, parsed_paths, review_bucket, review_checklist, review_order, review_status, source_paths, source_ref_count, source_refs, suggested_action, total_chunk_count |
 | `datasets/entity_review_queue.jsonl` | 5 | blocked_source_refs, entity_id, entity_type, generated_by, name, queue_id, review_status, source_processing_statuses, source_ref_count, source_refs, suggested_action |
@@ -108,7 +109,7 @@
 | `datasets/semantic_quality_findings.jsonl` | 16 | field, finding_id, generated_by, lifecycle_status, message, rule_id, severity, subject_id, subject_type, suggested_action |
 | `datasets/source_gap_queue.jsonl` | 0 |  |
 | `datasets/source_processing_status.jsonl` | 54 | case_observation_count, chunk_count, cleaned_status, notes, parseable, parsed_status, path, processing_status, raw_status, source_id, source_type |
-| `datasets/stage_acceptance_results.jsonl` | 32 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
+| `datasets/stage_acceptance_results.jsonl` | 34 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
 
 ## 查询命令
 

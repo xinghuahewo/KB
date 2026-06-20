@@ -68,3 +68,9 @@ def test_eval_script_scores_answers_and_renders_report_without_key_leak():
     assert "引用覆盖率" in report
     assert "sk-" not in serialized
 
+
+def test_eval_script_accepts_common_chinese_equivalents_for_must_have_terms():
+    namespace = runpy.run_path(str(SCRIPT))
+
+    assert namespace["text_contains"]("ARTEMIS 能够检测 BGP 劫持事件。", "hijack") is True
+    assert namespace["text_contains"]("该事件属于路由泄露。", "route leak") is True

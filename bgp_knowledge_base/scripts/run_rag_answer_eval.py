@@ -16,6 +16,12 @@ from service import llm_client, rag_answer  # noqa: E402
 QUESTIONS_PATH = ROOT / "datasets" / "rag_answer_eval_questions.jsonl"
 RESULTS_PATH = ROOT / "datasets" / "rag_answer_eval_results.jsonl"
 REPORT_PATH = ROOT / "reports" / "rag_answer_eval_report.md"
+TERM_ALIASES = {
+    "hijack": ["hijack", "hijacking", "劫持"],
+    "route leak": ["route leak", "route leaks", "路由泄露"],
+    "flap": ["flap", "flapping", "震荡"],
+    "semantics": ["semantics", "semantic", "语义"],
+}
 
 
 class StructureOnlyClient:
@@ -44,7 +50,9 @@ def load_questions(path=QUESTIONS_PATH):
 
 
 def text_contains(text, term):
-    return term.lower() in text.lower()
+    haystack = text.lower()
+    candidates = TERM_ALIASES.get(term.lower(), [term])
+    return any(candidate.lower() in haystack for candidate in candidates)
 
 
 def citation_source_refs(payload):

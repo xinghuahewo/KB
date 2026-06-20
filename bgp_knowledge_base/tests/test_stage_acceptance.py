@@ -73,6 +73,20 @@ def test_stage_acceptance_config_registers_phase_4_3_rag_answer_eval():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_4_4_deepseek_eval_analysis():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_4_4_deepseek_eval_analysis_v1"]
+
+    assert stage["name"] == "DeepSeek 批量评测与失败分析 v1"
+    assert "scripts/run_deepseek_rag_answer_eval.py" in stage["required_files"]
+    assert "scripts/build_rag_answer_failure_analysis.py" in stage["required_files"]
+    assert "reports/rag_answer_failure_analysis_report.md" in stage["required_files"]
+    assert any(command["id"] == "rag_answer_failure_analysis" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "scripts/run_stage_acceptance.py", "--stage", "phase_1_data_management_v1"],

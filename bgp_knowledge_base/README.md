@@ -248,6 +248,20 @@ python3 scripts/run_rag_answer_eval.py
 - `datasets/rag_answer_eval_results.jsonl`
 - `reports/rag_answer_eval_report.md`
 
+阶段 4.4 可用真实 DeepSeek API 跑同一评测集，并对失败样本做中文分析。真实评测脚本要求显式设置 `DEEPSEEK_API_KEY`；失败分析脚本不读取密钥，可在 CI 或本地离线复跑：
+
+```bash
+export DEEPSEEK_API_KEY="你的 DeepSeek API key"
+python3 scripts/run_deepseek_rag_answer_eval.py
+python3 scripts/build_rag_answer_failure_analysis.py
+```
+
+输出：
+
+- `datasets/deepseek_rag_answer_eval_results.jsonl`
+- `reports/deepseek_rag_answer_eval_report.md`
+- `reports/rag_answer_failure_analysis_report.md`
+
 自动化测试：
 
 ```bash

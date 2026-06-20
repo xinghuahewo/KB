@@ -2,18 +2,18 @@
 
 ## 摘要
 
-- 运行时间：2026-06-20T11:49:05
+- 运行时间：2026-06-20T14:25:34
 - 工作目录：`/Users/botongwu/Desktop/DB/bgp_knowledge_base`
-- 步骤数：46
+- 步骤数：47
 - 总体状态：通过
 
 ## 步骤结果
 
 | 步骤 | 脚本 | 状态 | 耗时秒 |
 | --- | --- | --- | ---: |
-| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 27.71 |
+| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 27.60 |
 | 构建知识片段 | `scripts/build_chunks.py` | 通过 | 0.18 |
-| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.04 |
+| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.03 |
 | 构建来源处理状态 | `scripts/build_source_processing_status.py` | 通过 | 0.03 |
 | 构建来源缺口队列 | `scripts/build_source_gap_queue.py` | 通过 | 0.02 |
 | 构建实体复核队列 | `scripts/build_entity_review_queue.py` | 通过 | 0.02 |
@@ -40,23 +40,24 @@
 | 构建人工复核会话指南 | `scripts/build_human_review_session_guides.py` | 通过 | 0.03 |
 | 构建人工复核指南 | `scripts/build_human_review_guides.py` | 通过 | 0.02 |
 | 构建术语表 | `scripts/build_glossary.py` | 通过 | 0.02 |
-| 构建发布知识库 | `scripts/build_published_knowledge_base.py` | 通过 | 0.10 |
+| 构建发布知识库 | `scripts/build_published_knowledge_base.py` | 通过 | 0.09 |
 | 构建语义标识前置层 | `scripts/build_semantic_identity.py` | 通过 | 0.06 |
 | 构建 LLM 候选增强框架 | `scripts/build_llm_candidate_enrichment.py` | 通过 | 0.04 |
-| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.12 |
-| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.18 |
-| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.76 |
+| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.11 |
+| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.17 |
+| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.70 |
 | 校验发布完整性 | `scripts/build_published_integrity_report.py` | 通过 | 0.07 |
 | 构建知识库就绪度报告 | `scripts/build_readiness_report.py` | 通过 | 0.02 |
-| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 0.77 |
+| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 0.74 |
 | 构建覆盖报告 | `scripts/build_coverage_report.py` | 通过 | 0.07 |
 | 构建数据管理能力报告 | `scripts/build_data_management_report.py` | 通过 | 0.04 |
-| 构建生命周期治理报告 | `scripts/build_lifecycle_report.py` | 通过 | 0.04 |
-| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.04 |
-| 构建 RAG 就绪框架报告 | `scripts/build_rag_readiness_report.py` | 通过 | 0.22 |
-| 运行 RAG 答案质量评测 | `scripts/run_rag_answer_eval.py` | 通过 | 0.88 |
-| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 4.61 |
-| 运行质量检查 | `scripts/quality_check.py` | 通过 | 5.01 |
+| 构建生命周期治理报告 | `scripts/build_lifecycle_report.py` | 通过 | 0.03 |
+| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.03 |
+| 构建 RAG 就绪框架报告 | `scripts/build_rag_readiness_report.py` | 通过 | 0.21 |
+| 运行 RAG 答案质量评测 | `scripts/run_rag_answer_eval.py` | 通过 | 0.79 |
+| 构建 RAG 答案失败样本分析 | `scripts/build_rag_answer_failure_analysis.py` | 通过 | 0.02 |
+| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 4.27 |
+| 运行质量检查 | `scripts/quality_check.py` | 通过 | 4.69 |
 
 ## 输出详情
 
@@ -803,6 +804,21 @@ Wrote datasets/rag_query_eval.jsonl
 ```text
 Wrote datasets/rag_answer_eval_results.jsonl
 Wrote reports/rag_answer_eval_report.md
+```
+
+标准错误：
+
+无
+
+### 构建 RAG 答案失败样本分析
+
+- 脚本：`scripts/build_rag_answer_failure_analysis.py`
+- 返回码：0
+
+标准输出：
+
+```text
+Wrote reports/rag_answer_failure_analysis_report.md
 ```
 
 标准错误：
