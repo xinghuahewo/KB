@@ -16,7 +16,7 @@
 
 - 清单记录数：457
 - 二进制文件数：15
-- 总字节数：123811584
+- 总字节数：123812733
 - JSONL 输出：`datasets/artifact_manifest.jsonl`
 - CSV 输出：`datasets/artifact_manifest.csv`
 
