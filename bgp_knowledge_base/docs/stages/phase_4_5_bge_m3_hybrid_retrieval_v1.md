@@ -3,7 +3,7 @@ title: "阶段 4.5 BGE-M3 混合检索 v1"
 document_type: "阶段说明"
 purpose: "定义阶段 4.5 的终极目标、技术选型、约束边界、交付物和验收标准。"
 scope: "阶段 4.5"
-status: "框架已完成，真实向量构建待配置远程 key"
+status: "已完成并通过真实 BGE-M3 向量评测"
 last_reviewed: "2026-06-20"
 ---
 # 阶段 4.5 BGE-M3 混合检索 v1
@@ -70,7 +70,7 @@ Provider 通过命令行参数显式选择，不做静默自动切换：
 | rrf_k | 60 |
 | fused_top_k | 20 |
 | context_top_k | 8 |
-| min_similarity | 0.0，第一版只排序不过滤 |
+| min_similarity | 0.50，低于阈值的真实向量结果不作为证据 |
 
 ## 约束与边界
 
@@ -117,7 +117,7 @@ Provider 通过命令行参数显式选择，不做静默自动切换：
 - SiliconFlow BGE-M3 provider 支持真实调用和 fake client 测试。
 - 阿里云 PAI/EAS BGE-M3 provider 保留兼容接口。
 - 无 key 时不会阻塞单元测试、结构检查和离线评测。
-- embedding manifest 记录模型名、endpoint 标识、维度、输入数量、输入 hash 和生成时间。
+- embedding manifest 记录模型名、provider、维度、输入数量、输入 hash 和生成时间。
 - 混合检索输出 lexical score、vector score、metadata boost、fusion score 和命中原因。
 - 中文“路由泄露”能扩展并召回 `route leak` 相关证据。
 - RFC/标准类问题优先返回 standards 来源。
@@ -131,10 +131,11 @@ Provider 通过命令行参数显式选择，不做静默自动切换：
 
 - 远程 provider、文件化索引构建、混合检索、CLI、API、RAG Answer 接入和阶段评测框架均已实现。
 - embedding 输入共 2269 条：2037 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
-- 当前未配置 SiliconFlow key，`published/bge_m3_embedding_manifest.json` 状态为 `skipped`，未伪造真实 BGE-M3 向量。
-- 离线混合检索评测 20/20 通过，Recall@5 为 84.31%，Recall@8 为 87.25%，MRR 为 0.6882，无证据拒答率为 100%。
+- SiliconFlow `BAAI/bge-m3` 已生成 2269 条、1024 维、L2 归一化的真实向量，manifest 状态为 `complete`。
+- 真实混合检索评测 20/20 通过，Recall@5 为 89.22%，Recall@8 为 89.22%，MRR 为 0.8971，无证据拒答率为 100%。
+- 初次真实评测发现无意义查询最高相似度为 0.4493，而有效查询最低最高相似度为 0.5892；据此将真实向量证据阈值设为 0.50。
 - 来源类型覆盖 `case_report`、`data_doc`、`paper`、`standard`、`tool_doc`。
-- 下一项外部条件是配置 `SILICONFLOW_API_KEY`，生成真实向量索引后复跑同一评测集，对比真实 BGE-M3 与离线基线。
+- 后续数据或模型变化时复用同一评测集，持续比较 Recall、MRR 和无证据拒答率。
 
 ## 参考资料
 

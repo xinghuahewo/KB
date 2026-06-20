@@ -524,5 +524,5 @@ stages:
     human_review_policy:
       allow_needs_human: true
       non_blocking_items:
-        - 当前未配置 SiliconFlow key，真实 BGE-M3 向量效果仍待远程调用验证。
+        - 真实 BGE-M3 向量效果已完成固定评测，仍建议对业务查询做持续人工抽样。
         - pending chunk 只在已批准实体 evidence 或已确定性处理来源的可追溯边界内进入检索，不会被改写为 approved。

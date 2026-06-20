@@ -162,12 +162,21 @@ def _vector_item(record, score, trusted_chunk_ids, eligible_doc_ids):
     return item
 
 
-def vector_search(query_vector, index_records, limit=50, trusted_chunk_ids=None, eligible_doc_ids=None):
+def vector_search(
+    query_vector,
+    index_records,
+    limit=50,
+    trusted_chunk_ids=None,
+    eligible_doc_ids=None,
+    min_similarity=-1.0,
+):
     trusted_chunk_ids = set(trusted_chunk_ids or [])
     eligible_doc_ids = set(eligible_doc_ids or [])
     results = []
     for record in index_records:
         score = cosine_similarity(query_vector, record.get("vector", []))
+        if score < min_similarity:
+            continue
         item = _vector_item(record, score, trusted_chunk_ids, eligible_doc_ids)
         if not item["trusted"]:
             continue
@@ -181,9 +190,30 @@ def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_id
         active_client = client or BgeM3RemoteClient.from_env("siliconflow_bge_m3")
         response = active_client.embed_texts([normalized])
         if not response.get("ok"):
+            if response.get("error_code") in {"missing_api_key", "missing_endpoint"} and MOCK_INDEX_PATH.exists():
+                records = retrieval_framework.load_jsonl(MOCK_INDEX_PATH)
+                dimensions = len(records[0].get("vector", [])) if records else 32
+                query_vector = retrieval_framework.stable_vector(normalized, dimensions=dimensions)
+                return vector_search(
+                    query_vector,
+                    records,
+                    limit,
+                    trusted_chunk_ids,
+                    eligible_doc_ids,
+                ), "offline_mock"
             return [], response.get("error_code", "unavailable")
         records = retrieval_framework.load_jsonl(BGE_INDEX_PATH)
-        return vector_search(response["vectors"][0], records, limit, trusted_chunk_ids, eligible_doc_ids), "complete"
+        threshold = float(
+            retrieval_framework.config().get("hybrid_retrieval", {}).get("min_vector_similarity", 0.5)
+        )
+        return vector_search(
+            response["vectors"][0],
+            records,
+            limit,
+            trusted_chunk_ids,
+            eligible_doc_ids,
+            min_similarity=threshold,
+        ), "complete"
     if MOCK_INDEX_PATH.exists():
         records = retrieval_framework.load_jsonl(MOCK_INDEX_PATH)
         dimensions = len(records[0].get("vector", [])) if records else 32
@@ -217,6 +247,10 @@ def search(query, limit=20, lexical_top_k=50, vector_top_k=50, rrf_k=60, vector_
         "lexical_count": len(lexical_results),
         "vector_count": len(vector_results),
         "vector_status": vector_status,
+        "vector_min_similarity": (
+            float(retrieval_framework.config().get("hybrid_retrieval", {}).get("min_vector_similarity", 0.5))
+            if vector_status == "complete" else None
+        ),
         "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "service/hybrid_retrieval.py",
     }

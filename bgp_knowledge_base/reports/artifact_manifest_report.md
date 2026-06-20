@@ -14,9 +14,9 @@
 
 ## 摘要
 
-- 清单记录数：457
+- 清单记录数：458
 - 二进制文件数：15
-- 总字节数：123812733
+- 总字节数：179001974
 - JSONL 输出：`datasets/artifact_manifest.jsonl`
 - CSV 输出：`datasets/artifact_manifest.csv`
 
@@ -29,7 +29,7 @@
 - entities：9
 - inventory：1
 - parsed：53
-- published：18
+- published：19
 - raw：53
 - relationships：1
 - reports：80

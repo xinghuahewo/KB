@@ -8,7 +8,7 @@
 
 **技术栈：** Python 3、标准库 `urllib.request`、FastAPI、pytest、JSONL、SiliconFlow `BAAI/bge-m3`、阿里云 PAI/EAS BGE-M3、DeepSeek API。
 
-**执行状态：** 计划内框架、测试、评测、验收和推送步骤已完成。当前外部待办仅为配置 `SILICONFLOW_API_KEY` 后生成真实 BGE-M3 向量索引并复跑同一评测集；无 key 状态已按设计生成 `skipped` manifest，不阻塞阶段验收。
+**执行状态：** 计划内框架、真实 BGE-M3 向量构建、测试、评测、验收和推送步骤均已完成。真实索引包含 2269 条 1024 维向量，固定评测 20/20 通过。
 
 ---
 

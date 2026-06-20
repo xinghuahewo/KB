@@ -11,7 +11,7 @@
 - Readiness：ready_deterministic
 - 发布完整性：pass
 - SQLite integrity_check：ok
-- Published 文件数：18
+- Published 文件数：19
 - SQLite 表数：30
 - JSONL 数据集数：34
 - 查询命令数：23
@@ -22,10 +22,11 @@
 | 文件 | 大小字节 | 说明 | JSONL 字段 |
 | --- | ---: | --- | --- |
 | `published/README.md` | 2601 | 发布入口说明。 |  |
-| `published/bge_m3_embedding_manifest.json` | 523 |  |  |
+| `published/bge_m3_embedding_manifest.json` | 491 |  |  |
+| `published/bge_m3_vector_index.jsonl` | 55189155 |  | doc_id, generated_by, kind, lifecycle_status, metadata, review_status, source_ref, source_refs, source_type, text, text_hash, trust_basis, trusted, vector |
 | `published/bgp_knowledge_base.sqlite` | 12963840 | 本地 SQL 查询入口。 |  |
 | `published/chunk_catalog.jsonl` | 1438186 | chunk 目录，包含 chunk 元数据、预览和所在文件。 | chunk_file, chunk_id, chunk_type, content_chars, content_preview, doc_id, language, review_status, section_path, source_ref, source_type, title, topics |
-| `published/data_dictionary.json` | 101087 | 本数据字典的机器可读版本。 |  |
+| `published/data_dictionary.json` | 102101 | 本数据字典的机器可读版本。 |  |
 | `published/embedding_manifest.json` | 401 | 阶段四 RAG 框架的 embedding 覆盖、provider 和边界摘要。 |  |
 | `published/entity_catalog.jsonl` | 121250 | 实体目录，包含实体 payload、来源、证据和复核桶。 | aliases, case_observation_count, category, chunk_count, entity_file, entity_id, entity_payload, entity_type, evidence_record_count, name, review_bucket, review_status, source_ref_count, source_refs |
 | `published/integrity_summary.json` | 8950 | 发布完整性 gate 的机器可读摘要。 |  |
@@ -112,7 +113,7 @@
 | `datasets/semantic_quality_findings.jsonl` | 16 | field, finding_id, generated_by, lifecycle_status, message, rule_id, severity, subject_id, subject_type, suggested_action |
 | `datasets/source_gap_queue.jsonl` | 0 |  |
 | `datasets/source_processing_status.jsonl` | 54 | case_observation_count, chunk_count, cleaned_status, notes, parseable, parsed_status, path, processing_status, raw_status, source_id, source_type |
-| `datasets/stage_acceptance_results.jsonl` | 36 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
+| `datasets/stage_acceptance_results.jsonl` | 39 | commands_passed, commands_total, decision, effect_summary, file_checks_passed, file_checks_total, generated_at, human_items_count, reasons, report_checks_passed, report_checks_total, stage_id, stage_name |
 
 ## 查询命令
 

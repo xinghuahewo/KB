@@ -5,7 +5,7 @@
 - 阶段：BGE-M3 混合检索 v1 (`phase_4_5_bge_m3_hybrid_retrieval_v1`)
 - 结论：pass
 - 验收模式：`deterministic_with_effect_review`
-- 生成时间：2026-06-20T17:01:30
+- 生成时间：2026-06-20T17:36:51
 
 当前 KB 已具备可替换远程 BGE-M3 provider、可解释融合排序、可信来源边界和固定检索评测体系。
 
@@ -57,9 +57,9 @@
 
 | 命令 | 状态 | 摘要 |
 | --- | --- | --- |
-| `python3 scripts/build_bge_m3_index.py` | 通过 | {"dimension": 0, "error_code": "missing_api_key", "generated_at": "2026-06-20T09:01:28+00:00", "generated_by": "scripts/build_bge_m3_index.py", "input_count": 2269, "input_hash": "ab0c6754081e7fd042d9cc2349fdb06fe4612a085056edb973b50b06b9891c6d", "local_model_enabled": false, "model": "BAAI/bge-m3", "provider": "siliconflow_bge_m3", "real_model_execution": false, "source_counts": {"chunk": 2037, "entity": 112, "evidence_template": 8, "glossary": 112}, "status": "skipped"} |
-| `python3 scripts/run_hybrid_retrieval_eval.py` | 通过 | {"failed": 0, "mrr": 0.6882352941176471, "no_evidence_rejection_rate": 1.0, "passed": 20, "recall_at_5": 0.8431372549019607, "recall_at_8": 0.872549019607843, "source_coverage": ["case_report", "data_doc", "paper", "standard", "tool_doc"], "total": 20} |
-| `python3 -m pytest tests/test_embedding_provider.py tests/test_bge_m3_remote_client.py tests/test_build_bge_m3_index.py tests/test_hybrid_retrieval.py tests/test_hybrid_retrieval_eval.py tests/test_service_api.py -v` | 通过 | ============================== 29 passed in 0.81s ============================== |
+| `python3 scripts/build_bge_m3_index.py` | 通过 | {"dimension": 1024, "generated_at": "2026-06-20T09:34:11+00:00", "generated_by": "scripts/build_bge_m3_index.py", "input_count": 2269, "input_hash": "ab0c6754081e7fd042d9cc2349fdb06fe4612a085056edb973b50b06b9891c6d", "local_model_enabled": false, "model": "BAAI/bge-m3", "provider": "siliconflow_bge_m3", "real_model_execution": true, "source_counts": {"chunk": 2037, "entity": 112, "evidence_template": 8, "glossary": 112}, "status": "complete"} |
+| `python3 scripts/run_hybrid_retrieval_eval.py` | 通过 | {"failed": 0, "mrr": 0.8970588235294118, "no_evidence_rejection_rate": 1.0, "passed": 20, "recall_at_5": 0.8921568627450981, "recall_at_8": 0.8921568627450981, "source_coverage": ["case_report", "data_doc", "paper", "standard", "tool_doc"], "total": 20} |
+| `python3 -m pytest tests/test_embedding_provider.py tests/test_bge_m3_remote_client.py tests/test_build_bge_m3_index.py tests/test_hybrid_retrieval.py tests/test_hybrid_retrieval_eval.py tests/test_service_api.py -v` | 通过 | ============================== 30 passed in 4.63s ============================== |
 
 ### 报告检查
 
@@ -72,7 +72,7 @@
 
 ## 风险与剩余人工事项
 
-- 当前未配置 SiliconFlow key，真实 BGE-M3 向量效果仍待远程调用验证。
+- 真实 BGE-M3 向量效果已完成固定评测，仍建议对业务查询做持续人工抽样。
 - pending chunk 只在已批准实体 evidence 或已确定性处理来源的可追溯边界内进入检索，不会被改写为 approved。
 
 ## 建议

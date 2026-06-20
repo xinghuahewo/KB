@@ -274,7 +274,9 @@ python3 scripts/query_hybrid_rag.py context-pack "route leak" --top-k 8
 python3 scripts/run_hybrid_retrieval_eval.py
 
 # 有 SiliconFlow key：构建真实 BGE-M3 文件化向量索引
-export SILICONFLOW_API_KEY="你的 SiliconFlow API key"
+set -a
+source .env
+set +a
 python3 scripts/build_bge_m3_index.py --provider siliconflow_bge_m3
 
 # 阿里云 PAI/EAS 兼容路径
@@ -282,6 +284,8 @@ export ALIYUN_BGE_M3_ENDPOINT="你的 EAS endpoint"
 export ALIYUN_BGE_M3_API_KEY="你的 EAS token"
 python3 scripts/build_bge_m3_index.py --provider aliyun_eas_bge_m3
 ```
+
+本地 `.env` 已被根目录 `.gitignore` 排除。运行 pipeline、阶段验收或服务前都可以先执行 `set -a; source .env; set +a`，让子进程继承远程 API 配置。
 
 阶段 4.5 输入数据限定为：`published/chunk_catalog.jsonl`、`published/entity_catalog.jsonl`、`datasets/glossary.jsonl` 和 `entities/evidence_templates.jsonl`。不直接 embedding `raw/` 或整份 `cleaned/` 文件。
 

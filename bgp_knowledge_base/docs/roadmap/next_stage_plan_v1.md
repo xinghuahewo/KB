@@ -31,7 +31,7 @@ BGP KB 已经具备结构化知识库、只读服务、RAG Answer API、DeepSeek
 
 该阶段不追求一次性上 Milvus 集群，也不在本机部署 Qwen/BGE-M3。默认先用 SiliconFlow `BAAI/bge-m3` 快速验证 OpenAI-compatible embedding 接口，再保留阿里云 PAI/EAS BGE-M3 作为正式部署路径。
 
-当前状态：远程 provider、embedding 构建框架、混合检索、API、RAG Answer 接入和 20 题评测已完成；真实 BGE-M3 向量索引等待配置 `SILICONFLOW_API_KEY` 后生成。
+当前状态：远程 provider、2269 条真实 BGE-M3 向量索引、混合检索、API、RAG Answer 接入和 20 题评测均已完成。下一步不再是补阶段 4.5 框架，而是持续评测真实业务查询，或进入阶段五。
 
 ## 推荐执行顺序
 

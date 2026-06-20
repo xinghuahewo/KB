@@ -55,6 +55,36 @@ def test_rrf_fuses_lexical_and_vector_results_and_deduplicates_chunks():
     assert fused[0]["fusion_score"] > 0
 
 
+def test_vector_search_filters_results_below_similarity_threshold():
+    records = [
+        {
+            "doc_id": "chunk:strong",
+            "kind": "chunk",
+            "trusted": True,
+            "review_status": "approved",
+            "vector": [1.0, 0.0],
+            "metadata": {"chunk_id": "strong", "doc_id": "rfc7908"},
+        },
+        {
+            "doc_id": "chunk:weak",
+            "kind": "chunk",
+            "trusted": True,
+            "review_status": "approved",
+            "vector": [0.4, 0.916515],
+            "metadata": {"chunk_id": "weak", "doc_id": "other"},
+        },
+    ]
+
+    results = hybrid_retrieval.vector_search(
+        [1.0, 0.0],
+        records,
+        limit=5,
+        min_similarity=0.5,
+    )
+
+    assert [item["chunk_id"] for item in results] == ["strong"]
+
+
 def test_metadata_boost_prefers_standards_cases_and_papers_by_query_intent():
     standard = result("rfc7908", "standard_chunk", "standard", 1.0)
     case = result("route_leak_case", "case_chunk", "case_report", 1.0)

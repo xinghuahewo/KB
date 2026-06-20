@@ -31,6 +31,7 @@ def test_rag_and_llm_configs_lock_offline_defaults_and_real_provider_boundaries(
         "colbert": False,
     }
     assert rag["vector_store"]["default_provider"] == "mock_jsonl"
+    assert rag["hybrid_retrieval"]["min_vector_similarity"] == 0.5
     assert rag["vector_store"]["providers"]["milvus_lite"]["enabled"] is False
     assert rag["lexical_fallback"]["provider"] == "sqlite_fts5"
     assert rag["context_pack"]["generates_final_answer"] is False

@@ -2,7 +2,7 @@
 
 ## 摘要
 
-- 运行时间：2026-06-20T16:57:41
+- 运行时间：2026-06-20T17:28:35
 - 工作目录：`/Users/botongwu/.config/superpowers/worktrees/DB/phase-4-5-bge-m3-hybrid/bgp_knowledge_base`
 - 步骤数：49
 - 总体状态：通过
@@ -11,9 +11,9 @@
 
 | 步骤 | 脚本 | 状态 | 耗时秒 |
 | --- | --- | --- | ---: |
-| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 30.80 |
+| 解析原始文档 | `scripts/parse_documents.py` | 通过 | 26.42 |
 | 构建知识片段 | `scripts/build_chunks.py` | 通过 | 0.18 |
-| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.03 |
+| 抽取案例观察值 | `scripts/extract_case_observations.py` | 通过 | 0.04 |
 | 构建来源处理状态 | `scripts/build_source_processing_status.py` | 通过 | 0.03 |
 | 构建来源缺口队列 | `scripts/build_source_gap_queue.py` | 通过 | 0.02 |
 | 构建实体复核队列 | `scripts/build_entity_review_queue.py` | 通过 | 0.02 |
@@ -27,7 +27,7 @@
 | 构建人工复核决策输入模板 | `scripts/build_human_review_decision_template.py` | 通过 | 0.02 |
 | 校验人工复核决策输入 | `scripts/build_human_review_input_validation.py` | 通过 | 0.02 |
 | 审计人工复核决策 | `scripts/build_human_review_decision_audit.py` | 通过 | 0.02 |
-| 预览人工复核决策应用 | `scripts/apply_human_review_decisions.py` | 通过 | 0.03 |
+| 预览人工复核决策应用 | `scripts/apply_human_review_decisions.py` | 通过 | 0.02 |
 | 构建人工复核进度 | `scripts/build_human_review_progress.py` | 通过 | 0.02 |
 | 构建人工复核证据摘录 | `scripts/build_human_review_evidence_extracts.py` | 通过 | 0.10 |
 | 构建人工复核会话队列 | `scripts/build_human_review_session_queue.py` | 通过 | 0.03 |
@@ -37,29 +37,29 @@
 | 构建人工复核任务板 | `scripts/build_human_review_task_board.py` | 通过 | 0.02 |
 | 构建人工复核交接清单 | `scripts/build_human_review_handoff.py` | 通过 | 0.02 |
 | 构建人工复核会话决策模板 | `scripts/build_human_review_session_decision_templates.py` | 通过 | 0.02 |
-| 构建人工复核会话指南 | `scripts/build_human_review_session_guides.py` | 通过 | 0.03 |
+| 构建人工复核会话指南 | `scripts/build_human_review_session_guides.py` | 通过 | 0.02 |
 | 构建人工复核指南 | `scripts/build_human_review_guides.py` | 通过 | 0.02 |
 | 构建术语表 | `scripts/build_glossary.py` | 通过 | 0.02 |
 | 构建发布知识库 | `scripts/build_published_knowledge_base.py` | 通过 | 0.09 |
-| 构建语义标识前置层 | `scripts/build_semantic_identity.py` | 通过 | 0.06 |
+| 构建语义标识前置层 | `scripts/build_semantic_identity.py` | 通过 | 0.05 |
 | 构建 LLM 候选增强框架 | `scripts/build_llm_candidate_enrichment.py` | 通过 | 0.04 |
-| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.12 |
-| 构建 BGE-M3 远程向量索引 | `scripts/build_bge_m3_index.py` | 通过 | 0.06 |
-| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.17 |
-| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.75 |
+| 构建 RAG 检索索引框架 | `scripts/build_rag_indexes.py` | 通过 | 0.11 |
+| 构建 BGE-M3 远程向量索引 | `scripts/build_bge_m3_index.py` | 通过 | 108.29 |
+| 构建 SQLite 知识库 | `scripts/build_sqlite_knowledge_base.py` | 通过 | 0.19 |
+| 构建查询样例报告 | `scripts/build_query_examples.py` | 通过 | 0.80 |
 | 校验发布完整性 | `scripts/build_published_integrity_report.py` | 通过 | 0.07 |
 | 构建知识库就绪度报告 | `scripts/build_readiness_report.py` | 通过 | 0.02 |
-| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 0.77 |
-| 构建覆盖报告 | `scripts/build_coverage_report.py` | 通过 | 0.07 |
+| 构建数据字典 | `scripts/build_data_dictionary.py` | 通过 | 1.20 |
+| 构建覆盖报告 | `scripts/build_coverage_report.py` | 通过 | 0.08 |
 | 构建数据管理能力报告 | `scripts/build_data_management_report.py` | 通过 | 0.04 |
 | 构建生命周期治理报告 | `scripts/build_lifecycle_report.py` | 通过 | 0.03 |
-| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.04 |
+| 构建语义质量治理报告 | `scripts/build_semantic_quality_report.py` | 通过 | 0.03 |
 | 构建 RAG 就绪框架报告 | `scripts/build_rag_readiness_report.py` | 通过 | 0.24 |
-| 运行 RAG 答案质量评测 | `scripts/run_rag_answer_eval.py` | 通过 | 1.22 |
-| 运行混合检索评测 | `scripts/run_hybrid_retrieval_eval.py` | 通过 | 1.18 |
+| 运行 RAG 答案质量评测 | `scripts/run_rag_answer_eval.py` | 通过 | 31.44 |
+| 运行混合检索评测 | `scripts/run_hybrid_retrieval_eval.py` | 通过 | 30.96 |
 | 构建 RAG 答案失败样本分析 | `scripts/build_rag_answer_failure_analysis.py` | 通过 | 0.02 |
-| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 4.81 |
-| 运行质量检查 | `scripts/quality_check.py` | 通过 | 4.80 |
+| 构建制品清单 | `scripts/build_artifact_manifest.py` | 通过 | 5.09 |
+| 运行质量检查 | `scripts/quality_check.py` | 通过 | 5.44 |
 
 ## 输出详情
 
@@ -646,7 +646,7 @@ Wrote published/rag_retrieval_index.json
 标准输出：
 
 ```text
-{"dimension": 0, "error_code": "missing_api_key", "generated_at": "2026-06-20T08:57:27+00:00", "generated_by": "scripts/build_bge_m3_index.py", "input_count": 2269, "input_hash": "ab0c6754081e7fd042d9cc2349fdb06fe4612a085056edb973b50b06b9891c6d", "local_model_enabled": false, "model": "BAAI/bge-m3", "provider": "siliconflow_bge_m3", "real_model_execution": false, "source_counts": {"chunk": 2037, "entity": 112, "evidence_template": 8, "glossary": 112}, "status": "skipped"}
+{"dimension": 1024, "generated_at": "2026-06-20T09:25:31+00:00", "generated_by": "scripts/build_bge_m3_index.py", "input_count": 2269, "input_hash": "ab0c6754081e7fd042d9cc2349fdb06fe4612a085056edb973b50b06b9891c6d", "local_model_enabled": false, "model": "BAAI/bge-m3", "provider": "siliconflow_bge_m3", "real_model_execution": true, "source_counts": {"chunk": 2037, "entity": 112, "evidence_template": 8, "glossary": 112}, "status": "complete"}
 ```
 
 标准错误：
@@ -835,7 +835,7 @@ Wrote reports/rag_answer_eval_report.md
 标准输出：
 
 ```text
-{"failed": 0, "mrr": 0.6882352941176471, "no_evidence_rejection_rate": 1.0, "passed": 20, "recall_at_5": 0.8431372549019607, "recall_at_8": 0.872549019607843, "source_coverage": ["case_report", "data_doc", "paper", "standard", "tool_doc"], "total": 20}
+{"failed": 0, "mrr": 0.8970588235294118, "no_evidence_rejection_rate": 1.0, "passed": 20, "recall_at_5": 0.8921568627450981, "recall_at_8": 0.8921568627450981, "source_coverage": ["case_report", "data_doc", "paper", "standard", "tool_doc"], "total": 20}
 ```
 
 标准错误：
