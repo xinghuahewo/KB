@@ -24,13 +24,13 @@ last_reviewed: "2026-06-20"
 
 当前不再继续扩写阶段四简易版。下一步直接进入阶段 4.5：
 
-> 使用阿里云 BGE-M3 远程 embedding，实现 BM25/关键词检索、向量检索、元数据过滤和 RRF 融合排序的混合检索较优解 v1。
+> 使用 BGE-M3 远程 embedding，实现 BM25/关键词检索、向量检索、元数据过滤和 RRF 融合排序的混合检索较优解 v1。
 
 ## 阶段 4.5 技术取舍
 
 | 问题 | 选择 | 理由 |
 | --- | --- | --- |
-| embedding 模型 | 阿里云 BGE-M3 远程服务 | 当前设备不运行模型，同时 BGE-M3 支持跨语言与长文本向量化。 |
+| embedding 模型 | SiliconFlow `BAAI/bge-m3` 优先，阿里云 PAI/EAS BGE-M3 兼容 | 当前设备不运行模型；先用 OpenAI-compatible API 快速验证，再保留阿里云部署路径。 |
 | LLM 回答 | DeepSeek API | 已有阶段 4.1-4.4 能力和评测报告。 |
 | 向量库 | 先用文件化 JSONL 索引 | 数据规模小，先验证混合检索质量；Milvus/Qdrant 后置。 |
 | 关键词检索 | 继续保留 BM25/FTS/规则命中 | BGP 协议词、RFC、AS 编号、字段名适合精确召回。 |
@@ -40,7 +40,7 @@ last_reviewed: "2026-06-20"
 ## 不做清单
 
 - 不在当前设备部署 BGE-M3、Qwen 或其它本地模型。
-- 不把 API key、endpoint token 写入仓库。
+- 不把 SiliconFlow key、阿里云 token、DeepSeek key 或 endpoint token 写入仓库。
 - 不引入需要常驻服务的 Milvus 作为阶段 4.5 必选项。
 - 不让 LLM 自动写回知识库。
 - 不把 pending、deprecated、archived 内容默认放入高可信 context pack。

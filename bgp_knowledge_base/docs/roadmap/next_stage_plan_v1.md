@@ -27,16 +27,16 @@ BGP KB 已经具备结构化知识库、只读服务、RAG Answer API、DeepSeek
 
 阶段 4.5 的终极目标：
 
-> 在当前设备不运行模型的前提下，接入阿里云 BGE-M3 远程 embedding，建立向量检索、BM25/关键词检索、元数据过滤与排序融合的混合检索框架，并让 RAG Answer API 能基于更稳定的 context pack 回答。
+> 在当前设备不运行模型的前提下，接入 BGE-M3 远程 embedding，建立向量检索、BM25/关键词检索、元数据过滤与排序融合的混合检索框架，并让 RAG Answer API 能基于更稳定的 context pack 回答。
 
-该阶段不追求一次性上 Milvus 集群，也不在本机部署 Qwen/BGE-M3。目标是先把工业界常见的混合检索链路变成可复跑、可评测、可回滚的本地框架。
+该阶段不追求一次性上 Milvus 集群，也不在本机部署 Qwen/BGE-M3。默认先用 SiliconFlow `BAAI/bge-m3` 快速验证 OpenAI-compatible embedding 接口，再保留阿里云 PAI/EAS BGE-M3 作为正式部署路径。
 
 ## 推荐执行顺序
 
 ```text
 1. 合并阶段 4.4 到 main
 2. 新建阶段 4.5 分支
-3. 配置阿里云 BGE-M3 远程 embedding provider
+3. 配置 BGE-M3 远程 embedding provider
 4. 构建可复跑 embedding index 与 manifest
 5. 实现 BM25/关键词 + 向量 + 元数据过滤 + RRF 融合
 6. 接入 retrieval/context-pack 与 RAG Answer
@@ -46,7 +46,7 @@ BGP KB 已经具备结构化知识库、只读服务、RAG Answer API、DeepSeek
 
 ## 阶段边界
 
-- DeepSeek key、阿里云 endpoint 和 token 只从环境变量读取。
+- DeepSeek key、SiliconFlow key、阿里云 endpoint 和 token 只从环境变量读取。
 - 当前设备不运行本地模型。
 - 不下载 BGE-M3、Qwen 或其它大模型权重。
 - 阶段 4.5 默认不引入 Milvus 服务；先用文件化向量索引跑通小规模闭环。
@@ -58,7 +58,7 @@ BGP KB 已经具备结构化知识库、只读服务、RAG Answer API、DeepSeek
 
 | 差距 | 4.5 处理方式 |
 | --- | --- |
-| 只有关键词/规则排序，缺少真实向量召回 | 接入阿里云 BGE-M3 dense embedding |
+| 只有关键词/规则排序，缺少真实向量召回 | 接入 BGE-M3 dense embedding，优先 SiliconFlow，兼容阿里云 PAI/EAS |
 | 中文同义查询依赖手写扩展 | 保留 query expansion，同时用跨语言 embedding 补召回 |
 | 检索排序解释不足 | 输出 lexical/vector/metadata/fusion score |
 | 评测更偏答案质量，检索指标不足 | 新增 recall@k、MRR、source coverage、citation hit rate |

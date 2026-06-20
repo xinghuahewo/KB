@@ -26,7 +26,7 @@ last_reviewed: "2026-06-20"
 | 4.2 DeepSeek smoke | 已完成 | 根目录 `README.md` 与 smoke 报告 |
 | 4.3 RAG 答案评测 | 已完成 | [stages/phase_4_3_rag_answer_eval_v1.md](stages/phase_4_3_rag_answer_eval_v1.md) |
 | 4.4 DeepSeek 批量评测 | 已完成，分支待并入主线 | [stages/phase_4_4_deepseek_eval_analysis_v1.md](stages/phase_4_4_deepseek_eval_analysis_v1.md) |
-| 4.5 阿里云 BGE-M3 混合检索 | 下一步 | [stages/phase_4_5_aliyun_bge_m3_hybrid_retrieval_v1.md](stages/phase_4_5_aliyun_bge_m3_hybrid_retrieval_v1.md) |
+| 4.5 BGE-M3 混合检索 | 下一步 | [stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md](stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md) |
 
 ## 文档分组
 
@@ -44,8 +44,8 @@ last_reviewed: "2026-06-20"
 | --- | --- |
 | [roadmap/phase_solution_matrix_v1.md](roadmap/phase_solution_matrix_v1.md) | 当前阶段采用较优解还是简易版的决策表。 |
 | [roadmap/next_stage_plan_v1.md](roadmap/next_stage_plan_v1.md) | 近期下一步建设计划。 |
-| [stages/phase_4_5_aliyun_bge_m3_hybrid_retrieval_v1.md](stages/phase_4_5_aliyun_bge_m3_hybrid_retrieval_v1.md) | 阶段 4.5 终极目标、技术选型、边界和验收标准。 |
-| [superpowers/plans/2026-06-20-phase-4-5-aliyun-bge-m3-hybrid.md](superpowers/plans/2026-06-20-phase-4-5-aliyun-bge-m3-hybrid.md) | 阶段 4.5 可执行开发计划。 |
+| [stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md](stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md) | 阶段 4.5 终极目标、技术选型、边界和验收标准。 |
+| [superpowers/plans/2026-06-20-phase-4-5-bge-m3-hybrid.md](superpowers/plans/2026-06-20-phase-4-5-bge-m3-hybrid.md) | 阶段 4.5 可执行开发计划。 |
 
 ## 维护规则
 

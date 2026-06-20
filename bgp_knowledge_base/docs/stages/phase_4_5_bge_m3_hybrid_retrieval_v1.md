@@ -1,18 +1,18 @@
 ---
-title: "阶段 4.5 阿里云 BGE-M3 混合检索 v1"
+title: "阶段 4.5 BGE-M3 混合检索 v1"
 document_type: "阶段说明"
 purpose: "定义阶段 4.5 的终极目标、技术选型、约束边界、交付物和验收标准。"
 scope: "阶段 4.5"
 status: "计划中"
 last_reviewed: "2026-06-20"
 ---
-# 阶段 4.5 阿里云 BGE-M3 混合检索 v1
+# 阶段 4.5 BGE-M3 混合检索 v1
 
 ## 终极目标
 
 阶段 4.5 的终极目标是：
 
-> 在当前设备不运行模型的前提下，使用阿里云 BGE-M3 远程 embedding 建立混合检索较优解 v1，让 BGP KB 同时具备向量召回、BM25/关键词召回、元数据过滤、融合排序、检索评测和可追溯 context pack。
+> 在当前设备不运行模型的前提下，使用 BGE-M3 远程 embedding 建立混合检索较优解 v1，让 BGP KB 同时具备向量召回、BM25/关键词召回、元数据过滤、融合排序、检索评测和可追溯 context pack。
 
 完成后，阶段四应从“能调用 DeepSeek 回答”升级为“能用可评测的混合检索稳定提供证据，再由 DeepSeek 基于证据回答”。
 
@@ -21,12 +21,30 @@ last_reviewed: "2026-06-20"
 | 模块 | 选型 | 说明 |
 | --- | --- | --- |
 | LLM 回答 | DeepSeek API | 复用阶段 4.1-4.4 已验证能力。 |
-| embedding | 阿里云 BGE-M3 远程服务 | 不在本机跑模型；通过环境变量配置 endpoint 和 token。 |
+| embedding | SiliconFlow `BAAI/bge-m3` 优先，阿里云 PAI/EAS BGE-M3 兼容 | 不在本机跑模型；先用 OpenAI-compatible 接口跑通，再兼容阿里云正式部署。 |
 | 关键词检索 | 现有检索框架 + BM25/FTS/规则命中 | 适合 RFC、AS 编号、协议字段、专有名词和精确短语。 |
 | 向量检索 | 文件化 JSONL 向量索引 v1 | 数据量小，先做可复跑和可评测；Milvus 后置。 |
 | 元数据索引 | source_type、entity_type、review_status、lifecycle_status、topic | 用于过滤、加权和排序解释。 |
 | 融合排序 | RRF + metadata boost | 简单稳定，可解释，便于测试。 |
 | 评测 | 固定问题集 + recall@k/MRR/citation hit rate | 与阶段 4.3/4.4 的答案评测衔接。 |
+
+## Provider 策略
+
+阶段 4.5 不把混合检索绑定到单个厂商，默认抽象为 `bge_m3_remote`。
+
+| Provider | 用途 | 环境变量 | 接口形态 |
+| --- | --- | --- | --- |
+| `siliconflow_bge_m3` | 第一版快速验证 | `SILICONFLOW_API_KEY`、可选 `SILICONFLOW_BASE_URL` | OpenAI-compatible `/v1/embeddings`，模型 `BAAI/bge-m3` |
+| `aliyun_eas_bge_m3` | 后续正式部署 | `ALIYUN_BGE_M3_ENDPOINT`、`ALIYUN_BGE_M3_API_KEY` | 阿里云 PAI/EAS 自托管 endpoint |
+| `fake_bge_m3` | 无 key 测试 | 无 | 确定性 fake embedding，用于单元测试和 CI |
+
+默认执行顺序：
+
+```text
+优先读取 siliconflow_bge_m3
+-> 不可用时尝试 aliyun_eas_bge_m3
+-> 无 key 或 CI 环境使用 fake_bge_m3
+```
 
 ## 工业化混合检索链路
 
@@ -34,7 +52,7 @@ last_reviewed: "2026-06-20"
 用户查询
 -> 查询规范化与中英文术语扩展
 -> BM25/关键词召回 topN
--> 阿里云 BGE-M3 查询向量召回 topN
+-> BGE-M3 远程查询向量召回 topN
 -> 元数据过滤与加权
 -> RRF 融合排序
 -> context pack 生成
@@ -58,7 +76,7 @@ last_reviewed: "2026-06-20"
 - 当前设备不运行本地模型。
 - 不下载 BGE-M3、Qwen 或其它模型权重。
 - API key、endpoint、token 只从环境变量读取。
-- 无阿里云 key 时，测试和结构评测必须能用 fake client 运行。
+- 无 SiliconFlow key 或阿里云 key 时，测试和结构评测必须能用 fake client 运行。
 - 阶段 4.5 不自动写回实体、关系、chunk、术语表或人工复核状态。
 - 阶段 4.5 不强制引入 Milvus、Qdrant 或其它常驻向量数据库。
 - 默认 context pack 不包含 `pending`、`deprecated`、`archived` 或被策略排除的内容。
@@ -70,16 +88,16 @@ last_reviewed: "2026-06-20"
 | 类型 | 路径 |
 | --- | --- |
 | 配置 | `config/rag_retrieval.yaml` |
-| 阿里云 BGE-M3 客户端 | `service/aliyun_bge_m3_client.py` |
+| BGE-M3 远程客户端 | `service/bge_m3_remote_client.py` |
 | 混合检索模块 | `service/hybrid_retrieval.py` |
-| 向量索引构建脚本 | `scripts/build_aliyun_bge_m3_index.py` |
+| 向量索引构建脚本 | `scripts/build_bge_m3_index.py` |
 | 混合检索查询脚本 | `scripts/query_hybrid_rag.py` |
 | 混合检索评测脚本 | `scripts/run_hybrid_retrieval_eval.py` |
-| 向量索引 | `published/aliyun_bge_m3_vector_index.jsonl` |
-| embedding manifest | `published/aliyun_bge_m3_embedding_manifest.json` |
-| 构建报告 | `reports/aliyun_bge_m3_embedding_report.md` |
+| 向量索引 | `published/bge_m3_vector_index.jsonl` |
+| embedding manifest | `published/bge_m3_embedding_manifest.json` |
+| 构建报告 | `reports/bge_m3_embedding_report.md` |
 | 检索评测报告 | `reports/hybrid_retrieval_eval_report.md` |
-| 阶段验收文档 | `docs/stages/phase_4_5_aliyun_bge_m3_hybrid_retrieval_v1.md` |
+| 阶段验收文档 | `docs/stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md` |
 
 ## 评测指标
 
@@ -94,7 +112,8 @@ last_reviewed: "2026-06-20"
 
 ## 验收标准
 
-- 阿里云 BGE-M3 provider 支持真实调用和 fake client 测试。
+- SiliconFlow BGE-M3 provider 支持真实调用和 fake client 测试。
+- 阿里云 PAI/EAS BGE-M3 provider 保留兼容接口。
 - 无 key 时不会阻塞单元测试、结构检查和离线评测。
 - embedding manifest 记录模型名、endpoint 标识、维度、输入数量、输入 hash 和生成时间。
 - 混合检索输出 lexical score、vector score、metadata boost、fusion score 和命中原因。
@@ -104,10 +123,11 @@ last_reviewed: "2026-06-20"
 - 检索评测报告列出通过、失败和需人工复核的问题。
 - 本地模型仍为禁用状态。
 - 质量检查 JSON 错误数和 Schema 错误数均为 0。
-- 仓库中不包含真实 DeepSeek 或阿里云 API key。
+- 仓库中不包含真实 DeepSeek、SiliconFlow 或阿里云 API key。
 
 ## 参考资料
 
+- SiliconFlow Embeddings API 文档说明 `/v1/embeddings` 接口支持 `BAAI/bge-m3`，该模型最大输入长度为 8192 tokens：https://docs.siliconflow.com/cn/api-reference/embeddings/create-embeddings
 - 阿里云 PAI Model Gallery 文档说明可从 PAI 部署 `bge-m3` embedding 模型，并查看 EAS 调用 URL 和 Token：https://help.aliyun.com/zh/es/user-guide/configuration-template-pai-model-gallery
 - 阿里云 DataWorks 文档将 BGE-M3 列为向量模型，并说明其支持密集检索、多向量检索、稀疏检索、最长 8192 tokens 输入和 100 多种自然语言：https://www.alibabacloud.com/help/tc/dataworks/user-guide/llm-service-management/
 - BGE-M3 官方文档说明其面向多功能、多语言、多粒度检索：https://bge-model.com/bge/bge_m3.html
