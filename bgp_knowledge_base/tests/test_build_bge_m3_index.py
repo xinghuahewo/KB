@@ -150,3 +150,18 @@ def test_missing_key_writes_skipped_manifest_without_vector_index(tmp_path):
     assert manifest["error_code"] == "missing_api_key"
     assert index_path.exists() is False
     assert "未配置远程 API key" in report_path.read_text(encoding="utf-8")
+
+
+def test_processed_source_chunk_is_marked_retrieval_eligible_without_approval():
+    namespace = runpy.run_path(str(SCRIPT))
+    inputs = sample_inputs()
+
+    documents = namespace["build_embedding_documents"](
+        **inputs,
+        trusted_doc_ids={"rfc7908"},
+    )
+    chunk = next(item for item in documents if item["kind"] == "chunk")
+
+    assert chunk["trusted"] is True
+    assert chunk["trust_basis"] == "processed_source_with_traceability"
+    assert chunk["review_status"] == "pending"

@@ -131,7 +131,7 @@ def test_hybrid_api_returns_fused_search_and_context_pack():
     pack_payload = pack.json()
     assert pack_payload["citations"]
     assert all(item["trusted"] is True for item in pack_payload["results"])
-    assert pack_payload["trusted_chunk_policy"] == "approved_or_linked_to_approved_entity_evidence"
+    assert pack_payload["trusted_chunk_policy"] == "approved_entity_evidence_or_processed_source_with_traceability"
 
 
 def test_rag_answer_api_returns_evidence_when_llm_key_is_missing(monkeypatch):

@@ -44,7 +44,7 @@ def test_answer_question_generates_traceable_answer_when_evidence_exists():
     assert payload["citations"]
     assert payload["context_pack"]["results"]
     assert payload["context_pack"]["generated_by"] == "service/hybrid_retrieval.py"
-    assert payload["context_pack"]["trusted_chunk_policy"] == "approved_or_linked_to_approved_entity_evidence"
+    assert payload["context_pack"]["trusted_chunk_policy"] == "approved_entity_evidence_or_processed_source_with_traceability"
     assert all(item["trusted"] is True for item in payload["context_pack"]["results"])
     assert payload["model_provider"] == "deepseek"
     assert payload["guardrails"]["requires_citations"] is True

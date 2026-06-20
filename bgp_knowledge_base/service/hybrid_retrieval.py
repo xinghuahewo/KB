@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BGE_INDEX_PATH = ROOT / "published" / "bge_m3_vector_index.jsonl"
 MOCK_INDEX_PATH = ROOT / "published" / "rag_mock_vector_index.jsonl"
 ENTITY_EVIDENCE_PATH = ROOT / "datasets" / "entity_source_evidence.jsonl"
+SOURCE_CATALOG_PATH = ROOT / "published" / "source_catalog.jsonl"
 
 
 def _trusted_chunk_ids():
@@ -21,11 +22,30 @@ def _trusted_chunk_ids():
     return trusted
 
 
-def _is_trusted(item, trusted_chunk_ids):
+def _retrieval_eligible_doc_ids():
+    eligible = set()
+    for item in retrieval_framework.load_jsonl(SOURCE_CATALOG_PATH):
+        if (
+            item.get("processing_status") == "complete_deterministic"
+            and item.get("trust_level") in {"high", "medium"}
+        ):
+            eligible.add(item.get("source_id", ""))
+    return eligible
+
+
+def _trust_basis(item, trusted_chunk_ids, eligible_doc_ids):
+    if item.get("review_status") == "approved":
+        return "approved_record"
+    if item.get("trusted") is True or item.get("chunk_id") in trusted_chunk_ids:
+        return "approved_entity_evidence"
+    if item.get("doc_id") in eligible_doc_ids:
+        return "processed_source_with_traceability"
+    return ""
+
+
+def _is_trusted(item, trusted_chunk_ids, eligible_doc_ids):
     return (
-        item.get("trusted") is True
-        or item.get("review_status") == "approved"
-        or item.get("chunk_id") in trusted_chunk_ids
+        bool(_trust_basis(item, trusted_chunk_ids, eligible_doc_ids))
     )
 
 
@@ -37,6 +57,8 @@ def _metadata_boost(item, query):
     if intent == "case" and source_type == "case_report":
         return 0.02
     if intent == "paper" and source_type == "paper":
+        return 0.02
+    if intent == "data" and source_type in {"data_doc", "tool_doc"}:
         return 0.02
     return 0.0
 
@@ -74,13 +96,13 @@ def rrf_fuse(query, lexical_results, vector_results, limit=20, rrf_k=60):
     return results[:limit]
 
 
-def _lexical_search(query, limit, trusted_chunk_ids):
+def _lexical_search(query, limit, trusted_chunk_ids, eligible_doc_ids):
     normalized = retrieval_framework.normalize_query(query)
     uris = retrieval_framework.semantic_uri_map("chunk")
     results = []
     for chunk in retrieval_framework.load_jsonl(retrieval_framework.PUBLISHED / "chunk_catalog.jsonl"):
         chunk_id = chunk.get("chunk_id", "")
-        if not _is_trusted(chunk, trusted_chunk_ids):
+        if not _is_trusted(chunk, trusted_chunk_ids, eligible_doc_ids):
             continue
         score = retrieval_framework.score_chunk(chunk, normalized)
         if score <= 0:
@@ -96,6 +118,7 @@ def _lexical_search(query, limit, trusted_chunk_ids):
             "review_status": chunk.get("review_status", ""),
             "lifecycle_status": "approved_evidence",
             "trusted": True,
+            "trust_basis": _trust_basis(chunk, trusted_chunk_ids, eligible_doc_ids),
             "content_preview": chunk.get("content_preview", ""),
             "score": score,
         })
@@ -112,7 +135,7 @@ def cosine_similarity(left, right):
     return sum(a * b for a, b in zip(left, right)) / denominator
 
 
-def _vector_item(record, score, trusted_chunk_ids):
+def _vector_item(record, score, trusted_chunk_ids, eligible_doc_ids):
     metadata = record.get("metadata", {})
     kind = record.get("kind", "chunk")
     raw_doc_id = record.get("doc_id", "")
@@ -130,19 +153,22 @@ def _vector_item(record, score, trusted_chunk_ids):
         "review_status": record.get("review_status") or metadata.get("review_status", ""),
         "lifecycle_status": record.get("lifecycle_status", "candidate"),
         "trusted": record.get("trusted", False),
+        "trust_basis": record.get("trust_basis", ""),
         "content_preview": metadata.get("content_preview") or record.get("text", ""),
         "score": score,
     }
-    item["trusted"] = _is_trusted(item, trusted_chunk_ids)
+    item["trust_basis"] = item["trust_basis"] or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
+    item["trusted"] = bool(item["trust_basis"])
     return item
 
 
-def vector_search(query_vector, index_records, limit=50, trusted_chunk_ids=None):
+def vector_search(query_vector, index_records, limit=50, trusted_chunk_ids=None, eligible_doc_ids=None):
     trusted_chunk_ids = set(trusted_chunk_ids or [])
+    eligible_doc_ids = set(eligible_doc_ids or [])
     results = []
     for record in index_records:
         score = cosine_similarity(query_vector, record.get("vector", []))
-        item = _vector_item(record, score, trusted_chunk_ids)
+        item = _vector_item(record, score, trusted_chunk_ids, eligible_doc_ids)
         if not item["trusted"]:
             continue
         results.append(item)
@@ -150,32 +176,34 @@ def vector_search(query_vector, index_records, limit=50, trusted_chunk_ids=None)
     return results[:limit]
 
 
-def _vector_results(query, normalized, limit, trusted_chunk_ids, client=None):
+def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_ids, client=None):
     if BGE_INDEX_PATH.exists():
         active_client = client or BgeM3RemoteClient.from_env("siliconflow_bge_m3")
         response = active_client.embed_texts([normalized])
         if not response.get("ok"):
             return [], response.get("error_code", "unavailable")
         records = retrieval_framework.load_jsonl(BGE_INDEX_PATH)
-        return vector_search(response["vectors"][0], records, limit, trusted_chunk_ids), "complete"
+        return vector_search(response["vectors"][0], records, limit, trusted_chunk_ids, eligible_doc_ids), "complete"
     if MOCK_INDEX_PATH.exists():
         records = retrieval_framework.load_jsonl(MOCK_INDEX_PATH)
         dimensions = len(records[0].get("vector", [])) if records else 32
         query_vector = retrieval_framework.stable_vector(normalized, dimensions=dimensions)
-        return vector_search(query_vector, records, limit, trusted_chunk_ids), "offline_mock"
+        return vector_search(query_vector, records, limit, trusted_chunk_ids, eligible_doc_ids), "offline_mock"
     return [], "index_unavailable"
 
 
 def search(query, limit=20, lexical_top_k=50, vector_top_k=50, rrf_k=60, vector_enabled=True, client=None):
     normalized = retrieval_framework.normalize_query(query)
     trusted_chunk_ids = _trusted_chunk_ids()
-    lexical_results = _lexical_search(query, lexical_top_k, trusted_chunk_ids)
+    eligible_doc_ids = _retrieval_eligible_doc_ids()
+    lexical_results = _lexical_search(query, lexical_top_k, trusted_chunk_ids, eligible_doc_ids)
     if vector_enabled:
         vector_results, vector_status = _vector_results(
             query,
             normalized,
             vector_top_k,
             trusted_chunk_ids,
+            eligible_doc_ids,
             client=client,
         )
         if vector_status == "offline_mock" and not lexical_results:
@@ -189,7 +217,7 @@ def search(query, limit=20, lexical_top_k=50, vector_top_k=50, rrf_k=60, vector_
         "lexical_count": len(lexical_results),
         "vector_count": len(vector_results),
         "vector_status": vector_status,
-        "trusted_chunk_policy": "approved_or_linked_to_approved_entity_evidence",
+        "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "service/hybrid_retrieval.py",
     }
 

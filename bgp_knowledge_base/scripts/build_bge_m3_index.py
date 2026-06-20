@@ -21,6 +21,7 @@ ENTITIES_PATH = ROOT / "published" / "entity_catalog.jsonl"
 GLOSSARY_PATH = ROOT / "datasets" / "glossary.jsonl"
 EVIDENCE_TEMPLATES_PATH = ROOT / "entities" / "evidence_templates.jsonl"
 ENTITY_EVIDENCE_PATH = ROOT / "datasets" / "entity_source_evidence.jsonl"
+SOURCE_CATALOG_PATH = ROOT / "published" / "source_catalog.jsonl"
 INDEX_PATH = ROOT / "published" / "bge_m3_vector_index.jsonl"
 MANIFEST_PATH = ROOT / "published" / "bge_m3_embedding_manifest.json"
 REPORT_PATH = ROOT / "reports" / "bge_m3_embedding_report.md"
@@ -36,7 +37,7 @@ def _join(values):
     return ", ".join(str(value) for value in values or [] if value)
 
 
-def _document(doc_id, kind, text, record, source_refs=None, trusted=False):
+def _document(doc_id, kind, text, record, source_refs=None, trusted=False, trust_basis=""):
     refs = source_refs or []
     return {
         "doc_id": doc_id,
@@ -48,12 +49,21 @@ def _document(doc_id, kind, text, record, source_refs=None, trusted=False):
         "review_status": record.get("review_status", ""),
         "lifecycle_status": record.get("lifecycle_status", "approved" if trusted else "candidate"),
         "trusted": trusted,
+        "trust_basis": trust_basis,
         "metadata": record,
     }
 
 
-def build_embedding_documents(chunks, entities, glossary, evidence_templates, trusted_chunk_ids=None):
+def build_embedding_documents(
+    chunks,
+    entities,
+    glossary,
+    evidence_templates,
+    trusted_chunk_ids=None,
+    trusted_doc_ids=None,
+):
     trusted_chunk_ids = set(trusted_chunk_ids or [])
+    trusted_doc_ids = set(trusted_doc_ids or [])
     documents = []
     for item in chunks:
         chunk_id = item.get("chunk_id", "")
@@ -65,7 +75,15 @@ def build_embedding_documents(chunks, entities, glossary, evidence_templates, tr
             f"section: {_join(item.get('section_path', []))}",
             f"content: {item.get('content_preview', '')}",
         ])
-        trusted = item.get("review_status") == "approved" or chunk_id in trusted_chunk_ids
+        if item.get("review_status") == "approved":
+            trust_basis = "approved_record"
+        elif chunk_id in trusted_chunk_ids:
+            trust_basis = "approved_entity_evidence"
+        elif item.get("doc_id") in trusted_doc_ids:
+            trust_basis = "processed_source_with_traceability"
+        else:
+            trust_basis = ""
+        trusted = bool(trust_basis)
         documents.append(_document(
             f"chunk:{chunk_id}",
             "chunk",
@@ -73,6 +91,7 @@ def build_embedding_documents(chunks, entities, glossary, evidence_templates, tr
             item,
             source_refs=[item.get("source_ref", "")] if item.get("source_ref") else [],
             trusted=trusted,
+            trust_basis=trust_basis,
         ))
 
     for item in entities:
@@ -95,6 +114,7 @@ def build_embedding_documents(chunks, entities, glossary, evidence_templates, tr
             item,
             source_refs=refs,
             trusted=item.get("review_status") == "approved",
+            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
         ))
 
     for item in glossary:
@@ -113,6 +133,7 @@ def build_embedding_documents(chunks, entities, glossary, evidence_templates, tr
             item,
             source_refs=refs,
             trusted=item.get("review_status") == "approved",
+            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
         ))
 
     for item in evidence_templates:
@@ -132,6 +153,7 @@ def build_embedding_documents(chunks, entities, glossary, evidence_templates, tr
             item,
             source_refs=refs,
             trusted=item.get("review_status") == "approved",
+            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
         ))
     return documents
 
@@ -144,6 +166,15 @@ def trusted_chunk_ids(entity_evidence):
     return trusted
 
 
+def retrieval_eligible_doc_ids(sources):
+    return {
+        item.get("source_id", "")
+        for item in sources
+        if item.get("processing_status") == "complete_deterministic"
+        and item.get("trust_level") in {"high", "medium"}
+    }
+
+
 def load_documents():
     evidence = load_jsonl(ENTITY_EVIDENCE_PATH)
     return build_embedding_documents(
@@ -152,6 +183,7 @@ def load_documents():
         glossary=load_jsonl(GLOSSARY_PATH),
         evidence_templates=load_jsonl(EVIDENCE_TEMPLATES_PATH),
         trusted_chunk_ids=trusted_chunk_ids(evidence),
+        trusted_doc_ids=retrieval_eligible_doc_ids(load_jsonl(SOURCE_CATALOG_PATH)),
     )
 
 
@@ -252,6 +284,7 @@ def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST
                 "review_status": document["review_status"],
                 "lifecycle_status": document["lifecycle_status"],
                 "trusted": document["trusted"],
+                "trust_basis": document["trust_basis"],
                 "text": document["text"],
                 "text_hash": hashlib.sha256(document["text"].encode("utf-8")).hexdigest(),
                 "metadata": document["metadata"],
