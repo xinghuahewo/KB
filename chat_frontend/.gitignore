@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+.env*.local
+.yarn/*
+!.yarn/releases/
+!.yarn/plugins/
+!.yarn/sdks/
+!.yarn/versions/

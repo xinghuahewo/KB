@@ -5,3 +5,4 @@ __pycache__/
 .venv/
 venv/
 bgp_visual_output/
+bgp_knowledge_base/.env

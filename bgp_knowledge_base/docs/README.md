@@ -15,6 +15,7 @@ last_reviewed: "2026-06-19"
 3. 需要理解项目总体背景时，回到仓库根部的 [context.md](../../context.md)。
 4. 需要判断下一步怎么做时，优先读 [阶段方案矩阵](roadmap/phase_solution_matrix_v1.md)。
 5. 需要查具体规则、阶段设计或技术调研时，再进入下方分组文档。
+6. 需要查看不插入阶段链的独立产品化工作时，读 [projects/](projects/) 下的项目分支文档。
 
 ## 目录分组
 
@@ -23,6 +24,7 @@ last_reviewed: "2026-06-19"
 | [roadmap/](roadmap/) | 路线图、阶段方案矩阵和跨阶段取舍。 | 只记录阶段级目标、顺序、较优解、简易版和验收边界。 |
 | [governance/](governance/) | 数据管理、生命周期、语义质量等治理设计。 | 说明治理模型和规则，不替代生成脚本或报告事实。 |
 | [stages/](stages/) | 单个阶段的详细开发、技术调研和标准出口方案。 | 记录阶段内实施方案、PoC 边界和交付物。 |
+| [projects/](projects/) | 独立项目分支、产品化实验和不计入阶段验收链的开发计划。 | 不写阶段编号，不修改阶段验收标准。 |
 | [rules/](rules/) | Markdown 文档维护规则。 | 约束文档 CRUD、Frontmatter、路径、索引和链接维护。 |
 
 ## 路线图文档
@@ -50,6 +52,12 @@ last_reviewed: "2026-06-19"
 | [stages/phase_4_rag_framework_v1.md](stages/phase_4_rag_framework_v1.md) | 阶段四 RAG 就绪框架交付说明，用于确认当前设备不运行模型条件下的框架、边界和验收标准。 |
 | [stages/phase_4_rag_and_llm_technical_research_v1.md](stages/phase_4_rag_and_llm_technical_research_v1.md) | 阶段四技术调研，用于评估 LLM 辅助知识加工、embedding、向量索引、混合检索和 RAG context pack。 |
 | [stages/phase_5_standard_exports_v1.md](stages/phase_5_standard_exports_v1.md) | 阶段五标准化出口方案，用于规划 JSON-LD、SKOS、PROV-O 和 RDF 的渐进式建设。 |
+
+## 项目分支文档
+
+| 文档 | 定位 |
+| --- | --- |
+| [projects/chat_frontend_project_branch_v1.md](projects/chat_frontend_project_branch_v1.md) | 对话前端独立项目分支开发文档，不插入阶段四或后续阶段。 |
 
 ## 规则文档
 
