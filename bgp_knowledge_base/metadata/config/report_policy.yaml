@@ -113,6 +113,11 @@ reports:
     category: publishing
     retention: generated
     human_entry: false
+  standardization_report:
+    path: data/generated/reports/publishing/standardization_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
   data_management_report:
     path: data/generated/reports/knowledge/data_management_report.md
     category: knowledge
