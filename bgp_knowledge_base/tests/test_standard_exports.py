@@ -62,7 +62,10 @@ def test_build_entity_jsonld_maps_skos_and_provenance():
     assert result["skos:prefLabel"] == "RPKI"
     assert result["skos:altLabel"] == ["资源公钥基础设施"]
     assert result["skos:definition"] == "用于路由起源验证的资源证书体系。"
-    assert result["prov:wasDerivedFrom"] == ["https://w3id.org/bgpkb/resource/source/rfc6811"]
+    assert result["prov:wasDerivedFrom"] == [{"@id": "https://w3id.org/bgpkb/resource/source/rfc6811"}]
+    assert module.node_reference_ids(result["prov:wasDerivedFrom"]) == [
+        "https://w3id.org/bgpkb/resource/source/rfc6811"
+    ]
     assert result["bgpkb:reviewStatus"] == "approved"
 
 
@@ -86,7 +89,7 @@ def test_build_source_jsonld_preserves_source_metadata():
         "@type": ["prov:Entity", "schema:CreativeWork"],
         "dcterms:title": "RFC 6811",
         "dcterms:type": "standard",
-        "schema:url": "https://www.rfc-editor.org/rfc/rfc6811",
+        "schema:url": {"@id": "https://www.rfc-editor.org/rfc/rfc6811"},
         "bgpkb:reviewStatus": "pending",
     }
 
@@ -179,6 +182,50 @@ def test_build_provenance_chain_covers_source_artifacts_chunks_and_entity():
         "record_id", "subject_uri", "predicate", "object_uri", "source_ref", "generated_by"
     } for row in records)
     assert unresolved == []
+
+
+def test_review_status_filter_prevents_provenance_and_relationship_leakage():
+    module = load_module()
+    sources = [
+        {"source_id": "allowed_source"},
+        {"source_id": "excluded_source"},
+    ]
+    evidence = [
+        {"evidence_id": "allowed__allowed_source", "entity_id": "allowed", "source_id": "allowed_source", "chunk_sample_ids": []},
+        {"evidence_id": "excluded__allowed_source", "entity_id": "excluded", "source_id": "allowed_source", "chunk_sample_ids": []},
+        {"evidence_id": "allowed__excluded_source", "entity_id": "allowed", "source_id": "excluded_source", "chunk_sample_ids": []},
+    ]
+    identities = [
+        {"resource_type": "entity", "local_id": "allowed", "uri": "https://example/entity/allowed"},
+        {"resource_type": "entity", "local_id": "excluded", "uri": "https://example/entity/excluded"},
+        {"resource_type": "source", "local_id": "allowed_source", "uri": "https://example/source/allowed"},
+        {"resource_type": "source", "local_id": "excluded_source", "uri": "https://example/source/excluded"},
+        {"resource_type": "evidence", "local_id": "allowed__allowed_source", "uri": "https://example/evidence/allowed"},
+        {"resource_type": "evidence", "local_id": "excluded__allowed_source", "uri": "https://example/evidence/excluded_entity"},
+        {"resource_type": "evidence", "local_id": "allowed__excluded_source", "uri": "https://example/evidence/excluded_source"},
+    ]
+
+    records, unresolved = module.build_provenance_chain_records(
+        sources, evidence, identities,
+        allowed_entity_ids={"allowed"}, allowed_source_ids={"allowed_source"},
+    )
+    serialized = json.dumps(records)
+    assert "excluded" not in serialized
+    assert unresolved == []
+
+    relationships = [
+        {"src_id": "allowed", "relation": "related_to", "dst_id": "allowed"},
+        {"src_id": "excluded", "relation": "related_to", "dst_id": "allowed"},
+        {"src_id": "allowed", "relation": "related_to", "dst_id": "excluded"},
+    ]
+    config = sample_config() | {"relation_mappings": {"related_to": "skos:related"}}
+    triples, _, unsafe = module.build_relationship_triples(
+        relationships, identities, config, allowed_entity_ids={"allowed"}
+    )
+    assert triples == [(
+        "https://example/entity/allowed", "skos:related", ("uri", "https://example/entity/allowed")
+    )]
+    assert unsafe == []
 
 
 def test_serialize_turtle_supports_all_v1_object_types_and_rejects_out_of_scope_values():
@@ -333,6 +380,54 @@ def test_integrity_diagnostics_block_without_overwriting_formal_outputs(tmp_path
         "unsafe_relation": "无法安全回退关系：1 条",
     }
     assert expected[blocking_issue] in report
+
+
+@pytest.mark.parametrize("missing_resource", ["entity", "source"])
+def test_eligible_resource_without_semantic_uri_blocks_formal_outputs(tmp_path, missing_resource):
+    module = load_module()
+    config = sample_config() | {
+        "outputs": {
+            "entity_catalog": "data/published/entity_catalog.jsonld",
+            "source_catalog": "data/published/source_catalog.jsonld",
+            "provenance_map": "data/published/provenance_map.jsonl",
+            "turtle_sample": "data/published/standard_exports/sample.ttl",
+            "report": "data/generated/reports/publishing/standardization_report.md",
+        },
+        "relation_mappings": {},
+    }
+    semantic = [
+        {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/entity/rpki"},
+        {"resource_type": "source", "local_id": "rfc6811", "uri": "https://example/source/rfc6811"},
+    ]
+    semantic = [row for row in semantic if row["resource_type"] != missing_resource]
+    fixtures = {
+        "data/published/entity_catalog.jsonl": [{
+            "entity_id": "concept_rpki", "entity_type": "BGPConcept", "name": "RPKI", "review_status": "approved"
+        }],
+        "data/published/source_catalog.jsonl": [{
+            "source_id": "rfc6811", "title": "RFC 6811", "source_type": "standard",
+            "review_status": "approved", "parsed_status": "present",
+        }],
+        "data/published/semantic_id_map.jsonl": semantic,
+        "data/derived/datasets/entity_source_evidence.jsonl": [],
+        "data/knowledge/relationships/relationships.jsonl": [],
+    }
+    for relative, records in fixtures.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in records), encoding="utf-8")
+    formal_outputs = [tmp_path / config["outputs"][key] for key in (
+        "entity_catalog", "source_catalog", "provenance_map", "turtle_sample"
+    )]
+    for path in formal_outputs:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("正式产物不得覆盖", encoding="utf-8")
+
+    assert module.generate_standard_exports(tmp_path, config) != 0
+    assert all(path.read_text(encoding="utf-8") == "正式产物不得覆盖" for path in formal_outputs)
+    report = (tmp_path / config["outputs"]["report"]).read_text(encoding="utf-8")
+    assert "语义 URI 缺失：1 条" in report
+    assert missing_resource in report
 
 
 def test_blocking_unresolved_references_only_write_report(tmp_path):

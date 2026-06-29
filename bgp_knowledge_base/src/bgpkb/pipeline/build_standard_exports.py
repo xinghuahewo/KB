@@ -35,7 +35,7 @@ def build_entity_jsonld(entity, entity_uri, source_uris, config):
     source_refs = entity.get("source_refs") or payload.get("source_refs") or []
     resolved_sources = [source_uris[source_ref] for source_ref in source_refs if source_ref in source_uris]
     if resolved_sources:
-        result["prov:wasDerivedFrom"] = resolved_sources
+        result["prov:wasDerivedFrom"] = [{"@id": uri} for uri in resolved_sources]
     if config.get("export_policy", {}).get("preserve_review_status", True):
         review_status = entity.get("review_status") or payload.get("review_status")
         if review_status:
@@ -55,10 +55,20 @@ def build_source_jsonld(source, source_uri):
         "dcterms:type": source.get("source_type", ""),
     }
     if source.get("url"):
-        result["schema:url"] = source["url"]
+        result["schema:url"] = {"@id": source["url"]}
     if source.get("review_status"):
         result["bgpkb:reviewStatus"] = source["review_status"]
     return result
+
+
+def node_reference_ids(value):
+    """验证并提取 JSON-LD 节点引用，避免把 IRI 误写成字符串 literal。"""
+    if not isinstance(value, list) or any(
+        not isinstance(item, dict) or set(item) != {"@id"} or not isinstance(item["@id"], str)
+        for item in value
+    ):
+        raise ValueError("JSON-LD node references must be objects containing only @id")
+    return [item["@id"] for item in value]
 
 
 def build_provenance_records(entities, entity_uris, source_uris):
@@ -185,7 +195,9 @@ def artifact_uri(path):
     return f"https://w3id.org/bgpkb/resource/artifact/{quote(path, safe='')}"
 
 
-def build_provenance_chain_records(sources, evidence_records, semantic_records):
+def build_provenance_chain_records(
+    sources, evidence_records, semantic_records, allowed_entity_ids=None, allowed_source_ids=None,
+):
     """构建 source→制品→chunk→evidence→entity 与生成 Activity 的 PROV-O 主链。"""
     source_rows = {row.get("source_id"): row for row in sources if row.get("source_id")}
     uri_maps = semantic_uri_maps(semantic_records)
@@ -206,6 +218,10 @@ def build_provenance_chain_records(sources, evidence_records, semantic_records):
     ):
         entity_id = evidence.get("entity_id", "")
         source_id = evidence.get("source_id", "")
+        if allowed_entity_ids is not None and entity_id not in allowed_entity_ids:
+            continue
+        if allowed_source_ids is not None and source_id not in allowed_source_ids:
+            continue
         evidence_id = evidence.get("evidence_id", "")
         source_uri = uri_maps["source"].get(source_id)
         entity_uri = uri_maps["entity"].get(entity_id)
@@ -276,7 +292,7 @@ def evidence_source_refs(evidence_records):
     return {entity_id: sorted(source_ids) for entity_id, source_ids in refs.items()}
 
 
-def build_relationship_triples(relationships, semantic_records, config):
+def build_relationship_triples(relationships, semantic_records, config, allowed_entity_ids=None):
     """把全部关系映射为 Turtle 三元组，并记录受控 fallback 与阻塞项。"""
     entity_uris = semantic_uri_maps(semantic_records)["entity"]
     mappings = config.get("relation_mappings", {})
@@ -290,6 +306,10 @@ def build_relationship_triples(relationships, semantic_records, config):
         relationships,
         key=lambda item: (item.get("src_id", ""), item.get("relation", ""), item.get("dst_id", "")),
     ):
+        if allowed_entity_ids is not None and (
+            row.get("src_id") not in allowed_entity_ids or row.get("dst_id") not in allowed_entity_ids
+        ):
+            continue
         relation = row.get("relation", "")
         predicate = mappings.get(relation)
         used_fallback = False
@@ -338,13 +358,16 @@ def build_turtle_sample(entity_graph, limit, namespaces, relationship_triples=No
             triples.append((subject, "skos:prefLabel", ("literal", entity["skos:prefLabel"])))
         if entity.get("skos:definition"):
             triples.append((subject, "skos:definition", ("literal", entity["skos:definition"])))
-        for source_uri in entity.get("prov:wasDerivedFrom", []):
-            triples.append((subject, "prov:wasDerivedFrom", ("uri", source_uri)))
+        for source_reference in entity.get("prov:wasDerivedFrom", []):
+            triples.append((subject, "prov:wasDerivedFrom", ("uri", source_reference["@id"])))
     triples.extend(relationship_triples or [])
     return serialize_turtle(triples, namespaces)
 
 
-def build_diagnostics(entities, sources, semantic_records, relationships, entity_graph, provenance, config):
+def build_diagnostics(
+    entities, sources, semantic_records, relationships, entity_graph, provenance, config,
+    identity_errors=None, allowed_entity_ids=None,
+):
     """统计标准词汇覆盖、未映射项以及 URI/来源解析完整性。"""
     total = len(entity_graph)
 
@@ -376,7 +399,9 @@ def build_diagnostics(entities, sources, semantic_records, relationships, entity
     for row in sources:
         unmapped_fields.update(f"source.{key}" for key in row if key not in mapped_source_fields)
 
-    _, fallback_relations, unsafe_relations = build_relationship_triples(relationships, semantic_records, config)
+    _, fallback_relations, unsafe_relations = build_relationship_triples(
+        relationships, semantic_records, config, allowed_entity_ids=allowed_entity_ids
+    )
     by_uri = defaultdict(list)
     for row in semantic_records:
         if row.get("uri"):
@@ -401,6 +426,9 @@ def build_diagnostics(entities, sources, semantic_records, relationships, entity
         "unsafe_relations": unsafe_relations,
         "duplicate_uris": duplicate_uris,
         "source_errors": source_errors,
+        "identity_errors": sorted(
+            identity_errors or [], key=lambda item: (item["resource_type"], item["local_id"])
+        ),
         "prov_predicate_count": sum(row.get("predicate", "").startswith("prov:") for row in provenance),
     }
 
@@ -410,10 +438,11 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
     diagnostics = diagnostics or {
         "coverage": {prefix: {"count": 0, "percent": 0.0} for prefix in ("skos", "prov", "bgpkb")},
         "unmapped_fields": [], "fallback_relations": [], "unsafe_relations": [],
-        "duplicate_uris": [], "source_errors": [],
+        "duplicate_uris": [], "source_errors": [], "identity_errors": [],
     }
     blocked = bool(
-        unresolved or diagnostics["duplicate_uris"] or diagnostics["source_errors"] or diagnostics["unsafe_relations"]
+        unresolved or diagnostics["duplicate_uris"] or diagnostics["source_errors"]
+        or diagnostics["unsafe_relations"] or diagnostics["identity_errors"]
     )
     conclusion = "阻塞" if blocked else "通过"
     lines = [
@@ -443,6 +472,7 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
         f"- 无法安全回退关系：{len(diagnostics['unsafe_relations'])} 条",
         f"- 重复 URI：{len(diagnostics['duplicate_uris'])} 组",
         f"- 来源解析错误：{len(diagnostics['source_errors'])} 条",
+        f"- 语义 URI 缺失：{len(diagnostics['identity_errors'])} 条",
         "",
         "## 输出文件",
         "",
@@ -479,6 +509,12 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
             f"- `{item['source_id']}` `{item['field']}` = `{item['status']}`"
             for item in diagnostics["source_errors"]
         )
+    if diagnostics["identity_errors"]:
+        lines.extend(["", "### 语义 URI 缺失明细", ""])
+        lines.extend(
+            f"- `{item['resource_type']}`：`{item['local_id']}`"
+            for item in diagnostics["identity_errors"]
+        )
     if unresolved:
         lines.extend(["", "## 未解析引用", ""])
         for item in unresolved:
@@ -505,26 +541,42 @@ def generate_standard_exports(root, config):
     refs_by_entity = evidence_source_refs(evidence)
     statuses = set(config.get("export_policy", {}).get("include_review_statuses", []))
 
+    eligible_entities = [
+        entity for entity in entities if not statuses or entity.get("review_status") in statuses
+    ]
+    eligible_sources = [
+        source for source in sources if not statuses or source.get("review_status") in statuses
+    ]
+    identity_errors = [
+        {"resource_type": "entity", "local_id": entity.get("entity_id", "")}
+        for entity in eligible_entities if entity.get("entity_id", "") not in entity_uris
+    ] + [
+        {"resource_type": "source", "local_id": source.get("source_id", "")}
+        for source in eligible_sources if source.get("source_id", "") not in source_uris
+    ]
+
+    included_entity_ids = {
+        entity.get("entity_id", "") for entity in eligible_entities if entity.get("entity_id", "") in entity_uris
+    }
+    included_source_ids = {
+        source.get("source_id", "") for source in eligible_sources if source.get("source_id", "") in source_uris
+    }
+    included_source_uris = {source_id: source_uris[source_id] for source_id in included_source_ids}
+
     included_entities = []
-    for entity in entities:
-        if statuses and entity.get("review_status") not in statuses:
-            continue
+    for entity in eligible_entities:
         entity_id = entity.get("entity_id", "")
-        if entity_id not in entity_uris:
+        if entity_id not in included_entity_ids:
             continue
         enriched = dict(entity)
         enriched["source_refs"] = refs_by_entity.get(entity_id, [])
         included_entities.append(enriched)
 
-    included_sources = [
-        source for source in sources
-        if source.get("source_id") in source_uris
-        and (not statuses or source.get("review_status") in statuses)
-    ]
+    included_sources = [source for source in eligible_sources if source.get("source_id") in included_source_ids]
 
     entity_graph = sorted(
         (
-            build_entity_jsonld(entity, entity_uris[entity["entity_id"]], source_uris, config)
+            build_entity_jsonld(entity, entity_uris[entity["entity_id"]], included_source_uris, config)
             for entity in included_entities
         ),
         key=lambda item: item["@id"],
@@ -536,13 +588,19 @@ def generate_standard_exports(root, config):
         ),
         key=lambda item: item["@id"],
     )
-    provenance, unresolved = build_provenance_chain_records(included_sources, evidence, semantic_records)
-    relationship_triples, _, _ = build_relationship_triples(relationships, semantic_records, config)
+    provenance, unresolved = build_provenance_chain_records(
+        included_sources, evidence, semantic_records,
+        allowed_entity_ids=included_entity_ids, allowed_source_ids=included_source_ids,
+    )
+    relationship_triples, _, _ = build_relationship_triples(
+        relationships, semantic_records, config, allowed_entity_ids=included_entity_ids
+    )
 
     context = dict(sorted(config["namespaces"].items()))
     sample_limit = config.get("export_policy", {}).get("turtle_sample_limit", 25)
     diagnostics = build_diagnostics(
-        included_entities, included_sources, semantic_records, relationships, entity_graph, provenance, config
+        included_entities, included_sources, semantic_records, relationships, entity_graph, provenance, config,
+        identity_errors=identity_errors, allowed_entity_ids=included_entity_ids,
     )
     report_path = root / outputs["report"]
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -555,7 +613,7 @@ def generate_standard_exports(root, config):
     )
     blocking_count = (
         len(unresolved) + len(diagnostics["duplicate_uris"]) + len(diagnostics["source_errors"])
-        + len(diagnostics["unsafe_relations"])
+        + len(diagnostics["unsafe_relations"]) + len(diagnostics["identity_errors"])
     )
     if blocking_count:
         print(f"Blocked: {blocking_count} standard export integrity issues")
