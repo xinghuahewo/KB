@@ -56,8 +56,9 @@
 - [ ] 重跑测试，确认实体与来源映射通过。
 - [ ] 新增失败测试，要求 provenance 记录表达 source→raw→parsed→cleaned→chunk→entity 主链、生成活动和证据链。
 - [ ] 实现 `build_provenance_records()`，并保证记录排序稳定。
-- [ ] 新增失败测试，要求 Turtle 转义引号、反斜杠和换行，并按主语/谓词/宾语排序。
-- [ ] 实现仅覆盖本项目输出所需的 Turtle 序列化器。
+- [ ] 新增失败测试，要求 Turtle 转义引号、反斜杠和换行，支持 IRI/CURIE/literal 三类对象，并按主语/谓词/宾语排序。
+- [ ] 新增失败测试，要求未登记对象类型、IRI 中非法控制字符和 literal 中不允许的控制字符被显式拒绝。
+- [ ] 实现仅覆盖本项目输出所需的 Turtle 序列化器，并用独立最小语法检查重新解析生成的三元组数量。
 - [ ] 新增 CLI 集成测试，要求生成 `entity_catalog.jsonld`、`source_catalog.jsonld`、`provenance_map.jsonl`、Turtle 样例和中文报告。
 - [ ] 实现 `main()`、报告统计和 `standardization_report` 报告策略。
 - [ ] 运行 `PYTHONPATH=src python3 -m pytest tests/test_standard_exports.py -v`，确认全部通过。

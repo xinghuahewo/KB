@@ -9,11 +9,32 @@
     "candidate_id": {"type": "string", "minLength": 1},
     "input_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "decision": {"enum": ["unreviewed", "approved", "rejected", "needs_evidence"]},
-    "reviewer": {"type": "string"},
+    "reviewer": {"type": "string", "minLength": 1},
     "reviewed_at": {"type": "string", "format": "date-time"},
     "decision_note": {"type": "string"},
     "audit_status": {"enum": ["no_op", "ready_to_apply", "rejected", "needs_evidence", "blocked_invalid_candidate", "blocked_invalid_input", "blocked_conflict"]},
     "write_eligible": {"type": "boolean"},
     "reason": {"type": "string", "minLength": 1}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"decision": {"const": "approved"}}, "required": ["decision"]},
+      "then": {
+        "required": ["reviewer", "reviewed_at"],
+        "properties": {
+          "reviewer": {"minLength": 1},
+          "reviewed_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"audit_status": {"const": "ready_to_apply"}}, "required": ["audit_status"]},
+      "then": {
+        "properties": {
+          "decision": {"const": "approved"},
+          "write_eligible": {"const": true}
+        }
+      }
+    }
+  ]
 }
