@@ -12,6 +12,8 @@ outputs:
   apply_preview: data/derived/datasets/standard_mapping_apply_preview.jsonl
   approved_mappings: data/derived/datasets/approved_standard_mappings.jsonl
   decisions: data/review_inputs/standard_mapping_decisions.csv
+  decision_audit_report: data/generated/reports/review/standard_mapping_decision_audit_report.md
+  decision_apply_report: data/generated/reports/review/standard_mapping_decision_apply_report.md
 namespaces:
   bgpkb: https://w3id.org/bgpkb/vocab#
   skos: http://www.w3.org/2004/02/skos/core#
