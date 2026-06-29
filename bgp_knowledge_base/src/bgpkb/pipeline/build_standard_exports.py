@@ -13,6 +13,8 @@ from bgpkb import paths
 
 GENERATED_BY = "src/bgpkb/pipeline/build_standard_exports.py"
 CONFIG_PATH = paths.CONFIG_DIR / "standard_exports.yaml"
+GENERATION_ACTIVITY_URI = "https://w3id.org/bgpkb/resource/activity/standard_exports_v1"
+PROV_ACTIVITY_URI = "http://www.w3.org/ns/prov#Activity"
 
 
 def build_entity_jsonld(entity, entity_uri, source_uris, config):
@@ -112,10 +114,12 @@ def validate_turtle_iri(value):
         raise ValueError(f"Invalid Turtle IRI: {value!r}")
 
 
-def validate_turtle_curie(value):
+def validate_turtle_curie(value, namespaces=None):
     """校验 v1 范围内的紧凑 IRI。"""
     if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9._-]*:[^\s:]+", value):
         raise ValueError(f"Invalid Turtle CURIE: {value!r}")
+    if namespaces is not None and value.split(":", 1)[0] not in namespaces:
+        raise ValueError(f"Unknown Turtle CURIE prefix: {value!r}")
 
 
 def serialize_turtle(triples, namespaces):
@@ -126,13 +130,13 @@ def serialize_turtle(triples, namespaces):
     lines.append("")
     for subject, predicate, obj in sorted(triples, key=lambda item: (item[0], item[1], item[2][0], item[2][1])):
         validate_turtle_iri(subject)
-        validate_turtle_curie(predicate)
+        validate_turtle_curie(predicate, merged_namespaces)
         object_type, value = obj
         if object_type == "uri":
             validate_turtle_iri(value)
             rendered = f"<{value}>"
         elif object_type == "curie":
-            validate_turtle_curie(value)
+            validate_turtle_curie(value, merged_namespaces)
             rendered = value
         elif object_type == "literal":
             rendered = turtle_literal(value)
@@ -168,7 +172,7 @@ def write_jsonl(path, records):
 
 def semantic_uri_maps(records):
     """从既有语义标识表构造实体与来源 URI 映射。"""
-    maps = {"entity": {}, "source": {}}
+    maps = {"entity": {}, "source": {}, "evidence": {}, "chunk": {}}
     for record in records:
         resource_type = record.get("resource_type")
         if resource_type in maps and record.get("local_id") and record.get("uri"):
@@ -182,20 +186,19 @@ def artifact_uri(path):
 
 
 def build_provenance_chain_records(sources, evidence_records, semantic_records):
-    """构建 source→raw→parsed→cleaned→chunk→entity 的 PROV-O 主链。"""
+    """构建 source→制品→chunk→evidence→entity 与生成 Activity 的 PROV-O 主链。"""
     source_rows = {row.get("source_id"): row for row in sources if row.get("source_id")}
     uri_maps = semantic_uri_maps(semantic_records)
-    chunk_uris = {
-        row["local_id"]: row["uri"]
-        for row in semantic_records
-        if row.get("resource_type") == "chunk" and row.get("local_id") and row.get("uri")
-    }
+    chunk_uris = uri_maps["chunk"]
+    evidence_uris = uri_maps["evidence"]
     links = set()
     unresolved = []
 
-    def add_link(subject_uri, object_uri, source_ref, stage):
+    def add_link(subject_uri, predicate, object_uri, source_ref, stage):
         if subject_uri and object_uri:
-            links.add((subject_uri, object_uri, source_ref, stage))
+            links.add((subject_uri, predicate, object_uri, source_ref, stage))
+
+    add_link(GENERATION_ACTIVITY_URI, "rdf:type", PROV_ACTIVITY_URI, "", "activity_type")
 
     for evidence in sorted(
         evidence_records,
@@ -203,30 +206,34 @@ def build_provenance_chain_records(sources, evidence_records, semantic_records):
     ):
         entity_id = evidence.get("entity_id", "")
         source_id = evidence.get("source_id", "")
+        evidence_id = evidence.get("evidence_id", "")
         source_uri = uri_maps["source"].get(source_id)
         entity_uri = uri_maps["entity"].get(entity_id)
+        evidence_uri = evidence_uris.get(evidence_id)
         source = source_rows.get(source_id, {})
         if not source_uri:
             unresolved.append({"entity_id": entity_id, "source_ref": source_id, "stage": "source"})
             continue
         if not entity_uri:
             unresolved.append({"entity_id": entity_id, "source_ref": source_id, "stage": "entity"})
+        if not evidence_uri:
+            unresolved.append({"entity_id": entity_id, "source_ref": source_id, "stage": "evidence"})
 
         parent_uri = source_uri
         raw_path = source.get("path", "")
         if raw_path:
             raw_uri = artifact_uri(raw_path)
-            add_link(raw_uri, parent_uri, source_id, "raw")
+            add_link(raw_uri, "prov:wasDerivedFrom", parent_uri, source_id, "raw")
             parent_uri = raw_uri
         parsed_path = evidence.get("parsed_path", "")
         if parsed_path:
             parsed_uri = artifact_uri(parsed_path)
-            add_link(parsed_uri, parent_uri, source_id, "parsed")
+            add_link(parsed_uri, "prov:wasDerivedFrom", parent_uri, source_id, "parsed")
             parent_uri = parsed_uri
         cleaned_path = evidence.get("cleaned_path", "")
         if cleaned_path:
             cleaned_uri = artifact_uri(cleaned_path)
-            add_link(cleaned_uri, parent_uri, source_id, "cleaned")
+            add_link(cleaned_uri, "prov:wasDerivedFrom", parent_uri, source_id, "cleaned")
             parent_uri = cleaned_uri
 
         for chunk_id in sorted(set(evidence.get("chunk_sample_ids", []))):
@@ -239,15 +246,19 @@ def build_provenance_chain_records(sources, evidence_records, semantic_records):
                     "chunk_id": chunk_id,
                 })
                 continue
-            add_link(chunk_uri, parent_uri, source_id, "chunk")
-            add_link(entity_uri, chunk_uri, source_id, "entity")
+            add_link(chunk_uri, "prov:wasDerivedFrom", parent_uri, source_id, "chunk")
+            add_link(evidence_uri, "prov:wasDerivedFrom", chunk_uri, source_id, "evidence")
+        if evidence_uri and not evidence.get("chunk_sample_ids"):
+            add_link(evidence_uri, "prov:wasDerivedFrom", parent_uri, source_id, "evidence")
+        add_link(evidence_uri, "prov:wasGeneratedBy", GENERATION_ACTIVITY_URI, source_id, "activity")
+        add_link(entity_uri, "prov:wasDerivedFrom", evidence_uri, source_id, "entity")
 
     records = []
-    for index, (subject_uri, object_uri, source_ref, stage) in enumerate(sorted(links), start=1):
+    for index, (subject_uri, predicate, object_uri, source_ref, stage) in enumerate(sorted(links), start=1):
         records.append({
             "record_id": f"provenance_chain_{index:06d}",
             "subject_uri": subject_uri,
-            "predicate": "prov:wasDerivedFrom",
+            "predicate": predicate,
             "object_uri": object_uri,
             "source_ref": source_ref,
             "generated_by": GENERATED_BY,
@@ -281,8 +292,77 @@ def build_turtle_sample(entity_graph, limit, namespaces):
     return serialize_turtle(triples, namespaces)
 
 
-def build_report(entity_count, source_count, provenance_count, unresolved, sample_count):
+def build_diagnostics(entities, sources, semantic_records, relationships, entity_graph, provenance, config):
+    """统计标准词汇覆盖、未映射项以及 URI/来源解析完整性。"""
+    total = len(entity_graph)
+
+    def prefix_coverage(prefix):
+        covered = 0
+        marker = f"{prefix}:"
+        for row in entity_graph:
+            values = row.get("@type", [])
+            if any(key.startswith(marker) for key in row if not key.startswith("@")) or any(
+                isinstance(value, str) and value.startswith(marker) for value in values
+            ):
+                covered += 1
+        return {"count": covered, "percent": (covered * 100 / total) if total else 0.0}
+
+    mapped_entity_fields = {
+        "entity_id", "entity_type", "name", "aliases", "review_status", "source_refs",
+        "entity_payload", "definition", "description", "lifecycle_status",
+    }
+    mapped_payload_fields = {
+        "id", "entity_type", "name", "aliases", "review_status", "source_refs",
+        "definition", "description", "lifecycle_status",
+    }
+    mapped_source_fields = {"source_id", "title", "url", "source_type", "review_status"}
+    unmapped_fields = set()
+    for row in entities:
+        unmapped_fields.update(f"entity.{key}" for key in row if key not in mapped_entity_fields)
+        payload = row.get("entity_payload", {})
+        unmapped_fields.update(f"entity_payload.{key}" for key in payload if key not in mapped_payload_fields)
+    for row in sources:
+        unmapped_fields.update(f"source.{key}" for key in row if key not in mapped_source_fields)
+
+    mapped_relations = set(config.get("relation_mappings", {}))
+    unmapped_relations = sorted({
+        row.get("relation", "") for row in relationships
+        if row.get("relation") and row.get("relation") not in mapped_relations
+    })
+    by_uri = defaultdict(list)
+    for row in semantic_records:
+        if row.get("uri"):
+            by_uri[row["uri"]].append(f"{row.get('resource_type', '')}:{row.get('local_id', '')}")
+    duplicate_uris = [
+        {"uri": uri, "resources": sorted(resources)}
+        for uri, resources in sorted(by_uri.items()) if len(resources) > 1
+    ]
+
+    error_markers = ("error", "failed", "missing")
+    source_errors = []
+    for row in sources:
+        for field in ("parsed_status", "cleaned_status", "processing_status"):
+            value = str(row.get(field, "")).lower()
+            if any(marker in value for marker in error_markers):
+                source_errors.append({"source_id": row.get("source_id", ""), "field": field, "status": value})
+
+    return {
+        "coverage": {prefix: prefix_coverage(prefix) for prefix in ("skos", "prov", "bgpkb")},
+        "unmapped_fields": sorted(unmapped_fields),
+        "unmapped_relations": unmapped_relations,
+        "duplicate_uris": duplicate_uris,
+        "source_errors": source_errors,
+        "prov_predicate_count": sum(row.get("predicate", "").startswith("prov:") for row in provenance),
+    }
+
+
+def build_report(entity_count, source_count, provenance_count, unresolved, sample_count, diagnostics=None):
     """生成中文标准化出口摘要。"""
+    diagnostics = diagnostics or {
+        "coverage": {prefix: {"count": 0, "percent": 0.0} for prefix in ("skos", "prov", "bgpkb")},
+        "unmapped_fields": [], "unmapped_relations": [], "duplicate_uris": [], "source_errors": [],
+    }
+    conclusion = "阻塞" if unresolved else "通过"
     lines = [
         "# 标准化出口报告",
         "",
@@ -295,6 +375,20 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
         f"- PROV-O 来源关系：{provenance_count} 条",
         f"- Turtle 样例实体：{sample_count} 条",
         f"- 未解析来源引用：{len(unresolved)} 条",
+        f"- 结论：{conclusion}",
+        "",
+        "## 标准覆盖率",
+        "",
+        f"- SKOS 覆盖率：{diagnostics['coverage']['skos']['percent']:.2f}%（{diagnostics['coverage']['skos']['count']}/{entity_count}）",
+        f"- PROV-O 覆盖率：{diagnostics['coverage']['prov']['percent']:.2f}%（{diagnostics['coverage']['prov']['count']}/{entity_count}）",
+        f"- bgpkb 覆盖率：{diagnostics['coverage']['bgpkb']['percent']:.2f}%（{diagnostics['coverage']['bgpkb']['count']}/{entity_count}）",
+        "",
+        "## 映射与完整性",
+        "",
+        f"- 未映射字段：{len(diagnostics['unmapped_fields'])} 个",
+        f"- 未映射关系：{len(diagnostics['unmapped_relations'])} 个",
+        f"- 重复 URI：{len(diagnostics['duplicate_uris'])} 组",
+        f"- 来源解析错误：{len(diagnostics['source_errors'])} 条",
         "",
         "## 输出文件",
         "",
@@ -307,25 +401,41 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
         "",
         "这些文件是兼容 JSON-LD、PROV-O、SKOS 与 Turtle 的派生出口，不替代现有主发布格式，也不改变复核状态。",
     ]
+    for label, items in (
+        ("未映射字段", diagnostics["unmapped_fields"]),
+        ("未映射关系", diagnostics["unmapped_relations"]),
+    ):
+        if items:
+            lines.extend(["", f"### {label}明细", ""])
+            lines.extend(f"- `{item}`" for item in items)
+    if diagnostics["duplicate_uris"]:
+        lines.extend(["", "### 重复 URI 明细", ""])
+        lines.extend(f"- `{item['uri']}`：{', '.join(item['resources'])}" for item in diagnostics["duplicate_uris"])
+    if diagnostics["source_errors"]:
+        lines.extend(["", "### 来源解析错误明细", ""])
+        lines.extend(
+            f"- `{item['source_id']}` `{item['field']}` = `{item['status']}`"
+            for item in diagnostics["source_errors"]
+        )
     if unresolved:
         lines.extend(["", "## 未解析引用", ""])
-        lines.extend(
-            f"- `{item['entity_id']}` → `{item['source_ref']}`"
-            for item in unresolved
-        )
+        for item in unresolved:
+            detail = f"- `{item['entity_id']}` → `{item['source_ref']}`；阶段：`{item.get('stage', 'source')}`"
+            if item.get("chunk_id"):
+                detail += f"；chunk：`{item['chunk_id']}`"
+            lines.append(detail)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def main():
-    """从现有发布文件生成全部标准出口。"""
-    root = paths.PROJECT_ROOT
-    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+def generate_standard_exports(root, config):
+    """生成标准出口；有未解析引用时仅写阻塞报告并返回非零。"""
     outputs = config["outputs"]
 
     entities = read_jsonl(root / "data/published/entity_catalog.jsonl")
     sources = read_jsonl(root / "data/published/source_catalog.jsonl")
     semantic_records = read_jsonl(root / "data/published/semantic_id_map.jsonl")
     evidence = read_jsonl(root / "data/derived/datasets/entity_source_evidence.jsonl")
+    relationships = read_jsonl(root / "data/knowledge/relationships/relationships.jsonl")
 
     uri_maps = semantic_uri_maps(semantic_records)
     entity_uris = uri_maps["entity"]
@@ -367,28 +477,43 @@ def main():
     provenance, unresolved = build_provenance_chain_records(included_sources, evidence, semantic_records)
 
     context = dict(sorted(config["namespaces"].items()))
-    write_json(root / outputs["entity_catalog"], {"@context": context, "@graph": entity_graph})
-    write_json(root / outputs["source_catalog"], {"@context": context, "@graph": source_graph})
-    write_jsonl(root / outputs["provenance_map"], provenance)
-
     sample_limit = config.get("export_policy", {}).get("turtle_sample_limit", 25)
-    turtle_path = root / outputs["turtle_sample"]
-    turtle_path.parent.mkdir(parents=True, exist_ok=True)
-    turtle_path.write_text(
-        build_turtle_sample(entity_graph, sample_limit, config["namespaces"]),
-        encoding="utf-8",
+    diagnostics = build_diagnostics(
+        included_entities, included_sources, semantic_records, relationships, entity_graph, provenance, config
     )
-
     report_path = root / outputs["report"]
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
-        build_report(len(entity_graph), len(source_graph), len(provenance), unresolved, min(sample_limit, len(entity_graph))),
+        build_report(
+            len(entity_graph), len(source_graph), len(provenance), unresolved,
+            min(sample_limit, len(entity_graph)), diagnostics,
+        ),
         encoding="utf-8",
+    )
+    if unresolved:
+        print(f"Blocked: {len(unresolved)} unresolved provenance references")
+        print(f"Wrote {outputs['report']}")
+        return 1
+
+    write_json(root / outputs["entity_catalog"], {"@context": context, "@graph": entity_graph})
+    write_json(root / outputs["source_catalog"], {"@context": context, "@graph": source_graph})
+    write_jsonl(root / outputs["provenance_map"], provenance)
+    turtle_path = root / outputs["turtle_sample"]
+    turtle_path.parent.mkdir(parents=True, exist_ok=True)
+    turtle_path.write_text(
+        build_turtle_sample(entity_graph, sample_limit, config["namespaces"]), encoding="utf-8"
     )
 
     for output_key in ("entity_catalog", "source_catalog", "provenance_map", "turtle_sample", "report"):
         print(f"Wrote {outputs[output_key]}")
+    return 0
+
+
+def main():
+    """从现有发布文件生成全部标准出口。"""
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    return generate_standard_exports(paths.PROJECT_ROOT, config)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

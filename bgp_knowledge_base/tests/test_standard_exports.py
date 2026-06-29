@@ -146,6 +146,7 @@ def test_build_provenance_chain_covers_source_artifacts_chunks_and_entity():
         {"resource_type": "source", "local_id": "rfc6811", "uri": "https://example/source/rfc6811"},
         {"resource_type": "chunk", "local_id": "rfc6811_s001_1_001", "uri": "https://example/chunk/1"},
         {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/entity/rpki"},
+        {"resource_type": "evidence", "local_id": "concept_rpki__rfc6811", "uri": "https://example/evidence/1"},
     ]
 
     records, unresolved = module.build_provenance_chain_records(sources, evidence, identities)
@@ -158,7 +159,20 @@ def test_build_provenance_chain_covers_source_artifacts_chunks_and_entity():
     assert (parsed_uri, raw_uri) in links
     assert (cleaned_uri, parsed_uri) in links
     assert ("https://example/chunk/1", cleaned_uri) in links
-    assert ("https://example/entity/rpki", "https://example/chunk/1") in links
+    assert ("https://example/evidence/1", "https://example/chunk/1") in links
+    assert ("https://example/entity/rpki", "https://example/evidence/1") in links
+    assert any(
+        row["subject_uri"] == "https://example/evidence/1"
+        and row["predicate"] == "prov:wasGeneratedBy"
+        and row["object_uri"] == module.GENERATION_ACTIVITY_URI
+        for row in records
+    )
+    assert any(
+        row["subject_uri"] == module.GENERATION_ACTIVITY_URI
+        and row["predicate"] == "rdf:type"
+        and row["object_uri"] == "http://www.w3.org/ns/prov#Activity"
+        for row in records
+    )
     assert all(row["generated_by"] == "src/bgpkb/pipeline/build_standard_exports.py" for row in records)
     assert all(set(row) == {
         "record_id", "subject_uri", "predicate", "object_uri", "source_ref", "generated_by"
@@ -188,6 +202,99 @@ def test_serialize_turtle_supports_all_v1_object_types_and_rejects_out_of_scope_
         module.serialize_turtle([("not an iri", "rdf:type", ("curie", "skos:Concept"))], {})
     with pytest.raises(ValueError, match="Invalid Turtle CURIE"):
         module.serialize_turtle([("urn:test", "not-a-curie", ("literal", "值"))], {})
+    with pytest.raises(ValueError, match="Unknown Turtle CURIE prefix"):
+        module.serialize_turtle([("urn:test", "rdf:type", ("curie", "unknown:Concept"))], {})
+
+
+def test_report_includes_coverage_mapping_and_integrity_diagnostics():
+    module = load_module()
+    entities = [{
+        "entity_id": "concept_rpki", "entity_type": "BGPConcept", "name": "RPKI",
+        "review_status": "approved", "custom_field": "待映射", "entity_payload": {"definition": "定义"},
+    }]
+    sources = [{
+        "source_id": "rfc6811", "title": "RFC 6811", "source_type": "standard",
+        "review_status": "approved", "parsed_status": "error", "cleaned_status": "present",
+    }]
+    semantic = [
+        {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/duplicate"},
+        {"resource_type": "source", "local_id": "rfc6811", "uri": "https://example/duplicate"},
+    ]
+    relationships = [{"relation": "unknown_relation"}]
+    entity_graph = [{
+        "@id": "https://example/entity", "@type": ["skos:Concept"],
+        "skos:prefLabel": "RPKI", "prov:wasDerivedFrom": ["https://example/source"],
+        "bgpkb:reviewStatus": "approved",
+    }]
+
+    diagnostics = module.build_diagnostics(
+        entities, sources, semantic, relationships, entity_graph, [{"predicate": "prov:wasDerivedFrom"}], sample_config()
+    )
+    report = module.build_report(1, 1, 1, [], 1, diagnostics)
+
+    assert "SKOS 覆盖率：100.00%" in report
+    assert "PROV-O 覆盖率：100.00%" in report
+    assert "bgpkb 覆盖率：100.00%" in report
+    assert "未映射字段" in report and "custom_field" in report
+    assert "未映射关系" in report and "unknown_relation" in report
+    assert "重复 URI：1 组" in report
+    assert "来源解析错误：1 条" in report
+
+
+def test_blocking_unresolved_references_only_write_report(tmp_path):
+    module = load_module()
+    config = sample_config() | {
+        "outputs": {
+            "entity_catalog": "data/published/entity_catalog.jsonld",
+            "source_catalog": "data/published/source_catalog.jsonld",
+            "provenance_map": "data/published/provenance_map.jsonl",
+            "turtle_sample": "data/published/standard_exports/sample.ttl",
+            "report": "data/generated/reports/publishing/standardization_report.md",
+        },
+        "relation_mappings": {},
+    }
+    fixtures = {
+        "data/published/entity_catalog.jsonl": [{
+            "entity_id": "concept_rpki", "entity_type": "BGPConcept", "name": "RPKI", "review_status": "approved"
+        }],
+        "data/published/source_catalog.jsonl": [{
+            "source_id": "rfc6811", "title": "RFC 6811", "source_type": "standard", "review_status": "approved"
+        }],
+        "data/published/semantic_id_map.jsonl": [
+            {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/entity/rpki"},
+            {"resource_type": "source", "local_id": "rfc6811", "uri": "https://example/source/rfc6811"},
+            {"resource_type": "evidence", "local_id": "concept_rpki__rfc6811", "uri": "https://example/evidence/good"},
+        ],
+        "data/derived/datasets/entity_source_evidence.jsonl": [
+            {
+                "evidence_id": "concept_rpki__missing", "entity_id": "concept_rpki", "source_id": "missing",
+                "chunk_sample_ids": [],
+            },
+            {
+                "evidence_id": "concept_rpki__rfc6811", "entity_id": "concept_rpki", "source_id": "rfc6811",
+                "chunk_sample_ids": ["missing_chunk"],
+            },
+        ],
+        "data/knowledge/relationships/relationships.jsonl": [],
+    }
+    for relative, records in fixtures.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in records), encoding="utf-8")
+    formal_outputs = [tmp_path / config["outputs"][key] for key in (
+        "entity_catalog", "source_catalog", "provenance_map", "turtle_sample"
+    )]
+    for path in formal_outputs:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("正式产物不得覆盖", encoding="utf-8")
+
+    exit_code = module.generate_standard_exports(tmp_path, config)
+
+    assert exit_code != 0
+    assert all(path.read_text(encoding="utf-8") == "正式产物不得覆盖" for path in formal_outputs)
+    report = (tmp_path / config["outputs"]["report"]).read_text(encoding="utf-8")
+    assert "结论：阻塞" in report
+    assert "missing" in report and "missing_chunk" in report
 
 
 def test_cli_generates_deterministic_standard_exports_without_changing_primary_inputs():
@@ -198,6 +305,7 @@ def test_cli_generates_deterministic_standard_exports_without_changing_primary_i
         root / "data/published/source_catalog.jsonl",
         root / "data/published/semantic_id_map.jsonl",
         root / "data/derived/datasets/entity_source_evidence.jsonl",
+        root / "data/knowledge/relationships/relationships.jsonl",
     ]
     outputs = [root / config["outputs"][key] for key in (
         "entity_catalog", "source_catalog", "provenance_map", "turtle_sample", "report"
@@ -230,10 +338,13 @@ def test_cli_generates_deterministic_standard_exports_without_changing_primary_i
     assert "@context" in entity_document and entity_document["@graph"]
     assert [row["@id"] for row in entity_document["@graph"]] == sorted(row["@id"] for row in entity_document["@graph"])
     assert "@context" in source_document and source_document["@graph"]
-    assert provenance and all(row["predicate"] == "prov:wasDerivedFrom" for row in provenance)
+    assert provenance and {row["predicate"] for row in provenance} == {
+        "prov:wasDerivedFrom", "prov:wasGeneratedBy", "rdf:type"
+    }
     assert "@prefix prov:" in turtle and "prov:wasDerivedFrom" in turtle
     assert report.startswith("# 标准化出口报告\n")
     assert "实体 JSON-LD" in report and "来源 JSON-LD" in report and "PROV-O" in report
+    assert "SKOS 覆盖率" in report and "未映射关系" in report and "重复 URI" in report
 
     report_policy = yaml.safe_load((root / "metadata/config/report_policy.yaml").read_text(encoding="utf-8"))
     assert report_policy["reports"]["standardization_report"] == {
