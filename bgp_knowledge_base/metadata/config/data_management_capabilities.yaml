@@ -1,0 +1,400 @@
+version: data_management_v1
+allowed_statuses:
+  - achieved
+  - partial
+  - planned
+  - not_started
+  - deferred
+generated_policy:
+  report_path: data/generated/reports/knowledge/data_management_report.md
+asset_groups:
+  - id: entities
+    name: 实体
+    status: achieved
+    description: BGP 概念、异常类型、数据源、数据字段、证据模板、案例、论文方法和路由机制等结构化实体。
+    paths:
+      - data/knowledge/entities/*.jsonl
+      - data/published/entity_catalog.jsonl
+    schemas:
+      - metadata/schemas/concept.schema.json
+      - metadata/schemas/case.schema.json
+      - metadata/schemas/paper.schema.json
+      - metadata/schemas/data_source.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/extract_entities.py
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+      - src/bgpkb/pipeline/build_sqlite_knowledge_base.py
+    quality_checks:
+      - JSON schema check
+      - duplicate entity_id check
+      - source reference check
+    evidence:
+      - data/knowledge/entities/bgp_concepts.jsonl
+      - data/published/entity_catalog.jsonl
+      - data/reports/gates/quality_report.md
+  - id: relationships
+    name: 关系
+    status: achieved
+    description: 实体之间的有向关系边，包含关系类型、两端实体类型、置信度和来源引用。
+    paths:
+      - data/knowledge/relationships/relationships.jsonl
+      - data/published/relationship_adjacency.json
+    schemas:
+      - metadata/schemas/relationship.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_relationships.py
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+    quality_checks:
+      - relationship endpoint reference check
+      - duplicate relationship check
+      - confidence range check
+    evidence:
+      - data/knowledge/relationships/relationships.jsonl
+      - data/published/relationship_adjacency.json
+  - id: sources
+    name: source
+    status: achieved
+    description: BGP 资料来源登记表，覆盖论文、标准、案例报告、数据文档和项目上下文。
+    paths:
+      - data/sources/inventory/sources.csv
+      - data/published/source_catalog.jsonl
+    schemas:
+      - metadata/schemas/source.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/collect_raw_sources.py
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+    quality_checks:
+      - source_id duplicate check
+      - local file existence check
+      - raw inventory consistency check
+    evidence:
+      - data/sources/inventory/sources.csv
+      - data/generated/reports/sources/source_processing_status_report.md
+  - id: chunks
+    name: chunk
+    status: achieved
+    description: 从清洗文本和人工 seed 中生成的知识片段，是检索、证据摘录和发布索引的基础。
+    paths:
+      - data/corpus/chunks/*.jsonl
+      - data/published/chunk_catalog.jsonl
+    schemas:
+      - metadata/schemas/chunk.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_chunks.py
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+    quality_checks:
+      - chunk_id duplicate check
+      - empty content check
+      - source path check
+    evidence:
+      - data/corpus/chunks/bgp_chunks.jsonl
+      - data/published/chunk_catalog.jsonl
+  - id: glossary
+    name: 术语表
+    status: achieved
+    description: 从已有实体机械派生的术语表，服务查询、浏览和后续检索增强。
+    paths:
+      - data/derived/datasets/glossary.jsonl
+      - data/derived/datasets/glossary.csv
+    schemas:
+      - metadata/schemas/glossary_entry.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_glossary.py
+    quality_checks:
+      - glossary entity coverage check
+      - source reference check
+    evidence:
+      - data/derived/datasets/glossary.jsonl
+      - data/generated/reports/knowledge/glossary_report.md
+  - id: evidence_templates
+    name: 证据模板
+    status: achieved
+    description: 面向异常类型判断的 required evidence、optional evidence 和 false positive checks。
+    paths:
+      - data/knowledge/entities/evidence_templates.jsonl
+      - data/published/entity_catalog.jsonl
+    schemas:
+      - metadata/schemas/evidence_template.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/extract_entities.py
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+    quality_checks:
+      - JSON schema check
+      - source reference check
+    evidence:
+      - data/knowledge/entities/evidence_templates.jsonl
+  - id: cases
+    name: 案例
+    status: partial
+    description: BGP 历史案例和机械抽取的案例观察值，事件角色、影响范围和证据强度仍需语义复核。
+    paths:
+      - data/knowledge/entities/cases.jsonl
+      - data/derived/datasets/case_observations.jsonl
+      - data/derived/datasets/case_observations.csv
+    schemas:
+      - metadata/schemas/case.schema.json
+      - metadata/schemas/case_observation.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/extract_case_observations.py
+      - src/bgpkb/pipeline/build_case_observation_guides.py
+    quality_checks:
+      - case observation duplicate key check
+      - source reference check
+    evidence:
+      - data/knowledge/entities/cases.jsonl
+      - data/derived/datasets/case_observations.jsonl
+      - data/generated/reports/knowledge/case_observation_report.md
+  - id: human_review_workbook
+    name: 人工复核工作簿
+    status: achieved
+    description: 面向实体人工复核的工作簿、会话队列和字段核验入口。
+    paths:
+      - data/derived/datasets/human_review_workbook.jsonl
+      - data/derived/datasets/human_review_workbook.csv
+    schemas:
+      - metadata/schemas/human_review_workbook_entry.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_human_review_workbook.py
+    quality_checks:
+      - workbook entity coverage check
+      - packet/action reference check
+    evidence:
+      - data/derived/datasets/human_review_workbook.jsonl
+      - data/generated/reports/review/human_review_workbook_report.md
+  - id: next_action_queue
+    name: 行动队列
+    status: achieved
+    description: 汇总实体复核、来源补充和语义跳过事项的下一步行动队列。
+    paths:
+      - data/derived/datasets/next_action_queue.jsonl
+      - data/derived/datasets/next_action_queue.csv
+    schemas:
+      - metadata/schemas/next_action.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_next_action_queue.py
+    quality_checks:
+      - action id duplicate check
+      - needs_llm flag check
+    evidence:
+      - data/derived/datasets/next_action_queue.jsonl
+      - data/reports/actions/next_action_queue_report.md
+  - id: semantic_quality
+    name: 语义质量 findings
+    status: achieved
+    description: 语义一致性扫描输出的问题清单和报告，覆盖 blocker、warning、info 分级以及 RAG 默认可信集合影响。
+    paths:
+      - data/derived/datasets/semantic_quality_findings.jsonl
+      - data/generated/reports/knowledge/semantic_quality_report.md
+    schemas: []
+    generated_by:
+      - src/bgpkb/pipeline/build_semantic_quality_report.py
+    quality_checks:
+      - semantic consistency check
+      - trusted RAG eligibility check
+    evidence:
+      - data/derived/datasets/semantic_quality_findings.jsonl
+      - data/generated/reports/knowledge/semantic_quality_report.md
+  - id: semantic_identity
+    name: 语义标识前置层
+    status: achieved
+    description: 阶段三点五新增的 bgpkb 命名空间、URI 规则、JSON-LD context 和稳定 ID 映射。
+    paths:
+      - metadata/config/semantic_identity.yaml
+      - data/published/jsonld_context.json
+      - data/published/semantic_id_map.jsonl
+      - data/generated/reports/publishing/semantic_identity_report.md
+    schemas: []
+    generated_by:
+      - src/bgpkb/pipeline/build_semantic_identity.py
+    quality_checks:
+      - stable URI uniqueness check
+      - JSON-LD context coverage check
+      - field mapping coverage check
+    evidence:
+      - metadata/config/semantic_identity.yaml
+      - data/published/jsonld_context.json
+      - data/published/semantic_id_map.jsonl
+      - data/generated/reports/publishing/semantic_identity_report.md
+  - id: rag_retrieval_framework
+    name: RAG 检索框架
+    status: achieved
+    description: 阶段四在当前设备不运行模型条件下建立的完整 RAG 框架，包含 provider 配置、候选增强、mock embedding、检索索引、context pack 和 API。
+    paths:
+      - metadata/config/rag_retrieval.yaml
+      - metadata/config/llm_candidate_enrichment.yaml
+      - data/derived/datasets/chunk_enrichment_candidates.jsonl
+      - data/derived/datasets/entity_link_candidates.jsonl
+      - data/derived/datasets/rag_query_eval.jsonl
+      - data/published/embedding_manifest.json
+      - data/published/rag_mock_vector_index.jsonl
+      - data/published/rag_retrieval_index.json
+      - data/generated/reports/rag/rag_readiness_report.md
+    schemas:
+      - metadata/schemas/retrieval_result.schema.json
+      - metadata/schemas/context_pack.schema.json
+      - metadata/schemas/chunk_enrichment_candidate.schema.json
+      - metadata/schemas/entity_link_candidate.schema.json
+    generated_by:
+      - src/bgpkb/pipeline/build_llm_candidate_enrichment.py
+      - src/bgpkb/pipeline/build_rag_indexes.py
+      - src/bgpkb/pipeline/build_rag_readiness_report.py
+    quality_checks:
+      - offline provider boundary check
+      - traceable retrieval result check
+      - context pack policy exclusion check
+    evidence:
+      - metadata/config/rag_retrieval.yaml
+      - data/generated/reports/rag/rag_readiness_report.md
+      - tests/test_rag_retrieval.py
+  - id: published_package
+    name: 发布包
+    status: achieved
+    description: 面向下游查询和集成的 JSONL、JSON、SQLite 和 manifest 发布目录。
+    paths:
+      - data/published/
+      - data/published/manifest.json
+      - data/published/bgp_knowledge_base.sqlite
+    schemas:
+      - data/published/sqlite_schema.sql
+    generated_by:
+      - src/bgpkb/pipeline/build_published_knowledge_base.py
+      - src/bgpkb/pipeline/build_sqlite_knowledge_base.py
+    quality_checks:
+      - manifest count check
+      - sqlite integrity check
+      - query example check
+    evidence:
+      - data/published/manifest.json
+      - data/reports/gates/published_integrity_report.md
+  - id: service_api
+    name: 服务化 API
+    status: achieved
+    description: 基于 FastAPI 的只读知识服务，提供 API、OpenAPI 和简单 HTML 浏览页。
+    paths:
+      - src/bgpkb/service/
+      - tests/test_service_api.py
+    schemas:
+      - data/published/sqlite_schema.sql
+    generated_by:
+      - src/bgpkb/service/app.py
+    quality_checks:
+      - API test
+      - health check
+    evidence:
+      - src/bgpkb/service/app.py
+      - tests/test_service_api.py
+capability_groups:
+  - id: data_asset_inventory
+    name: 数据资产清单
+    status: achieved
+    description: 核心数据资产已在文件、发布包和报告中具备可盘点入口。
+    evidence:
+      - data/sources/inventory/sources.csv
+      - data/generated/reports/publishing/artifact_manifest_report.md
+      - data/published/manifest.json
+    next_steps:
+      - 将新增资产统一登记到 data_management_capabilities.yaml。
+  - id: data_model_standards
+    name: 数据模型标准
+    status: partial
+    description: JSON Schema、实体类型、主题分类和阶段三点五语义标识层已存在，但跨类型关系约束和集中 required fields 说明仍待补充。
+    evidence:
+      - metadata/schemas/
+      - metadata/config/entity_types.yaml
+      - metadata/config/topic_taxonomy.yaml
+      - metadata/config/semantic_identity.yaml
+    next_steps:
+      - 建立关系两端类型约束。
+      - 建立集中 required fields 说明。
+  - id: metadata_lineage
+    name: 元数据与溯源
+    status: partial
+    description: source、raw、parsed、cleaned、chunk、entity 的链路已经存在，统一 extracted_at、reviewed_by、approved_at 字段待阶段二补齐。
+    evidence:
+      - data/derived/datasets/entity_source_evidence.jsonl
+      - data/generated/reports/knowledge/entity_source_evidence_report.md
+      - data/published/source_catalog.jsonl
+    next_steps:
+      - 在生命周期阶段补齐统一审核和时间字段。
+  - id: quality_governance
+    name: 质量治理
+    status: partial
+    description: 结构质量检查已较完整，语义质量扫描已建立，后续仍需扩展更多领域规则和有效期策略。
+    evidence:
+      - data/reports/gates/quality_report.md
+      - data/reports/gates/published_integrity_report.md
+      - data/generated/reports/knowledge/semantic_quality_report.md
+    next_steps:
+      - 扩展更多跨实体语义规则。
+      - 新增更细的 validity period 来源时效策略。
+  - id: lifecycle
+    name: 生命周期
+    status: achieved
+    description: 已建立 draft/candidate/reviewed/approved/deprecated/archived 生命周期视图，并生成实体级生命周期清单。
+    evidence:
+      - data/generated/reports/knowledge/lifecycle_report.md
+      - data/derived/datasets/lifecycle_inventory.jsonl
+      - data/derived/datasets/human_review_decision_audit.jsonl
+    next_steps:
+      - 补齐 valid_from 和 valid_until 来源时效策略。
+      - 在后续阶段按需增加 deprecated 和 archived 显式覆盖。
+  - id: semantic_quality_governance
+    name: 语义质量治理
+    status: achieved
+    description: 已建立确定性语义质量 findings，能分级展示跨实体语义问题、RAG 默认可信集合影响和人工复核建议。
+    evidence:
+      - metadata/config/semantic_quality_rules.yaml
+      - data/generated/reports/knowledge/semantic_quality_report.md
+      - data/derived/datasets/semantic_quality_findings.jsonl
+    next_steps:
+      - 将 blocker findings 转入人工修复或规则例外审查。
+      - 在 RAG 阶段默认引用无 blocker 的 approved 实体集合。
+  - id: semantic_identity_governance
+    name: 语义标识治理
+    status: achieved
+    description: 已建立 bgpkb 命名空间、稳定 URI 规则、JSON-LD context 和字段映射草案，供 RAG 与标准化出口复用。
+    evidence:
+      - docs/governance/semantic_identity_v1.md
+      - metadata/config/semantic_identity.yaml
+      - data/generated/reports/publishing/semantic_identity_report.md
+      - data/published/jsonld_context.json
+      - data/published/semantic_id_map.jsonl
+    next_steps:
+      - 在阶段四 RAG context pack 中引用 semantic_id_map 的 @id。
+      - 在阶段五继续扩展 SKOS、PROV-O 和 RDF 导出。
+  - id: rag_retrieval
+    name: RAG 检索框架
+    status: achieved
+    description: 已建立离线可验收的 RAG 框架，默认使用 mock provider、SQLite FTS5 和稳定 @id；DeepSeek、Qwen/vLLM、BGE-M3 和 Milvus 真实路径保留但默认禁用。
+    evidence:
+      - metadata/config/rag_retrieval.yaml
+      - metadata/config/llm_candidate_enrichment.yaml
+      - data/generated/reports/rag/rag_readiness_report.md
+      - data/published/rag_retrieval_index.json
+    next_steps:
+      - 在有模型设备后显式启用 BGE-M3 与 Milvus，不运行模型的默认 mock 流水线必须保持通过。
+      - 在具备 API key 后显式启用 DeepSeek 候选增强，并保持候选 pending_review 边界。
+      - 后续用 Qwen/vLLM OpenAI-compatible endpoint 替换 DeepSeek provider。
+  - id: service_access
+    name: 服务化访问
+    status: partial
+    description: SQLite、FTS、CLI、REST API、HTML 浏览页和 RAG retrieval API 已具备；真实向量库和模型运行留待具备部署环境后启用。
+    evidence:
+      - data/published/bgp_knowledge_base.sqlite
+      - src/bgpkb/pipeline/query_knowledge_base.py
+      - src/bgpkb/service/app.py
+      - src/bgpkb/pipeline/query_rag.py
+    next_steps:
+      - 在模型设备上启用 BGE-M3 和 Milvus。
+      - 对比真实 hybrid retrieval 与当前 mock/FTS baseline。
+  - id: standard_exports
+    name: 标准化出口
+    status: partial
+    description: JSONL、JSON、CSV、SQLite 和轻量 JSON-LD context 已具备，RDF、完整 SKOS/PROV-O、STIX/MISP 尚未建设。
+    evidence:
+      - data/published/
+      - data/derived/datasets/
+      - data/published/jsonld_context.json
+    next_steps:
+      - 在阶段五补充实体级 JSON-LD 样例出口。
+      - 再扩展完整 SKOS 和 PROV-O 映射。

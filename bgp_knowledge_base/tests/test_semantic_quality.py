@@ -3,18 +3,20 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
+
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DOC = ROOT / "docs" / "governance" / "semantic_quality_v1.md"
-CONFIG = ROOT / "config" / "semantic_quality_rules.yaml"
-REPORT = ROOT / "reports" / "semantic_quality_report.md"
-FINDINGS = ROOT / "datasets" / "semantic_quality_findings.jsonl"
-SCRIPT = ROOT / "scripts" / "build_semantic_quality_report.py"
-PIPELINE = ROOT / "scripts" / "run_pipeline.py"
-ACCEPTANCE = ROOT / "config" / "stage_acceptance_gates.yaml"
-DATA_MANAGEMENT = ROOT / "config" / "data_management_capabilities.yaml"
+ROOT = paths.PROJECT_ROOT
+DOC = paths.DOCS_DIR / "governance" / "semantic_quality_v1.md"
+CONFIG = paths.CONFIG_DIR / "semantic_quality_rules.yaml"
+REPORT = paths.report_path("semantic_quality_report")
+FINDINGS = paths.DATASETS_DIR / "semantic_quality_findings.jsonl"
+SCRIPT = paths.PIPELINE_DIR / "build_semantic_quality_report.py"
+PIPELINE = paths.PIPELINE_DIR / "run_pipeline.py"
+ACCEPTANCE = paths.CONFIG_DIR / "stage_acceptance_gates.yaml"
+DATA_MANAGEMENT = paths.CONFIG_DIR / "data_management_capabilities.yaml"
 
 ALLOWED_SEVERITIES = {"blocker", "warning", "info"}
 REQUIRED_RULES = {
@@ -54,8 +56,8 @@ def test_semantic_quality_config_declares_required_rules_and_outputs():
 
     assert data["version"] == "semantic_quality_v1"
     assert set(data["allowed_severities"]) == ALLOWED_SEVERITIES
-    assert data["generated_policy"]["findings_path"] == "datasets/semantic_quality_findings.jsonl"
-    assert data["generated_policy"]["report_path"] == "reports/semantic_quality_report.md"
+    assert data["generated_policy"]["findings_path"] == "data/derived/datasets/semantic_quality_findings.jsonl"
+    assert data["generated_policy"]["report_path"] == "data/generated/reports/knowledge/semantic_quality_report.md"
     assert REQUIRED_RULES <= {rule["id"] for rule in data["rules"]}
 
 
@@ -136,8 +138,8 @@ def test_semantic_quality_is_registered_in_pipeline_data_management_and_acceptan
     stage = stages["phase_3_semantic_quality_v1"]
     assert stage["name"] == "语义质量治理 v1"
     assert "docs/governance/semantic_quality_v1.md" in stage["required_files"]
-    assert "reports/semantic_quality_report.md" in stage["required_files"]
-    assert "datasets/semantic_quality_findings.jsonl" in stage["required_files"]
+    assert "data/generated/reports/knowledge/semantic_quality_report.md" in stage["required_files"]
+    assert "data/derived/datasets/semantic_quality_findings.jsonl" in stage["required_files"]
     assert len(stage["effect_review"]["new_capabilities"]) >= 3
     assert len(stage["effect_review"]["user_can_now"]) >= 3
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3

@@ -14,18 +14,18 @@ last_reviewed: "2026-06-20"
 
 ## 新增能力
 
-- `scripts/run_deepseek_rag_answer_eval.py` 使用真实 DeepSeek API 运行批量评测。
-- `datasets/deepseek_rag_answer_eval_results.jsonl` 保存真实评测逐题结果。
-- `reports/deepseek_rag_answer_eval_report.md` 保存真实评测中文报告。
-- `scripts/build_rag_answer_failure_analysis.py` 生成失败样本分析。
-- `reports/rag_answer_failure_analysis_report.md` 汇总失败检查分布、状态迁移和样本建议。
+- `src/bgpkb/pipeline/run_deepseek_rag_answer_eval.py` 使用真实 DeepSeek API 运行批量评测。
+- `data/derived/datasets/deepseek_rag_answer_eval_results.jsonl` 保存真实评测逐题结果。
+- `data/generated/reports/rag/deepseek_rag_answer_eval_report.md` 保存真实评测中文报告。
+- `src/bgpkb/pipeline/build_rag_answer_failure_analysis.py` 生成失败样本分析。
+- `data/generated/reports/rag/rag_answer_failure_analysis_report.md` 汇总失败检查分布、状态迁移和样本建议。
 
 ## 运行方式
 
 ```bash
 export DEEPSEEK_API_KEY="你的 DeepSeek API key"
-python3 scripts/run_deepseek_rag_answer_eval.py
-python3 scripts/build_rag_answer_failure_analysis.py
+python3 -m bgpkb.pipeline.run_deepseek_rag_answer_eval
+python3 -m bgpkb.pipeline.build_rag_answer_failure_analysis
 ```
 
 失败分析脚本不读取密钥。如果真实评测结果存在，它优先分析真实结果；否则分析阶段 4.3 的离线评测结果。

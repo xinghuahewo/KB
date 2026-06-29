@@ -1,14 +1,16 @@
 from pathlib import Path
+
+from bgpkb import paths
 import sys
 
 from fastapi.testclient import TestClient
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = paths.PROJECT_ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from service.app import app  # noqa: E402
+from bgpkb.service.app import app  # noqa: E402
 
 
 client = TestClient(app)

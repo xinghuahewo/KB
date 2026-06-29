@@ -1,0 +1,120 @@
+version: semantic_quality_v1
+allowed_severities:
+  - blocker
+  - warning
+  - info
+generated_policy:
+  findings_path: data/derived/datasets/semantic_quality_findings.jsonl
+  report_path: data/generated/reports/knowledge/semantic_quality_report.md
+  trusted_rag_default_lifecycle_status: approved
+rules:
+  - id: anomaly_required_evidence_template_coverage
+    severity: blocker
+    description: AnomalyType 的 required_evidence 必须被对应 EvidenceTemplate 覆盖或解释。
+  - id: evidence_template_field_mapping
+    severity: warning
+    description: EvidenceTemplate 的证据字段应能映射到 DataField 或已登记概念。
+  - id: relationship_type_constraint
+    severity: blocker
+    description: Relationship 的起点和终点实体类型必须符合允许关系类型。
+  - id: case_anomaly_type_mapping
+    severity: warning
+    description: Case 的 event_type 应能映射到已知 AnomalyType。
+  - id: datasource_field_lineage
+    severity: info
+    description: DataSource 与 DataField 之间应存在可解释来源链路。
+  - id: candidate_excluded_from_trusted_rag
+    severity: warning
+    description: candidate 实体不得进入高可信默认集合。
+  - id: expired_validity_requires_action
+    severity: warning
+    description: valid_until 过期实体必须进入行动队列或被降级。
+relationship_type_constraints:
+  affects_interpretation_of:
+    - [RoutingMechanism, DataField]
+  belongs_to:
+    - [BGPConcept, BGPConcept]
+    - [DataField, BGPConcept]
+    - [DataField, DataField]
+    - [DataField, DataSource]
+  depends_on:
+    - [DataSource, BGPConcept]
+    - [RoutingMechanism, BGPConcept]
+    - [RoutingMechanism, DataSource]
+  derived_from:
+    - [BGPConcept, BGPConcept]
+    - [DataField, DataField]
+  does_not_validate_full:
+    - [BGPConcept, BGPConcept]
+    - [DataSource, DataField]
+  guards_against_overclaiming:
+    - [FalsePositivePattern, AnomalyType]
+  instance_of:
+    - [Case, AnomalyType]
+  limits_interpretation_of:
+    - [DataField, DataField]
+  may_explain:
+    - [BGPConcept, AnomalyType]
+  outputs:
+    - [RoutingMechanism, DataField]
+  produces:
+    - [RoutingMechanism, BGPConcept]
+  provides:
+    - [DataSource, BGPConcept]
+    - [DataSource, DataField]
+  represented_by:
+    - [DataField, DataField]
+  requires_evidence:
+    - [AnomalyType, EvidenceTemplate]
+  retrieves:
+    - [DataSource, BGPConcept]
+  secures:
+    - [RoutingMechanism, BGPConcept]
+  supported_by:
+    - [RoutingMechanism, DataSource]
+  supports:
+    - [BGPConcept, AnomalyType]
+    - [DataField, AnomalyType]
+    - [DataField, BGPConcept]
+    - [DataField, DataField]
+    - [DataField, DataSource]
+    - [DataField, RoutingMechanism]
+    - [DataSource, AnomalyType]
+    - [DataSource, BGPConcept]
+    - [DataSource, DataField]
+    - [DataSource, DataSource]
+    - [RoutingMechanism, AnomalyType]
+    - [RoutingMechanism, EvidenceTemplate]
+    - [RoutingMechanism, RoutingMechanism]
+  uses:
+    - [DataSource, DataSource]
+    - [PaperMethod, BGPConcept]
+    - [PaperMethod, DataSource]
+    - [PaperMethod, RoutingMechanism]
+    - [RoutingMechanism, BGPConcept]
+    - [RoutingMechanism, DataField]
+    - [RoutingMechanism, DataSource]
+  validates:
+    - [BGPConcept, BGPConcept]
+field_mapping_ignored_terms:
+  - event
+  - before
+  - after
+  - historical
+  - current
+  - changed
+  - known
+  - suspected
+  - status
+  - set
+  - record
+  - report
+  - evidence
+  - observation
+  - observations
+  - sequence
+  - type
+  - time
+  - window
+  - start
+  - end

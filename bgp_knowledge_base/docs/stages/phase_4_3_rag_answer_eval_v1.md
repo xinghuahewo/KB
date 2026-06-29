@@ -14,16 +14,16 @@ last_reviewed: "2026-06-20"
 
 ## 新增能力
 
-- `datasets/rag_answer_eval_questions.jsonl` 保存固定评测问题。
-- `scripts/run_rag_answer_eval.py` 运行答案质量评测。
-- `datasets/rag_answer_eval_results.jsonl` 保存逐题结果。
-- `reports/rag_answer_eval_report.md` 汇总引用覆盖率、拒答率和失败项。
+- `data/derived/datasets/rag_answer_eval_questions.jsonl` 保存固定评测问题。
+- `src/bgpkb/pipeline/run_rag_answer_eval.py` 运行答案质量评测。
+- `data/derived/datasets/rag_answer_eval_results.jsonl` 保存逐题结果。
+- `data/generated/reports/rag/rag_answer_eval_report.md` 汇总引用覆盖率、拒答率和失败项。
 - 检索排序加入轻量意图权重，使定义类问题优先标准、事件类问题优先案例、方法类问题优先论文。
 
 ## 运行方式
 
 ```bash
-python3 scripts/run_rag_answer_eval.py
+python3 -m bgpkb.pipeline.run_rag_answer_eval
 ```
 
 如果环境变量 `DEEPSEEK_API_KEY` 不存在，脚本使用离线结构检查客户端，不调用外部 API。设置 `DEEPSEEK_API_KEY` 后，同一脚本可调用真实 DeepSeek API。

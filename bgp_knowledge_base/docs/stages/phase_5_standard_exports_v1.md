@@ -54,7 +54,7 @@ last_reviewed: "2026-06-19"
 简易版只做最小稳定语义层：
 
 1. 冻结 ID 和 URI 命名规范。
-2. 提供 `published/jsonld_context.json`。
+2. 提供 `data/published/jsonld_context.json`。
 3. 提供字段映射说明。
 4. 为每类核心实体输出少量 JSON-LD 样例。
 5. 不生成全量 RDF。
@@ -116,20 +116,20 @@ last_reviewed: "2026-06-19"
 
 较优解交付物：
 
-- `published/jsonld_context.json`
-- `published/entity_catalog.jsonld`
-- `published/source_catalog.jsonld`
-- `published/provenance_map.jsonl`
-- `published/standard_exports/`
-- `reports/standardization_report.md`
-- `schemas/jsonld_context.schema.json`
+- `data/published/jsonld_context.json`
+- `data/published/entity_catalog.jsonld`
+- `data/published/source_catalog.jsonld`
+- `data/published/provenance_map.jsonl`
+- `data/published/standard_exports/`
+- `data/generated/reports/publishing/standardization_report.md`
+- `metadata/schemas/jsonld_context.schema.json`
 - `tests/test_standard_exports.py`
 
 简易版交付物：
 
-- `published/jsonld_context.json`
+- `data/published/jsonld_context.json`
 - `docs/stages/phase_5_standard_exports_v1.md`
-- `reports/standardization_report.md`
+- `data/generated/reports/publishing/standardization_report.md`
 - 5 到 10 条 JSON-LD 样例
 
 ## 9. 验收标准

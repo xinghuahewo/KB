@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "required": [
+    "validation_id",
+    "check_order",
+    "input_path",
+    "check_type",
+    "status",
+    "severity",
+    "checked_count",
+    "issue_count",
+    "message",
+    "suggested_action",
+    "needs_llm",
+    "generated_by"
+  ],
+  "properties": {
+    "validation_id": {"type": "string"},
+    "check_order": {"type": "integer"},
+    "input_path": {"type": "string"},
+    "check_type": {
+      "type": "string",
+      "enum": [
+        "input_file_exists",
+        "required_columns",
+        "duplicate_entity_id",
+        "missing_entity_id",
+        "known_entity_id",
+        "allowed_review_decision",
+        "semantic_review_boundary",
+        "ready_to_apply_preview"
+      ]
+    },
+    "status": {"type": "string", "enum": ["pass", "warning", "fail", "info"]},
+    "severity": {"type": "string", "enum": ["error", "warning", "info"]},
+    "checked_count": {"type": "integer"},
+    "issue_count": {"type": "integer"},
+    "affected_entity_ids": {"type": "array", "items": {"type": "string"}},
+    "affected_rows": {"type": "array", "items": {"type": "integer"}},
+    "message": {"type": "string"},
+    "suggested_action": {"type": "string"},
+    "needs_llm": {"type": "boolean"},
+    "generated_by": {"type": "string", "const": "src/bgpkb/pipeline/build_human_review_input_validation.py"}
+  }
+}

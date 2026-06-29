@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "required": [
+    "handoff_id",
+    "task_id",
+    "task_order",
+    "task_type",
+    "handoff_status",
+    "title",
+    "primary_input",
+    "primary_input_exists",
+    "expected_manual_output",
+    "verification_command",
+    "can_write",
+    "requires_human_decision",
+    "needs_llm",
+    "skip_note",
+    "generated_by"
+  ],
+  "properties": {
+    "handoff_id": {"type": "string"},
+    "task_id": {"type": "string"},
+    "task_order": {"type": "integer"},
+    "task_type": {"type": "string"},
+    "handoff_status": {"type": "string", "enum": ["ready_for_human"]},
+    "title": {"type": "string"},
+    "primary_input": {"type": "string"},
+    "primary_input_exists": {"type": "boolean"},
+    "secondary_input": {"type": "string"},
+    "secondary_input_exists": {"type": "boolean"},
+    "expected_manual_output": {"type": "string"},
+    "dry_run_command": {"type": "string"},
+    "write_command": {"type": "string"},
+    "verification_command": {"type": "string"},
+    "can_write": {"type": "boolean"},
+    "requires_human_decision": {"type": "boolean"},
+    "needs_llm": {"type": "boolean"},
+    "skip_note": {"type": "string"},
+    "generated_by": {"type": "string", "const": "src/bgpkb/pipeline/build_human_review_handoff.py"}
+  }
+}

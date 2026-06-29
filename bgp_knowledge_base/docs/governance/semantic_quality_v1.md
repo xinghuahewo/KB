@@ -48,10 +48,10 @@ last_reviewed: "2026-06-19"
 
 ## 交付物
 
-- `config/semantic_quality_rules.yaml`：语义质量规则、等级、关系类型约束和输出路径。
-- `scripts/build_semantic_quality_report.py`：确定性生成 findings 与报告。
-- `datasets/semantic_quality_findings.jsonl`：逐条语义质量问题清单。
-- `reports/semantic_quality_report.md`：语义问题总览、等级统计、RAG 影响和人工复核建议。
+- `metadata/config/semantic_quality_rules.yaml`：语义质量规则、等级、关系类型约束和输出路径。
+- `src/bgpkb/pipeline/build_semantic_quality_report.py`：确定性生成 findings 与报告。
+- `data/derived/datasets/semantic_quality_findings.jsonl`：逐条语义质量问题清单。
+- `data/generated/reports/knowledge/semantic_quality_report.md`：语义问题总览、等级统计、RAG 影响和人工复核建议。
 - `tests/test_semantic_quality.py`：阶段三测试。
 
 ## 非目标

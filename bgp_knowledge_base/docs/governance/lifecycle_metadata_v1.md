@@ -28,8 +28,8 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 | `candidate` | 已有来源和证据线索，等待人工复核或补充。 | `review_status=pending`，且存在复核包或打开的行动项。 |
 | `reviewed` | 已经过一定复核或结构审查，但尚未满足批准条件。 | `review_status=approved` 但证据索引不足，或后续策略显式覆盖。 |
 | `approved` | 已批准进入知识库主视图，可被服务化、检索和下游出口依赖。 | `review_status=approved`，且存在来源证据记录。 |
-| `deprecated` | 仍保留用于兼容或历史解释，但不建议新流程继续依赖。 | 由 `config/lifecycle_policy.yaml` 显式覆盖。 |
-| `archived` | 历史归档，不进入默认活跃视图。 | 由 `config/lifecycle_policy.yaml` 显式覆盖。 |
+| `deprecated` | 仍保留用于兼容或历史解释，但不建议新流程继续依赖。 | 由 `metadata/config/lifecycle_policy.yaml` 显式覆盖。 |
+| `archived` | 历史归档，不进入默认活跃视图。 | 由 `metadata/config/lifecycle_policy.yaml` 显式覆盖。 |
 
 ## 生命周期状态推导规则
 
@@ -42,7 +42,7 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 
 ## 元数据字段
 
-生命周期清单 `datasets/lifecycle_inventory.jsonl` 至少登记以下字段：
+生命周期清单 `data/derived/datasets/lifecycle_inventory.jsonl` 至少登记以下字段：
 
 - `entity_id`
 - `entity_type`
@@ -77,10 +77,10 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 
 ## 交付物
 
-- `config/lifecycle_policy.yaml`：生命周期状态、元数据字段、推导规则和质量规则配置。
-- `scripts/build_lifecycle_report.py`：生成生命周期清单与治理报告。
-- `datasets/lifecycle_inventory.jsonl`：实体级生命周期清单。
-- `reports/lifecycle_report.md`：生命周期状态、元数据覆盖、质量规则和行动建议报告。
+- `metadata/config/lifecycle_policy.yaml`：生命周期状态、元数据字段、推导规则和质量规则配置。
+- `src/bgpkb/pipeline/build_lifecycle_report.py`：生成生命周期清单与治理报告。
+- `data/derived/datasets/lifecycle_inventory.jsonl`：实体级生命周期清单。
+- `data/generated/reports/knowledge/lifecycle_report.md`：生命周期状态、元数据覆盖、质量规则和行动建议报告。
 - `tests/test_lifecycle_metadata.py`：阶段二确定性测试。
 
 ## 非目标

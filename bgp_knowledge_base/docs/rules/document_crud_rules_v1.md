@@ -4,9 +4,20 @@ document_type: "文档规则"
 purpose: "定义后续新增、读取、更新、删除或归档 Markdown 文档时必须遵守的元数据、目录归属、索引维护和自动校验规则。"
 scope: "当前仓库内所有 Markdown 文档"
 status: "现行规则"
-last_reviewed: "2026-06-19"
+last_reviewed: "2026-06-29"
 ---
 # Markdown 文档 CRUD 规则 v1
+
+## 文档保留原则
+
+`docs/` 只长期保留治理规范、现行验收依据、仍有效的路线图和稳定项目说明。以下内容完成使命后应删除，由 Git 历史承担追溯：
+
+- 已完成的一次性实施计划和任务拆解。
+- 已被正式规范或现行阶段文档覆盖的设计稿、调研草案。
+- 基线、路径或阶段结论已经失效的路线图。
+- 与代码、配置或生成报告重复，且没有独立决策价值的说明。
+
+删除文档时必须同步更新最近的索引和所有显式引用；仍被验收配置、测试或运行流程引用的文档不得直接删除。
 
 ## 1. 规则目标
 
@@ -20,8 +31,8 @@ last_reviewed: "2026-06-19"
 | --- | --- | --- |
 | `context.md` | 是 | 项目总上下文。 |
 | `bgp_knowledge_base/**/*.md` | 是 | 知识库内所有 Markdown 文档。 |
-| `raw/` 原始资料 | 仅 Markdown 适用 | 非 Markdown 原始文件不受本规则约束。 |
-| `parsed/`、`chunks/`、`entities/`、`relationships/`、`datasets/` | 否 | 这些目录以机器数据为主，不按 Markdown CRUD 管理。 |
+| `data/sources/raw/` 原始资料 | 仅 Markdown 适用 | 非 Markdown 原始文件不受本规则约束。 |
+| `data/corpus/parsed/`、`data/corpus/chunks/`、`data/knowledge/entities/`、`data/knowledge/relationships/`、`data/derived/datasets/` | 否 | 这些目录以机器数据为主，不按 Markdown CRUD 管理。 |
 | 由脚本生成的报告 | 是 | 可补充 Frontmatter 和索引，但正文统计以生成脚本为准。 |
 
 ## 3. 文档分类
@@ -32,24 +43,24 @@ last_reviewed: "2026-06-19"
 | --- | --- | --- |
 | `目录入口说明` | `bgp_knowledge_base/README.md` | 根入口。 |
 | `目录使用说明` | `bgp_knowledge_base/目录介绍.md` | 面向人工浏览的目录说明。 |
-| `归并索引` | `docs/README.md`、`reports/README.md`、`cleaned/README.md` | 将同类文档收束为可导航入口。 |
+| `归并索引` | `docs/README.md`、`data/reports/README.md`、`data/corpus/cleaned/README.md` | 将同类文档收束为可导航入口。 |
 | `阶段方案矩阵` | `docs/roadmap/*matrix*.md` | 对比每个阶段的较优解、简易版、推荐路径和取舍。 |
 | `规划与治理文档` | `docs/roadmap/*.md`、`docs/governance/*.md` | 路线规划、数据治理、生命周期和语义质量设计。 |
 | `阶段设计文档` | `docs/stages/*.md` | 单个阶段的详细开发方案、标准出口方案或实施边界。 |
 | `技术调研文档` | `docs/stages/*research*.md` | 技术路线、PoC、方案比选和风险边界。 |
 | `文档规则` | `docs/rules/*rules*.md` | 文档维护与 CRUD 规则。 |
 | `项目上下文` | `context.md` | 项目方案、范围和背景上下文。 |
-| `项目报告` | `reports/*_report.md` | 阶段报告、质量报告、发布报告、数据字典等。 |
-| `人工复核清单` | `reports/human_review_guides/*.md` | 人工复核分组清单。 |
-| `人工复核会话指南` | `reports/human_review_session_guides/*.md` | 单个 session 的复核材料。 |
-| `案例观察值核验指南` | `reports/case_observation_guides/*.md` | 单个案例的观察值核验材料。 |
-| `清洗后的标准资料` | `cleaned/standards/*.md` | RFC 与标准语料。 |
-| `清洗后的数据源文档` | `cleaned/data_docs/*.md` | 数据源和 API 文档语料。 |
-| `清洗后的研究论文` | `cleaned/papers/*.md` | 论文语料。 |
-| `清洗后的案例资料` | `cleaned/cases/*.md` | 案例报告语料。 |
-| `清洗上下文摘要` | `cleaned/notes/*.md` | 上下文摘要语料。 |
-| `发布包入口说明` | `published/README.md` | 发布包入口和查询说明。 |
-| `人工复核输入模板说明` | `review_inputs/**/*.md` | 人工复核输入模板说明。 |
+| `项目报告` | `data/reports/{gates,reference,actions}/*_report.md`、`data/generated/reports/**/*.md` | 门禁、参考、行动入口和可再生成明细报告。 |
+| `人工复核清单` | `data/generated/reports/review/human_review_guides/*.md` | 人工复核分组清单。 |
+| `人工复核会话指南` | `data/generated/reports/review/human_review_session_guides/*.md` | 单个 session 的复核材料。 |
+| `案例观察值核验指南` | `data/generated/reports/review/case_observation_guides/*.md` | 单个案例的观察值核验材料。 |
+| `清洗后的标准资料` | `data/corpus/cleaned/standards/*.md` | RFC 与标准语料。 |
+| `清洗后的数据源文档` | `data/corpus/cleaned/data_docs/*.md` | 数据源和 API 文档语料。 |
+| `清洗后的研究论文` | `data/corpus/cleaned/papers/*.md` | 论文语料。 |
+| `清洗后的案例资料` | `data/corpus/cleaned/cases/*.md` | 案例报告语料。 |
+| `清洗上下文摘要` | `data/corpus/cleaned/notes/*.md` | 上下文摘要语料。 |
+| `发布包入口说明` | `data/published/README.md` | 发布包入口和查询说明。 |
+| `人工复核输入模板说明` | `data/review_inputs/**/*.md` | 人工复核输入模板说明。 |
 
 ## 4. Frontmatter 规则
 
@@ -135,8 +146,8 @@ last_reviewed: "YYYY-MM-DD"
 | 治理设计 | `bgp_knowledge_base/docs/governance/` |
 | 阶段详细方案 | `bgp_knowledge_base/docs/stages/` |
 | 文档规则 | `bgp_knowledge_base/docs/rules/` |
-| 报告 | `bgp_knowledge_base/reports/` |
-| 报告子指南 | `bgp_knowledge_base/reports/*_guides/` |
+| 报告入口 | `bgp_knowledge_base/data/reports/` |
+| 生成报告与子指南 | `bgp_knowledge_base/data/generated/reports/` |
 | 清洗语料 | `bgp_knowledge_base/cleaned/<source_group>/` |
 | 发布包入口 | `bgp_knowledge_base/published/README.md` |
 | 人工复核输入说明 | `bgp_knowledge_base/review_inputs/**/README.md` |
@@ -158,13 +169,14 @@ last_reviewed: "YYYY-MM-DD"
 | 文档位置 | 必须维护的索引 |
 | --- | --- |
 | `docs/**/*.md` | `docs/README.md` |
-| `reports/*.md` | `reports/README.md` |
-| `reports/case_observation_guides/*.md` | `reports/case_observation_guides/README.md`，必要时同步 `reports/README.md` |
-| `reports/human_review_guides/*.md` | `reports/human_review_guides/README.md`，必要时同步 `reports/README.md` |
-| `reports/human_review_session_guides/*.md` | `reports/human_review_session_guides/README.md`，必要时同步 `reports/README.md` |
-| `cleaned/**/*.md` | `cleaned/README.md` |
-| `published/README.md` | `README.md` 与 `docs/README.md` 的入口关系 |
-| `review_inputs/**/*.md` | 对应目录 `README.md`，必要时同步 `README.md` 的人工复核说明 |
+| `data/reports/{gates,reference,actions}/*.md` | `data/reports/README.md` |
+| `data/generated/reports/**/*.md` | 最近的 generated 分区 README 或 `data/reports/README.md` |
+| `data/generated/reports/review/case_observation_guides/*.md` | `data/generated/reports/review/case_observation_guides/README.md`，必要时同步 `data/reports/README.md` |
+| `data/generated/reports/review/human_review_guides/*.md` | `data/generated/reports/review/human_review_guides/README.md`，必要时同步 `data/reports/README.md` |
+| `data/generated/reports/review/human_review_session_guides/*.md` | `data/generated/reports/review/human_review_session_guides/README.md`，必要时同步 `data/reports/README.md` |
+| `data/corpus/cleaned/**/*.md` | `data/corpus/cleaned/README.md` |
+| `data/published/README.md` | `README.md` 与 `docs/README.md` 的入口关系 |
+| `data/review_inputs/**/*.md` | 对应目录 `README.md`，必要时同步 `README.md` 的人工复核说明 |
 
 归并索引不必须逐条列出所有语料文件，但必须至少按分组覆盖，并说明每组用途。
 
@@ -236,7 +248,7 @@ last_reviewed: "YYYY-MM-DD"
 | `BODY-002` | 正文应以 H1 开头。 | 非豁免文件正文第一段不是 `# `。 |
 | `PATH-001` | 新增英文文件名使用小写 snake_case。 | 文件名含大写、空格或非约定分隔符。 |
 | `PATH-002` | 版本化规则或治理文档有版本后缀。 | 规则或治理文档缺少 `_vN`。 |
-| `PATH-003` | 报告文件使用 `*_report.md`。 | 顶层报告不符合命名且不是 README。 |
+| `PATH-003` | 报告文件使用 `*_report.md`，且先登记到 `metadata/config/report_policy.yaml`。 | 未登记报告、旧顶层报告或命名不符合策略。 |
 | `LINK-001` | Markdown 本地相对链接必须可解析。 | 链接目标不存在。 |
 | `INDEX-001` | 新增或改名文档必须进入最近归并索引。 | 无索引覆盖记录或分组说明。 |
 | `ARCHIVE-001` | `已归档` 文档必须有 `archived_at`。 | 缺少归档日期。 |
@@ -247,8 +259,8 @@ last_reviewed: "YYYY-MM-DD"
 | 豁免项 | 原因 |
 | --- | --- |
 | `context.md` 正文不强制第一段为 H1 | 该文件保留原始项目说明开头，历史上下文价值高于格式统一。 |
-| `cleaned/**/*.md` 的正文标题不强制与 `title` 完全一致 | 清洗文本可能保留原始网页、PDF 或 RFC 解析噪声。 |
-| 语料文件不要求全部逐条列入总索引 | `cleaned/README.md` 以分组归并为主，避免索引过度膨胀。 |
+| `data/corpus/cleaned/**/*.md` 的正文标题不强制与 `title` 完全一致 | 清洗文本可能保留原始网页、PDF 或 RFC 解析噪声。 |
+| 语料文件不要求全部逐条列入总索引 | `data/corpus/cleaned/README.md` 以分组归并为主，避免索引过度膨胀。 |
 | 脚本生成报告的正文统计不要求人工维护 | 报告事实应由生成脚本和流水线维护。 |
 
 ## 11. 最小校验命令草案
@@ -265,4 +277,4 @@ last_reviewed: "YYYY-MM-DD"
 7. 对已归档文档校验 archived_at 和替代关系。
 ```
 
-正式脚本若后续添加，建议命名为 `scripts/check_markdown_documents.py`，输出报告可写入 `reports/document_rules_report.md`。在添加脚本前，本规则文档就是 Markdown CRUD 的准入标准。
+正式脚本若后续添加，建议命名为 `src/bgpkb/pipeline/check_markdown_documents.py`，输出报告可写入 `data/generated/reports/knowledge/document_rules_report.md`，并先登记到 `metadata/config/report_policy.yaml`。在添加脚本前，本规则文档就是 Markdown CRUD 的准入标准。

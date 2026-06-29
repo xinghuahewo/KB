@@ -1,14 +1,16 @@
 import json
 from pathlib import Path
 
+from bgpkb import paths
+
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[1]
-RAG_CONFIG = ROOT / "config" / "rag_retrieval.yaml"
-LLM_CONFIG = ROOT / "config" / "llm_candidate_enrichment.yaml"
-RETRIEVAL_SCHEMA = ROOT / "schemas" / "retrieval_result.schema.json"
-CONTEXT_SCHEMA = ROOT / "schemas" / "context_pack.schema.json"
+ROOT = paths.PROJECT_ROOT
+RAG_CONFIG = paths.CONFIG_DIR / "rag_retrieval.yaml"
+LLM_CONFIG = paths.CONFIG_DIR / "llm_candidate_enrichment.yaml"
+RETRIEVAL_SCHEMA = paths.SCHEMAS_DIR / "retrieval_result.schema.json"
+CONTEXT_SCHEMA = paths.SCHEMAS_DIR / "context_pack.schema.json"
 
 
 def test_rag_and_llm_configs_lock_offline_defaults_and_real_provider_boundaries():

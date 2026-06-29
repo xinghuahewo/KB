@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "required": [
+    "progress_id",
+    "scope_type",
+    "scope_value",
+    "entity_count",
+    "pending_count",
+    "approved_count",
+    "rejected_count",
+    "unreviewed_decision_count",
+    "approved_decision_count",
+    "rejected_decision_count",
+    "needs_source_decision_count",
+    "needs_semantic_review_decision_count",
+    "ready_to_apply_count",
+    "manual_followup_count",
+    "blocked_by_llm_count",
+    "no_op_count",
+    "completion_percent",
+    "needs_llm_count",
+    "next_step",
+    "generated_by"
+  ],
+  "properties": {
+    "progress_id": {"type": "string"},
+    "scope_type": {
+      "type": "string",
+      "enum": ["overall", "entity_type", "review_batch", "review_bucket"]
+    },
+    "scope_value": {"type": "string"},
+    "entity_count": {"type": "integer"},
+    "pending_count": {"type": "integer"},
+    "approved_count": {"type": "integer"},
+    "rejected_count": {"type": "integer"},
+    "unreviewed_decision_count": {"type": "integer"},
+    "approved_decision_count": {"type": "integer"},
+    "rejected_decision_count": {"type": "integer"},
+    "needs_source_decision_count": {"type": "integer"},
+    "needs_semantic_review_decision_count": {"type": "integer"},
+    "ready_to_apply_count": {"type": "integer"},
+    "manual_followup_count": {"type": "integer"},
+    "blocked_by_llm_count": {"type": "integer"},
+    "no_op_count": {"type": "integer"},
+    "completion_percent": {"type": "number"},
+    "needs_llm_count": {"type": "integer"},
+    "next_step": {"type": "string"},
+    "generated_by": {"type": "string", "const": "src/bgpkb/pipeline/build_human_review_progress.py"}
+  }
+}

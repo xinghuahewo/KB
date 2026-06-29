@@ -2,13 +2,15 @@ import subprocess
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
+
+ROOT = paths.PROJECT_ROOT
 
 
 def test_query_examples_script_matches_current_published_database():
     result = subprocess.run(
-        [sys.executable, "scripts/build_query_examples.py"],
+        [sys.executable, "-m", "bgpkb.pipeline.build_query_examples"],
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,

@@ -1,74 +1,55 @@
 ---
-title: "规划与治理文档归并索引"
+title: "项目文档索引"
 document_type: "归并索引"
-purpose: "归并项目级规划、治理、阶段方案和文档规则，说明阅读顺序、目录分组和维护边界。"
-scope: "docs 目录与项目级 Markdown 入口"
+purpose: "集中导航仍然有效的治理规范、阶段交付、后续路线和项目说明。"
+scope: "docs 目录"
 status: "现行索引"
-last_reviewed: "2026-06-19"
+last_reviewed: "2026-06-29"
 ---
-# 规划与治理文档归并索引
+# 项目文档索引
 
-## 阅读顺序
+`docs/` 只保留仍对运行、验收、治理或后续建设有用的文档。已完成的临时实施计划、被正式规范覆盖的调研草稿和过期路线图不在这里长期保存，历史内容由 Git 记录。
 
-1. 先读根目录 [README](../README.md)，确认知识库目标、范围、目录结构和流水线入口。
-2. 再读 [目录介绍](../目录介绍.md)，按目录理解数据层、发布包、报告和人工复核入口。
-3. 需要理解项目总体背景时，回到仓库根部的 [context.md](../../context.md)。
-4. 需要判断下一步怎么做时，优先读 [阶段方案矩阵](roadmap/phase_solution_matrix_v1.md)。
-5. 需要查具体规则、阶段设计或技术调研时，再进入下方分组文档。
-6. 需要查看不插入阶段链的独立产品化工作时，读 [projects/](projects/) 下的项目分支文档。
+## 推荐阅读顺序
 
-## 目录分组
+1. 阅读根目录 [README](../README.md)，了解项目目标、运行命令和主要入口。
+2. 阅读 [目录介绍](../目录介绍.md)，了解数据、元数据、代码、测试和报告的边界。
+3. 按需要查阅下方治理规范、阶段交付或后续路线。
+4. 查运行结果时使用 [报告索引](../data/reports/README.md)，不要在 `docs/` 查生成报告。
 
-| 分组 | 作用 | 维护边界 |
-| --- | --- | --- |
-| [roadmap/](roadmap/) | 路线图、阶段方案矩阵和跨阶段取舍。 | 只记录阶段级目标、顺序、较优解、简易版和验收边界。 |
-| [governance/](governance/) | 数据管理、生命周期、语义质量等治理设计。 | 说明治理模型和规则，不替代生成脚本或报告事实。 |
-| [stages/](stages/) | 单个阶段的详细开发、技术调研和标准出口方案。 | 记录阶段内实施方案、PoC 边界和交付物。 |
-| [projects/](projects/) | 独立项目分支、产品化实验和不计入阶段验收链的开发计划。 | 不写阶段编号，不修改阶段验收标准。 |
-| [rules/](rules/) | Markdown 文档维护规则。 | 约束文档 CRUD、Frontmatter、路径、索引和链接维护。 |
+## 治理规范
 
-## 路线图文档
-
-| 文档 | 定位 |
+| 文档 | 用途 |
 | --- | --- |
-| [roadmap/phase_solution_matrix_v1.md](roadmap/phase_solution_matrix_v1.md) | 每个阶段的较优解、简易版、推荐采用方式和取舍说明。 |
-| [roadmap/next_stage_plan_v1.md](roadmap/next_stage_plan_v1.md) | 下一阶段建设计划，用于判断阶段顺序和总体路线。 |
+| [数据管理体系](governance/data_management_v1.md) | 数据资产、模型、溯源、质量、生命周期、访问和出口的总体治理边界。 |
+| [生命周期与元数据治理](governance/lifecycle_metadata_v1.md) | 生命周期状态、推导规则、治理证据和行动边界。 |
+| [语义质量治理](governance/semantic_quality_v1.md) | 语义问题分级、可信集合和扫描范围。 |
+| [语义标识规范](governance/semantic_identity_v1.md) | 命名空间、稳定 URI、JSON-LD context 和字段映射。 |
 
-## 治理文档
+## 阶段交付
 
-| 文档 | 定位 |
+下列文档是现行验收依据或仍有明确后续价值的专项说明。
+
+| 文档 | 状态与用途 |
 | --- | --- |
-| [governance/data_management_v1.md](governance/data_management_v1.md) | 数据管理体系总说明，用于理解资产、模型、元数据、质量、生命周期和访问能力。 |
-| [governance/lifecycle_metadata_v1.md](governance/lifecycle_metadata_v1.md) | 生命周期与元数据治理说明，用于理解状态字段、阶段边界和治理证据。 |
-| [governance/semantic_quality_v1.md](governance/semantic_quality_v1.md) | 语义质量治理说明，用于理解 blocker/warning/info、可信默认集合和语义扫描边界。 |
-| [governance/semantic_identity_v1.md](governance/semantic_identity_v1.md) | 语义标识前置说明，用于理解 `bgpkb:`、URI 规则、JSON-LD context 和字段映射边界。 |
+| [语义标识前置](stages/phase_3_5_semantic_identity_v1.md) | 已交付；记录语义标识层的交付物和验收边界。 |
+| [RAG 就绪框架](stages/phase_4_rag_framework_v1.md) | 已交付；记录检索框架、Provider 边界和离线验收。 |
+| [RAG 答案质量评测](stages/phase_4_3_rag_answer_eval_v1.md) | 现行；记录固定评测集和质量门槛。 |
+| [DeepSeek 批量评测](stages/phase_4_4_deepseek_eval_analysis_v1.md) | 现行；记录真实模型评测和失败分析边界。 |
+| [轻量标准化出口](stages/phase_5_standard_exports_v1.md) | 待继续建设；记录 JSON-LD、SKOS、PROV-O 和 RDF 的渐进方案。 |
 
-## 阶段文档
+## 后续路线
 
-| 文档 | 定位 |
+| 文档 | 用途 |
 | --- | --- |
-| [stages/phase_1_data_management_v1_development.md](stages/phase_1_data_management_v1_development.md) | 阶段一数据管理体系的详细开发说明，用于回看该阶段设计和落地范围。 |
-| [stages/phase_3_5_semantic_identity_v1.md](stages/phase_3_5_semantic_identity_v1.md) | 阶段三点五语义标识前置交付说明，用于确认小步较优解的交付物和验收标准。 |
-| [stages/phase_4_rag_framework_v1.md](stages/phase_4_rag_framework_v1.md) | 阶段四 RAG 就绪框架交付说明，用于确认当前设备不运行模型条件下的框架、边界和验收标准。 |
-| [stages/phase_4_rag_and_llm_technical_research_v1.md](stages/phase_4_rag_and_llm_technical_research_v1.md) | 阶段四技术调研，用于评估 LLM 辅助知识加工、embedding、向量索引、混合检索和 RAG context pack。 |
-| [stages/phase_5_standard_exports_v1.md](stages/phase_5_standard_exports_v1.md) | 阶段五标准化出口方案，用于规划 JSON-LD、SKOS、PROV-O 和 RDF 的渐进式建设。 |
+| [工业界对齐改进方案](roadmap/industry_alignment_improvement_plan_v1.md) | 当前唯一的长期改进路线，覆盖语料画像、层级 chunk、分类、候选层、追溯和增量更新。 |
 
-## 项目分支文档
+## 独立项目
 
-| 文档 | 定位 |
+| 文档 | 用途 |
 | --- | --- |
-| [projects/chat_frontend_project_branch_v1.md](projects/chat_frontend_project_branch_v1.md) | 对话前端独立项目分支开发文档，不插入阶段四或后续阶段。 |
+| [对话前端](projects/chat_frontend_project_branch_v1.md) | 已交付的独立 Next.js 前端边界、接口和运行说明。 |
 
-## 规则文档
+## 文档规则
 
-| 文档 | 定位 |
-| --- | --- |
-| [rules/document_crud_rules_v1.md](rules/document_crud_rules_v1.md) | Markdown 文档 CRUD 规则，用于约束后续新增、读取、更新、删除或归档文档。 |
-
-## 与其他归并入口的关系
-
-| 入口 | 何时使用 |
-| --- | --- |
-| [../reports/README.md](../reports/README.md) | 需要找阶段报告、质量报告、发布报告、人工复核报告时使用。 |
-| [../cleaned/README.md](../cleaned/README.md) | 需要找清洗后的标准、数据源、论文、案例语料时使用。 |
-| [../published/README.md](../published/README.md) | 需要使用可交付知识库包、SQLite、JSONL 和查询入口时使用。 |
+新增、更新和删除文档时遵循 [文档 CRUD 规则](rules/document_crud_rules_v1.md)。长期文档必须进入本索引；临时实施计划完成后应删除，由 Git 保留历史。

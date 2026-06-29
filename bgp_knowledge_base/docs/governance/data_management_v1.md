@@ -20,7 +20,7 @@ BGP KB 数据管理体系 v1 用于把当前知识库从“文件和脚本集合
 - 服务化访问能力有哪些。
 - 标准化出口如何逐步演进。
 
-本体系是现有流水线之上的治理层，不替代 `scripts/run_pipeline.py`，不重排现有目录，也不改变 `entities/`、`chunks/`、`relationships/`、`published/` 的当前数据格式。
+本体系是现有流水线之上的治理层，不替代 `src/bgpkb/pipeline/run_pipeline.py`，不重排现有目录，也不改变 `data/knowledge/entities/`、`data/corpus/chunks/`、`data/knowledge/relationships/`、`data/published/` 的当前数据格式。
 
 ## 2. 数据资产清单
 
@@ -28,29 +28,29 @@ BGP KB 数据管理体系 v1 用于把当前知识库从“文件和脚本集合
 
 | 资产 | 当前位置 | 发布出口 | 当前状态 |
 | --- | --- | --- | --- |
-| 实体 | `entities/*.jsonl` | `published/entity_catalog.jsonl`、SQLite `entities` | 已建立 |
-| 关系 | `relationships/relationships.jsonl` | `published/relationship_adjacency.json`、SQLite `relationships` | 已建立 |
-| source | `inventory/sources.csv` | `published/source_catalog.jsonl`、SQLite `sources` | 已建立 |
-| chunk | `chunks/*.jsonl` | `published/chunk_catalog.jsonl`、SQLite `chunks` | 已建立 |
-| 术语表 | `datasets/glossary.*` | SQLite `glossary` | 已建立 |
-| 证据模板 | `entities/evidence_templates.jsonl` | `published/entity_catalog.jsonl`、SQLite `entities` | 已建立 |
-| 案例 | `entities/cases.jsonl`、`datasets/case_observations.*` | SQLite `entities`、`case_observations` | 已建立，语义字段仍需复核 |
-| 人工复核工作簿 | `datasets/human_review_workbook.*` | SQLite `human_review_workbook` | 已建立 |
-| 行动队列 | `datasets/next_action_queue.*` | SQLite `next_actions` | 已建立 |
-| 发布包 | `published/` | JSONL/JSON/SQLite | 已建立 |
-| 服务化 API | `service/` | FastAPI/OpenAPI | 已建立 |
+| 实体 | `data/knowledge/entities/*.jsonl` | `data/published/entity_catalog.jsonl`、SQLite `entities` | 已建立 |
+| 关系 | `data/knowledge/relationships/relationships.jsonl` | `data/published/relationship_adjacency.json`、SQLite `relationships` | 已建立 |
+| source | `data/sources/inventory/sources.csv` | `data/published/source_catalog.jsonl`、SQLite `sources` | 已建立 |
+| chunk | `data/corpus/chunks/*.jsonl` | `data/published/chunk_catalog.jsonl`、SQLite `chunks` | 已建立 |
+| 术语表 | `data/derived/datasets/glossary.*` | SQLite `glossary` | 已建立 |
+| 证据模板 | `data/knowledge/entities/evidence_templates.jsonl` | `data/published/entity_catalog.jsonl`、SQLite `entities` | 已建立 |
+| 案例 | `data/knowledge/entities/cases.jsonl`、`data/derived/datasets/case_observations.*` | SQLite `entities`、`case_observations` | 已建立，语义字段仍需复核 |
+| 人工复核工作簿 | `data/derived/datasets/human_review_workbook.*` | SQLite `human_review_workbook` | 已建立 |
+| 行动队列 | `data/derived/datasets/next_action_queue.*` | SQLite `next_actions` | 已建立 |
+| 发布包 | `data/published/` | JSONL/JSON/SQLite | 已建立 |
+| 服务化 API | `src/bgpkb/service/` | FastAPI/OpenAPI | 已建立 |
 
-资产清单的机器可读版本维护在 `config/data_management_capabilities.yaml`，自动盘点报告由 `scripts/build_data_management_report.py` 生成。
+资产清单的机器可读版本维护在 `metadata/config/data_management_capabilities.yaml`，自动盘点报告由 `src/bgpkb/pipeline/build_data_management_report.py` 生成。
 
 ## 3. 数据模型标准
 
 当前项目已经具备以下模型标准：
 
-- `schemas/` 中维护实体、来源、关系、chunk、复核队列、治理数据集等 JSON Schema。
-- `config/entity_types.yaml` 定义实体类型。
-- `config/topic_taxonomy.yaml` 定义主题分类。
-- `config/source_types.yaml` 定义来源类型。
-- `config/storage_formats.yaml` 定义各层存储格式。
+- `metadata/schemas/` 中维护实体、来源、关系、chunk、复核队列、治理数据集等 JSON Schema。
+- `metadata/config/entity_types.yaml` 定义实体类型。
+- `metadata/config/topic_taxonomy.yaml` 定义主题分类。
+- `metadata/config/source_types.yaml` 定义来源类型。
+- `metadata/config/storage_formats.yaml` 定义各层存储格式。
 
 当前不足：
 
@@ -107,9 +107,9 @@ source
 
 主要证据：
 
-- `reports/quality_report.md`
-- `reports/published_integrity_report.md`
-- `published/integrity_summary.json`
+- `data/reports/gates/quality_report.md`
+- `data/reports/gates/published_integrity_report.md`
+- `data/published/integrity_summary.json`
 
 当前不足：
 
@@ -141,11 +141,11 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 当前已具备以下访问方式：
 
 - 文件化访问：JSONL、JSON、CSV。
-- SQLite 查询：`published/bgp_knowledge_base.sqlite`。
+- SQLite 查询：`data/published/bgp_knowledge_base.sqlite`。
 - FTS 查询：实体和 chunk 全文检索。
-- CLI 查询：`scripts/query_knowledge_base.py`。
-- REST API：`service/app.py`。
-- 简单 HTML 浏览页：`service/templates/`。
+- CLI 查询：`src/bgpkb/pipeline/query_knowledge_base.py`。
+- REST API：`src/bgpkb/service/app.py`。
+- 简单 HTML 浏览页：`src/bgpkb/service/templates/`。
 
 当前不足：
 

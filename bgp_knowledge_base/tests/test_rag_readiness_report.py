@@ -2,10 +2,12 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "build_rag_readiness_report.py"
-REPORT = ROOT / "reports" / "rag_readiness_report.md"
+
+ROOT = paths.PROJECT_ROOT
+SCRIPT = paths.PIPELINE_DIR / "build_rag_readiness_report.py"
+REPORT = paths.report_path("rag_readiness_report")
 
 
 def test_rag_readiness_report_records_framework_boundaries_and_api_entries():

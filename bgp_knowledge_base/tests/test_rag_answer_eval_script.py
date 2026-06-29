@@ -1,10 +1,12 @@
 from pathlib import Path
+
+from bgpkb import paths
 import json
 import runpy
 
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "run_rag_answer_eval.py"
+ROOT = paths.PROJECT_ROOT
+SCRIPT = paths.PIPELINE_DIR / "run_rag_answer_eval.py"
 
 
 class EvalFakeClient:

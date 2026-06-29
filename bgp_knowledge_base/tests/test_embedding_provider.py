@@ -1,12 +1,14 @@
 from pathlib import Path
+
+from bgpkb import paths
 import sys
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = paths.PROJECT_ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from service import embedding_provider  # noqa: E402
+from bgpkb.service import embedding_provider  # noqa: E402
 
 
 def test_default_embedding_provider_never_runs_local_model():

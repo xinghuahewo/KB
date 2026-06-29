@@ -29,7 +29,7 @@ last_reviewed: "2026-06-19"
 
 ## 3. URI 规则
 
-URI 规则由 `config/semantic_identity.yaml` 维护，并由 `scripts/build_semantic_identity.py` 生成映射。
+URI 规则由 `metadata/config/semantic_identity.yaml` 维护，并由 `src/bgpkb/pipeline/build_semantic_identity.py` 生成映射。
 
 | 类型 | URI 形态 |
 | --- | --- |
@@ -43,13 +43,13 @@ URI 规则由 `config/semantic_identity.yaml` 维护，并由 `scripts/build_sem
 
 ## 4. 派生产物
 
-- `published/jsonld_context.json`：JSON-LD `@context`。
-- `published/semantic_id_map.jsonl`：实体、来源、chunk、关系和证据的本地 ID 到 URI 映射。
-- `reports/semantic_identity_report.md`：人读验收报告。
+- `data/published/jsonld_context.json`：JSON-LD `@context`。
+- `data/published/semantic_id_map.jsonl`：实体、来源、chunk、关系和证据的本地 ID 到 URI 映射。
+- `data/generated/reports/publishing/semantic_identity_report.md`：人读验收报告。
 
 ## 5. 边界
 
-- 不改变 `entities/*.jsonl`、`chunks/*.jsonl`、`relationships/*.jsonl` 的字段。
+- 不改变 `data/knowledge/entities/*.jsonl`、`data/corpus/chunks/*.jsonl`、`data/knowledge/relationships/*.jsonl` 的字段。
 - 不把 pending 实体升级为 approved。
 - 不做 RDF/OWL 全量建模。
 - 不替代阶段五标准化出口，只为其提供稳定底座。
