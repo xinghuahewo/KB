@@ -163,13 +163,14 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 - JSON。
 - CSV。
 - SQLite。
+- JSON-LD `@context`、实体目录和来源目录。
+- SKOS 概念映射。
+- PROV-O 加工与来源主链。
+- RDF/Turtle 样例。
 
-尚未具备：
+按实际对接需求后置：
 
-- JSON-LD。
-- RDF。
-- SKOS taxonomy 映射。
-- PROV-O 溯源映射。
+- 全量 RDF 发布包。
 - STIX/MISP 安全事件映射。
 
 建议顺序：
@@ -191,7 +192,7 @@ draft -> candidate -> reviewed -> approved -> deprecated -> archived
 | 质量治理 | partial | 结构质量强，语义质量待建设 |
 | 生命周期 | planned | 当前仅有 review_status，生命周期状态待建设 |
 | 服务化访问 | partial | REST API 已有，向量和 RAG 接口待建设 |
-| 标准化出口 | partial | JSON/CSV/SQLite 已有，JSON-LD/RDF 待建设 |
+| 标准化出口 | achieved | JSON/CSV/SQLite、JSON-LD、SKOS、PROV-O 与 Turtle 样例已具备 |
 
 ## 10. 后续演进
 

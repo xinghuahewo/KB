@@ -89,6 +89,23 @@ def test_stage_acceptance_config_registers_phase_4_4_deepseek_eval_analysis():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_5_standard_exports():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_5_standard_exports_v1"]
+
+    assert stage["name"] == "轻量标准化出口 v1"
+    assert "metadata/config/standard_exports.yaml" in stage["required_files"]
+    assert "data/published/entity_catalog.jsonld" in stage["required_files"]
+    assert "data/published/provenance_map.jsonl" in stage["required_files"]
+    assert "data/generated/reports/publishing/standardization_report.md" in stage["required_files"]
+    assert any(command["id"] == "standard_exports" for command in stage["commands"])
+    assert any(command["id"] == "standard_mapping_candidates" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["user_can_now"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "-m", "bgpkb.pipeline.run_stage_acceptance", "--stage", "phase_1_data_management_v1"],

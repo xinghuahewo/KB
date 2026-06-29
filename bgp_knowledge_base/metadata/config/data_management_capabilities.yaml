@@ -389,12 +389,16 @@ capability_groups:
       - 对比真实 hybrid retrieval 与当前 mock/FTS baseline。
   - id: standard_exports
     name: 标准化出口
-    status: partial
-    description: JSONL、JSON、CSV、SQLite 和轻量 JSON-LD context 已具备，RDF、完整 SKOS/PROV-O、STIX/MISP 尚未建设。
+    status: achieved
+    description: JSONL、JSON、CSV、SQLite、JSON-LD 实体/来源目录、SKOS、PROV-O 主链和 Turtle 样例已具备；模型仅生成待人工审核映射候选。
     evidence:
       - data/published/
-      - data/derived/datasets/
       - data/published/jsonld_context.json
+      - data/published/entity_catalog.jsonld
+      - data/published/source_catalog.jsonld
+      - data/published/provenance_map.jsonl
+      - data/published/standard_exports/bgp_knowledge_sample.ttl
+      - data/generated/reports/publishing/standardization_report.md
     next_steps:
-      - 在阶段五补充实体级 JSON-LD 样例出口。
-      - 再扩展完整 SKOS 和 PROV-O 映射。
+      - 根据实际对接需求扩展全量 RDF、STIX 或 MISP 映射。
+      - 人工审核模型映射候选后再显式写入批准映射集合。

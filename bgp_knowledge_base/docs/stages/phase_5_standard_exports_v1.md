@@ -3,7 +3,7 @@ title: "阶段五：轻量标准化出口 v1"
 document_type: "阶段设计文档"
 purpose: "定义 BGP KB 从当前 JSON/JSONL/SQLite 出口渐进扩展到 JSON-LD、SKOS、PROV-O 和 RDF 的方案、简易版路径和验收边界。"
 scope: "JSON-LD、SKOS、PROV-O、RDF、标准化报告和发布包兼容性"
-status: "实施中"
+status: "已完成并通过阶段验收"
 last_reviewed: "2026-06-29"
 ---
 # 阶段五：轻量标准化出口 v1
@@ -34,13 +34,13 @@ last_reviewed: "2026-06-29"
 - entity、source、chunk、relationship 和 evidence 的语义 ID 映射。
 - 字段到 SKOS、PROV-O 和项目词汇的初步映射。
 
-当前尚未具备：
+阶段五本次实施补齐：
 
-- SKOS taxonomy 映射。
-- PROV-O 溯源映射。
-- RDF 导出。
-- 标准化出口完整性报告。
-- 模型辅助映射候选与人工审核闭环。
+- SKOS taxonomy 映射和项目自定义词汇回退。
+- source、raw、parsed、cleaned、chunk、entity、evidence 和生成活动的 PROV-O 主链。
+- JSON-LD 实体/来源目录与 RDF/Turtle 样例。
+- 标准化出口覆盖率、缺口与阻塞报告。
+- mock/DeepSeek 模型辅助映射候选与人工审核闭环。
 
 ## 3. 较优解
 
@@ -128,8 +128,15 @@ last_reviewed: "2026-06-29"
 - `data/published/provenance_map.jsonl`
 - `data/published/standard_exports/`
 - `data/generated/reports/publishing/standardization_report.md`
-- `metadata/schemas/jsonld_context.schema.json`
+- `metadata/schemas/standard_mapping_candidate.schema.json`
+- `metadata/schemas/standard_mapping_audit.schema.json`
+- `metadata/schemas/provenance_record.schema.json`
+- `src/bgpkb/pipeline/build_standard_mapping_candidates.py`
+- `src/bgpkb/pipeline/build_standard_mapping_decision_audit.py`
+- `src/bgpkb/pipeline/apply_standard_mapping_decisions.py`
 - `tests/test_standard_exports.py`
+- `tests/test_standard_mapping_candidates.py`
+- `tests/test_standard_mapping_review.py`
 
 简易版交付物：
 

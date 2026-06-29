@@ -338,6 +338,32 @@ python3 -m bgpkb.pipeline.build_semantic_quality_report
 
 该步骤只做 blocker、warning、info 分级扫描，不自动修改实体、关系、chunk、来源或发布包。后续 RAG 默认可信集合应优先使用 `lifecycle_status=approved` 且无 blocker 的实体。
 
+## 阶段五标准化出口
+
+阶段五在现有 JSONL、CSV 和 SQLite 发布包之外生成 JSON-LD、SKOS、PROV-O 与 Turtle 派生出口。正式出口保持确定性；模型只生成 `pending_review` 映射候选，未经人工审计和显式应用不会影响发布结果。
+
+```bash
+python3 -m bgpkb.pipeline.build_standard_mapping_candidates --provider mock
+python3 -m bgpkb.pipeline.build_standard_mapping_decision_audit
+python3 -m bgpkb.pipeline.apply_standard_mapping_decisions
+python3 -m bgpkb.pipeline.build_standard_exports
+```
+
+显式应用已批准映射时才使用：
+
+```bash
+python3 -m bgpkb.pipeline.apply_standard_mapping_decisions --write
+```
+
+主要输出：
+
+- `data/published/entity_catalog.jsonld`
+- `data/published/source_catalog.jsonld`
+- `data/published/provenance_map.jsonl`
+- `data/published/standard_exports/bgp_knowledge_sample.ttl`
+- `data/derived/datasets/standard_mapping_candidates.jsonl`
+- `data/generated/reports/publishing/standardization_report.md`
+
 ## 阶段验收 Agent
 
 `src/bgpkb/pipeline/run_stage_acceptance.py` 提供效果导向的阶段验收 Agent。它不会只输出“测试通过”，还会给出本阶段实际新增能力、使用者现在能做什么、后续阶段能依赖什么，以及仍需人工处理的语义事项。
@@ -358,6 +384,12 @@ python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_2_lifecycle_metadat
 
 ```bash
 python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_3_semantic_quality_v1
+```
+
+运行阶段五验收：
+
+```bash
+python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_5_standard_exports_v1
 ```
 
 输出：

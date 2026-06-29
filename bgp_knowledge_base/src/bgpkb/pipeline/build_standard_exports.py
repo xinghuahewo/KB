@@ -3,6 +3,7 @@
 
 import json
 import re
+import copy
 from collections import defaultdict
 from urllib.parse import quote, urlsplit
 
@@ -13,6 +14,16 @@ from bgpkb import paths
 
 GENERATED_BY = "src/bgpkb/pipeline/build_standard_exports.py"
 CONFIG_PATH = paths.CONFIG_DIR / "standard_exports.yaml"
+
+
+def apply_approved_mappings(config, approved_mappings):
+    """把人工批准映射叠加到配置副本，不修改原始配置。"""
+    effective = copy.deepcopy(config)
+    relation_mappings = effective.setdefault("relation_mappings", {})
+    for mapping in approved_mappings:
+        if mapping.get("candidate_type") == "relation":
+            relation_mappings[mapping["local_value"]] = mapping["suggested_mapping"]
+    return effective
 GENERATION_ACTIVITY_URI = "https://w3id.org/bgpkb/resource/activity/standard_exports_v1"
 PROV_ACTIVITY_URI = "http://www.w3.org/ns/prov#Activity"
 
@@ -528,6 +539,9 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
 def generate_standard_exports(root, config):
     """生成标准出口；有未解析引用时仅写阻塞报告并返回非零。"""
     outputs = config["outputs"]
+    approved_path = root / outputs.get("approved_mappings", "data/derived/datasets/approved_standard_mappings.jsonl")
+    approved_mappings = read_jsonl(approved_path) if approved_path.exists() else []
+    config = apply_approved_mappings(config, approved_mappings)
 
     entities = read_jsonl(root / "data/published/entity_catalog.jsonl")
     sources = read_jsonl(root / "data/published/source_catalog.jsonl")

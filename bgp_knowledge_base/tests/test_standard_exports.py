@@ -550,3 +550,21 @@ def test_cli_generates_deterministic_standard_exports_without_changing_primary_i
         "retention": "generated",
         "human_entry": False,
     }
+
+
+def test_approved_relation_mapping_overrides_fallback_without_mutating_config():
+    module = load_module()
+    config = {
+        "relation_mappings": {"supports": "bgpkb:supports"},
+    }
+    approved = [{
+        "candidate_type": "relation",
+        "local_value": "secures",
+        "suggested_mapping": "dcterms:relation",
+        "input_fingerprint": "a" * 64,
+    }]
+
+    effective = module.apply_approved_mappings(config, approved)
+
+    assert effective["relation_mappings"]["secures"] == "dcterms:relation"
+    assert config["relation_mappings"] == {"supports": "bgpkb:supports"}

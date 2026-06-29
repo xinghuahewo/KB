@@ -135,6 +135,14 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_llm_candidate_enrichment.py"
     if rel.startswith("data/derived/datasets/entity_link_candidates."):
         return "src/bgpkb/pipeline/build_llm_candidate_enrichment.py"
+    if rel.startswith("data/derived/datasets/standard_mapping_candidate"):
+        return "src/bgpkb/pipeline/build_standard_mapping_candidates.py"
+    if rel.startswith("data/derived/datasets/standard_mapping_decision_audit."):
+        return "src/bgpkb/pipeline/build_standard_mapping_decision_audit.py"
+    if rel.startswith("data/derived/datasets/standard_mapping_apply_preview."):
+        return "src/bgpkb/pipeline/apply_standard_mapping_decisions.py"
+    if rel.startswith("data/derived/datasets/approved_standard_mappings."):
+        return "src/bgpkb/pipeline/apply_standard_mapping_decisions.py"
     if rel.startswith("data/derived/datasets/rag_query_eval."):
         return "src/bgpkb/pipeline/build_rag_readiness_report.py"
     if rel.startswith("data/derived/datasets/rag_answer_eval_questions."):
@@ -151,9 +159,17 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_human_review_session_decision_templates.py"
     if rel == "data/review_inputs/human_review_decisions.csv":
         return "manual_human_review_input"
+    if rel == "data/review_inputs/standard_mapping_decisions.csv":
+        return "manual_standard_mapping_review_input"
     if rel.startswith("data/derived/datasets/glossary."):
         return "src/bgpkb/pipeline/build_glossary.py"
     if rel.startswith("data/published/"):
+        if rel in {
+            "data/published/entity_catalog.jsonld",
+            "data/published/source_catalog.jsonld",
+            "data/published/provenance_map.jsonl",
+        } or rel.startswith("data/published/standard_exports/"):
+            return "src/bgpkb/pipeline/build_standard_exports.py"
         if rel in {"data/published/bgp_knowledge_base.sqlite", "data/published/sqlite_schema.sql"}:
             return "src/bgpkb/pipeline/build_sqlite_knowledge_base.py"
         if rel == "data/published/integrity_summary.json":
@@ -227,6 +243,14 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_semantic_quality_report.py"
     if rel.startswith("data/generated/reports/publishing/semantic_identity_report.md"):
         return "src/bgpkb/pipeline/build_semantic_identity.py"
+    if rel.startswith("data/generated/reports/publishing/standardization_report.md"):
+        return "src/bgpkb/pipeline/build_standard_exports.py"
+    if rel.startswith("data/generated/reports/review/standard_mapping_candidate_report.md"):
+        return "src/bgpkb/pipeline/build_standard_mapping_candidates.py"
+    if rel.startswith("data/generated/reports/review/standard_mapping_decision_audit_report.md"):
+        return "src/bgpkb/pipeline/build_standard_mapping_decision_audit.py"
+    if rel.startswith("data/generated/reports/review/standard_mapping_decision_apply_report.md"):
+        return "src/bgpkb/pipeline/apply_standard_mapping_decisions.py"
     if rel.startswith("data/generated/reports/rag/rag_readiness_report.md"):
         return "src/bgpkb/pipeline/build_rag_readiness_report.py"
     if rel.startswith("data/generated/reports/rag/rag_answer_eval_report.md"):
