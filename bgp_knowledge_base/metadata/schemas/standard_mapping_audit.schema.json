@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/standard_mapping_audit.schema.json",
+  "title": "标准语义映射人工审核记录",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate_id", "decision", "audit_status", "write_eligible", "reason"],
+  "properties": {
+    "candidate_id": {"type": "string", "minLength": 1},
+    "decision": {"enum": ["unreviewed", "approved", "rejected", "needs_evidence"]},
+    "reviewer": {"type": "string"},
+    "reviewed_at": {"type": "string"},
+    "decision_note": {"type": "string"},
+    "audit_status": {"enum": ["no_op", "ready_to_apply", "rejected", "needs_evidence", "blocked_invalid_candidate", "blocked_invalid_input"]},
+    "write_eligible": {"type": "boolean"},
+    "reason": {"type": "string", "minLength": 1}
+  }
+}

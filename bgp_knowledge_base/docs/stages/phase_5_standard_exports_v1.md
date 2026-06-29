@@ -3,8 +3,8 @@ title: "阶段五：轻量标准化出口 v1"
 document_type: "阶段设计文档"
 purpose: "定义 BGP KB 从当前 JSON/JSONL/SQLite 出口渐进扩展到 JSON-LD、SKOS、PROV-O 和 RDF 的方案、简易版路径和验收边界。"
 scope: "JSON-LD、SKOS、PROV-O、RDF、标准化报告和发布包兼容性"
-status: "现行参考"
-last_reviewed: "2026-06-19"
+status: "实施中"
+last_reviewed: "2026-06-29"
 ---
 # 阶段五：轻量标准化出口 v1
 
@@ -27,14 +27,20 @@ last_reviewed: "2026-06-19"
 | 生命周期、复核、证据派生数据集 | 已具备 |
 | JSONL、JSON、CSV、SQLite 发布包 | 已具备 |
 
-当前尚未具备：
+阶段三点五已经进一步交付：
 
 - JSON-LD `@context`。
-- `bgpkb:` 命名空间。
+- `bgpkb:` 命名空间和稳定 URI 规则。
+- entity、source、chunk、relationship 和 evidence 的语义 ID 映射。
+- 字段到 SKOS、PROV-O 和项目词汇的初步映射。
+
+当前尚未具备：
+
 - SKOS taxonomy 映射。
 - PROV-O 溯源映射。
 - RDF 导出。
 - 标准化出口完整性报告。
+- 模型辅助映射候选与人工审核闭环。
 
 ## 3. 较优解
 

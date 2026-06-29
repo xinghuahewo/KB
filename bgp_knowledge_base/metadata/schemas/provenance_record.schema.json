@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/provenance_record.schema.json",
+  "title": "标准出口溯源记录",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["record_id", "subject_uri", "predicate", "object_uri", "generated_by"],
+  "properties": {
+    "record_id": {"type": "string", "minLength": 1},
+    "subject_uri": {"type": "string", "format": "uri"},
+    "predicate": {"type": "string", "minLength": 1},
+    "object_uri": {"type": "string", "format": "uri"},
+    "source_ref": {"type": "string"},
+    "generated_by": {"type": "string", "minLength": 1}
+  }
+}
