@@ -95,10 +95,10 @@
 
 - [ ] 先写失败测试，覆盖 approved、rejected、needs_evidence、unreviewed、未知候选、陈旧指纹、缺少审核人/时间和冲突批准。
 - [ ] 运行目标测试，确认因模块不存在而失败。
-- [ ] 实现决策 CSV 解析、重复项检查和审计状态计算。
+- [ ] 实现决策 CSV 解析、提交/当前输入指纹对比、带时区审核时间校验、重复项检查和审计状态计算。
 - [ ] 新增失败测试，要求默认运行只写 preview，不写批准映射。
 - [ ] 实现 dry-run preview 和中文审计/应用报告。
-- [ ] 新增失败测试，要求只有审计通过的 approved 项在 `--write` 时进入 `approved_standard_mappings.jsonl`。
+- [ ] 新增失败测试，要求冲突批准整组阻塞，且只有审计通过、指纹仍匹配的 approved 项在 `--write` 时进入 `approved_standard_mappings.jsonl`。
 - [ ] 实现显式写入、稳定排序和重复候选保护。
 - [ ] 运行目标测试，确认全部通过。
 - [ ] 提交：`feat: 添加标准映射人工审核闸门`。
