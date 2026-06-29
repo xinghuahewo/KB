@@ -8,11 +8,15 @@
 - **THEN** 系统必须拒绝该候选并记录校验错误
 
 ### Requirement: 候选必须具有证据和可审计元数据
-每条有效候选 MUST 包含稳定 ID、本地项、建议标准映射、来源证据、置信度、理由、provider、model 和 prompt version。
+每条有效候选 MUST 包含稳定 ID、本地项、建议标准映射、来源证据、输入指纹、置信度、理由、provider、model 和 prompt version。候选 ID 必须包含输入指纹，使证据或模型输入变化后旧批准不能复用。
 
 #### Scenario: 缺少来源证据
 - **WHEN** 模型返回的候选没有 `source_refs`
 - **THEN** 系统必须将候选判定为无效且不得写入候选数据集
+
+#### Scenario: 候选证据发生变化
+- **WHEN** 本地项和建议映射相同但来源证据、输入内容或 prompt version 发生变化
+- **THEN** 系统必须生成新的输入指纹和 candidate ID，旧人工决策不得适用于新候选
 
 ### Requirement: 默认离线且模型调用显式启用
 默认流水线 MUST 使用离线 mock provider；DeepSeek 只有在显式选择且存在环境变量密钥时才能调用。
@@ -22,11 +26,19 @@
 - **THEN** 系统必须返回 skipped 状态且不得覆盖已有候选
 
 ### Requirement: 人工决策必须经过审计
-系统 MUST 校验人工 CSV 中的候选 ID、决策值、重复项和审核元数据，并生成中文审计报告。
+系统 MUST 校验人工 CSV 中的候选 ID、候选输入指纹、决策值、重复项和审核元数据，并生成中文审计报告。`approved` 决策必须包含审核人和合法的审核时间。
 
 #### Scenario: 审核引用未知候选
 - **WHEN** 人工决策引用不存在的 candidate ID
 - **THEN** 审计必须失败且禁止形成批准映射
+
+#### Scenario: 批准缺少可归责信息
+- **WHEN** approved 决策缺少 reviewer、合法 reviewed_at 或当前候选输入指纹
+- **THEN** 审计必须标记为 blocked_invalid_input 且禁止写入批准映射
+
+#### Scenario: 同一本地项存在冲突批准
+- **WHEN** 同一 candidate_type 和 local_value 有多个不同 suggested_mapping 被批准
+- **THEN** 审计必须把冲突组全部阻塞，不得任意选择优先映射
 
 ### Requirement: 批准映射只能显式写入
 默认应用命令 MUST 只生成预览；只有显式 `--write` 才能把审计通过的 approved 候选写入批准映射集合。

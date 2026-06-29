@@ -46,18 +46,18 @@ last_reviewed: "2026-06-29"
 
 较优解是在保持原有发布包不变的前提下，新增标准化出口层：
 
-1. 定义 `bgpkb:` 命名空间和稳定 URI 规则。
-2. 发布 JSON-LD `@context`。
-3. 将概念类实体映射为 SKOS。
-4. 将来源、生成脚本、复核审计和证据链映射为 PROV-O。
-5. 生成 JSON-LD catalog 和 RDF 样例。
+1. 复用阶段三点五已经冻结的 `bgpkb:` 命名空间、稳定 URI 和 JSON-LD `@context`。
+2. 将概念类实体映射为 SKOS。
+3. 将来源、生成脚本、复核审计和证据链映射为 PROV-O。
+4. 生成 JSON-LD catalog 和 RDF 样例。
+5. 使用模型生成待人工审核的未知语义映射候选。
 6. 生成标准化出口报告，记录覆盖率、缺口和不可映射字段。
 
 较优解适合需要对接图数据库、RDF 工具链、知识图谱平台或外部数据治理评审的场景。
 
 ## 4. 简易版
 
-简易版只做最小稳定语义层：
+简易版已由阶段三点五完成，其范围是最小稳定语义层：
 
 1. 冻结 ID 和 URI 命名规范。
 2. 提供 `data/published/jsonld_context.json`。
@@ -70,7 +70,7 @@ last_reviewed: "2026-06-29"
 
 ## 5. 推荐路径
 
-推荐分两步实施：
+项目按以下两步实施，其中第一步已经完成：
 
 ```text
 阶段三点五：语义标识前置
@@ -91,13 +91,13 @@ last_reviewed: "2026-06-29"
 
 | 前缀 | URI | 用途 |
 | --- | --- | --- |
-| `bgpkb:` | `https://example.org/bgpkb/id/` | BGP KB 自有实体、source、chunk、关系和证据 ID。 |
+| `bgpkb:` | `https://w3id.org/bgpkb/vocab#` | BGP KB 自有词汇。资源 URI 使用 `https://w3id.org/bgpkb/resource/`。 |
 | `skos:` | `http://www.w3.org/2004/02/skos/core#` | 概念、标签、定义、概念关系和分类体系。 |
 | `prov:` | `http://www.w3.org/ns/prov#` | 来源、生成活动、派生关系和审核活动。 |
 | `dcterms:` | `http://purl.org/dc/terms/` | 标题、描述、日期、来源和语言等通用元数据。 |
 | `schema:` | `https://schema.org/` | 组织、网页、文章、数据集等通用实体补充。 |
 
-正式 URI 可在实施前替换为项目实际域名或内部命名空间。若没有公开域名，仍应保持 URI 形态稳定。
+阶段五必须复用 `metadata/config/semantic_identity.yaml` 中已经冻结的 w3id URI，不得建立第二套资源 URI。
 
 ## 7. 核心字段映射
 

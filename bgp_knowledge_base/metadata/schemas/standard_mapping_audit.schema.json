@@ -4,14 +4,15 @@
   "title": "标准语义映射人工审核记录",
   "type": "object",
   "additionalProperties": false,
-  "required": ["candidate_id", "decision", "audit_status", "write_eligible", "reason"],
+  "required": ["candidate_id", "input_fingerprint", "decision", "audit_status", "write_eligible", "reason"],
   "properties": {
     "candidate_id": {"type": "string", "minLength": 1},
+    "input_fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "decision": {"enum": ["unreviewed", "approved", "rejected", "needs_evidence"]},
     "reviewer": {"type": "string"},
-    "reviewed_at": {"type": "string"},
+    "reviewed_at": {"type": "string", "format": "date-time"},
     "decision_note": {"type": "string"},
-    "audit_status": {"enum": ["no_op", "ready_to_apply", "rejected", "needs_evidence", "blocked_invalid_candidate", "blocked_invalid_input"]},
+    "audit_status": {"enum": ["no_op", "ready_to_apply", "rejected", "needs_evidence", "blocked_invalid_candidate", "blocked_invalid_input", "blocked_conflict"]},
     "write_eligible": {"type": "boolean"},
     "reason": {"type": "string", "minLength": 1}
   }

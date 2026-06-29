@@ -54,7 +54,7 @@
 - [ ] 运行 `PYTHONPATH=src python3 -m pytest tests/test_standard_exports.py -v`，确认因模块不存在而失败。
 - [ ] 实现 JSONL/config 加载、URI 索引、实体与来源 JSON-LD 映射的最小代码。
 - [ ] 重跑测试，确认实体与来源映射通过。
-- [ ] 新增失败测试，要求 provenance 记录表达实体到来源、生成活动和证据链。
+- [ ] 新增失败测试，要求 provenance 记录表达 source→raw→parsed→cleaned→chunk→entity 主链、生成活动和证据链。
 - [ ] 实现 `build_provenance_records()`，并保证记录排序稳定。
 - [ ] 新增失败测试，要求 Turtle 转义引号、反斜杠和换行，并按主语/谓词/宾语排序。
 - [ ] 实现仅覆盖本项目输出所需的 Turtle 序列化器。
@@ -74,8 +74,8 @@
 - [ ] 先写失败测试，要求 mock provider 对未映射本地关系生成稳定 `pending_review` 候选。
 - [ ] 运行目标测试，确认因模块不存在而失败。
 - [ ] 实现候选 ID、证据、置信度、provider/model/prompt_version 和状态字段。
-- [ ] 新增失败测试，要求非法 JSON、未知前缀、无证据和越权批准状态被拒绝。
-- [ ] 实现 `validate_candidate()` 和结构化 DeepSeek 响应解析函数。
+- [ ] 新增失败测试，要求非法 JSON、未知前缀、无证据、缺少输入指纹和越权批准状态被拒绝。
+- [ ] 实现 `validate_candidate()`、输入指纹、含指纹 candidate ID 和结构化 DeepSeek 响应解析函数。
 - [ ] 新增失败测试，要求缺少 `DEEPSEEK_API_KEY` 时返回 skipped 且不覆盖既有候选。
 - [ ] 实现 opt-in DeepSeek 调用边界；测试只注入假响应，不联网。
 - [ ] 实现候选 JSONL 和中文生成报告。
@@ -92,7 +92,7 @@
 - 新建：`data/review_inputs/standard_mapping_decisions.csv`
 - 修改：`metadata/config/report_policy.yaml`
 
-- [ ] 先写失败测试，覆盖 approved、rejected、needs_evidence、unreviewed 和未知候选。
+- [ ] 先写失败测试，覆盖 approved、rejected、needs_evidence、unreviewed、未知候选、陈旧指纹、缺少审核人/时间和冲突批准。
 - [ ] 运行目标测试，确认因模块不存在而失败。
 - [ ] 实现决策 CSV 解析、重复项检查和审计状态计算。
 - [ ] 新增失败测试，要求默认运行只写 preview，不写批准映射。
