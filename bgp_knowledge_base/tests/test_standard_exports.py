@@ -33,6 +33,7 @@ def sample_config():
         "export_policy": {
             "include_review_statuses": ["approved", "pending"],
             "preserve_review_status": True,
+            "unmapped_relation_prefix": "bgpkb",
         },
     }
 
@@ -218,9 +219,10 @@ def test_report_includes_coverage_mapping_and_integrity_diagnostics():
     }]
     semantic = [
         {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/duplicate"},
+        {"resource_type": "entity", "local_id": "concept_rov", "uri": "https://example/entity/rov"},
         {"resource_type": "source", "local_id": "rfc6811", "uri": "https://example/duplicate"},
     ]
-    relationships = [{"relation": "unknown_relation"}]
+    relationships = [{"src_id": "concept_rpki", "relation": "unknown_relation", "dst_id": "concept_rov"}]
     entity_graph = [{
         "@id": "https://example/entity", "@type": ["skos:Concept"],
         "skos:prefLabel": "RPKI", "prov:wasDerivedFrom": ["https://example/source"],
@@ -236,9 +238,101 @@ def test_report_includes_coverage_mapping_and_integrity_diagnostics():
     assert "PROV-O 覆盖率：100.00%" in report
     assert "bgpkb 覆盖率：100.00%" in report
     assert "未映射字段" in report and "custom_field" in report
-    assert "未映射关系" in report and "unknown_relation" in report
+    assert "自定义回退关系" in report and "unknown_relation" in report
     assert "重复 URI：1 组" in report
     assert "来源解析错误：1 条" in report
+
+
+def test_relationship_triples_use_config_mapping_and_controlled_camel_case_fallback():
+    module = load_module()
+    config = sample_config() | {
+        "relation_mappings": {"related_to": "skos:related"},
+        "export_policy": sample_config()["export_policy"] | {"unmapped_relation_prefix": "bgpkb"},
+    }
+    identities = [
+        {"resource_type": "entity", "local_id": "a", "uri": "https://example/entity/a"},
+        {"resource_type": "entity", "local_id": "b", "uri": "https://example/entity/b"},
+    ]
+    relationships = [
+        {"src_id": "a", "relation": "related_to", "dst_id": "b"},
+        {"src_id": "b", "relation": "affects_interpretation_of", "dst_id": "a"},
+    ]
+
+    triples, fallbacks, unsafe = module.build_relationship_triples(relationships, identities, config)
+
+    assert triples == [
+        ("https://example/entity/a", "skos:related", ("uri", "https://example/entity/b")),
+        ("https://example/entity/b", "bgpkb:affectsInterpretationOf", ("uri", "https://example/entity/a")),
+    ]
+    assert fallbacks == [{
+        "relation": "affects_interpretation_of",
+        "predicate": "bgpkb:affectsInterpretationOf",
+        "count": 1,
+    }]
+    assert unsafe == []
+    turtle = module.build_turtle_sample([], 0, config["namespaces"], triples)
+    assert "<https://example/entity/a> skos:related <https://example/entity/b> ." in turtle
+    assert "<https://example/entity/b> bgpkb:affectsInterpretationOf <https://example/entity/a> ." in turtle
+
+
+@pytest.mark.parametrize("blocking_issue", ["duplicate_uri", "source_error", "unsafe_relation"])
+def test_integrity_diagnostics_block_without_overwriting_formal_outputs(tmp_path, blocking_issue):
+    module = load_module()
+    config = sample_config() | {
+        "outputs": {
+            "entity_catalog": "data/published/entity_catalog.jsonld",
+            "source_catalog": "data/published/source_catalog.jsonld",
+            "provenance_map": "data/published/provenance_map.jsonl",
+            "turtle_sample": "data/published/standard_exports/sample.ttl",
+            "report": "data/generated/reports/publishing/standardization_report.md",
+        },
+        "relation_mappings": {},
+    }
+    source_uri = "https://example/entity/rpki" if blocking_issue == "duplicate_uri" else "https://example/source/rfc6811"
+    parsed_status = "error" if blocking_issue == "source_error" else "present"
+    fixtures = {
+        "data/published/entity_catalog.jsonl": [{
+            "entity_id": "concept_rpki", "entity_type": "BGPConcept", "name": "RPKI", "review_status": "approved"
+        }],
+        "data/published/source_catalog.jsonl": [{
+            "source_id": "rfc6811", "title": "RFC 6811", "source_type": "standard",
+            "review_status": "approved", "parsed_status": parsed_status,
+        }],
+        "data/published/semantic_id_map.jsonl": [
+            {"resource_type": "entity", "local_id": "concept_rpki", "uri": "https://example/entity/rpki"},
+            {"resource_type": "source", "local_id": "rfc6811", "uri": source_uri},
+            {"resource_type": "evidence", "local_id": "concept_rpki__rfc6811", "uri": "https://example/evidence/1"},
+        ],
+        "data/derived/datasets/entity_source_evidence.jsonl": [{
+            "evidence_id": "concept_rpki__rfc6811", "entity_id": "concept_rpki",
+            "source_id": "rfc6811", "chunk_sample_ids": [],
+        }],
+        "data/knowledge/relationships/relationships.jsonl": (
+            [{"src_id": "concept_rpki", "relation": "unsafe relation", "dst_id": "concept_rpki"}]
+            if blocking_issue == "unsafe_relation" else []
+        ),
+    }
+    for relative, records in fixtures.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(row) + "\n" for row in records), encoding="utf-8")
+    formal_outputs = [tmp_path / config["outputs"][key] for key in (
+        "entity_catalog", "source_catalog", "provenance_map", "turtle_sample"
+    )]
+    for path in formal_outputs:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("正式产物不得覆盖", encoding="utf-8")
+
+    assert module.generate_standard_exports(tmp_path, config) != 0
+    assert all(path.read_text(encoding="utf-8") == "正式产物不得覆盖" for path in formal_outputs)
+    report = (tmp_path / config["outputs"]["report"]).read_text(encoding="utf-8")
+    assert "结论：阻塞" in report
+    expected = {
+        "duplicate_uri": "重复 URI：1 组",
+        "source_error": "来源解析错误：1 条",
+        "unsafe_relation": "无法安全回退关系：1 条",
+    }
+    assert expected[blocking_issue] in report
 
 
 def test_blocking_unresolved_references_only_write_report(tmp_path):
@@ -344,7 +438,15 @@ def test_cli_generates_deterministic_standard_exports_without_changing_primary_i
     assert "@prefix prov:" in turtle and "prov:wasDerivedFrom" in turtle
     assert report.startswith("# 标准化出口报告\n")
     assert "实体 JSON-LD" in report and "来源 JSON-LD" in report and "PROV-O" in report
-    assert "SKOS 覆盖率" in report and "未映射关系" in report and "重复 URI" in report
+    assert "SKOS 覆盖率" in report and "自定义回退关系" in report and "重复 URI" in report
+    assert "bgpkb:affectsInterpretationOf" in turtle
+    assert "bgpkb:limitsInterpretationOf" in turtle
+    assert "bgpkb:secures" in turtle
+    relationships = [json.loads(line) for line in inputs[4].read_text(encoding="utf-8").splitlines() if line]
+    semantic_records = [json.loads(line) for line in inputs[2].read_text(encoding="utf-8").splitlines() if line]
+    relationship_triples, _, unsafe = load_module().build_relationship_triples(relationships, semantic_records, config)
+    assert not unsafe and len(relationship_triples) == len(relationships)
+    assert all(f"<{subject}> {predicate} <{obj[1]}> ." in turtle for subject, predicate, obj in relationship_triples)
 
     report_policy = yaml.safe_load((root / "metadata/config/report_policy.yaml").read_text(encoding="utf-8"))
     assert report_policy["reports"]["standardization_report"] == {

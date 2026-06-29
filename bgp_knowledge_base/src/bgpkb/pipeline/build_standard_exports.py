@@ -276,7 +276,58 @@ def evidence_source_refs(evidence_records):
     return {entity_id: sorted(source_ids) for entity_id, source_ids in refs.items()}
 
 
-def build_turtle_sample(entity_graph, limit, namespaces):
+def build_relationship_triples(relationships, semantic_records, config):
+    """把全部关系映射为 Turtle 三元组，并记录受控 fallback 与阻塞项。"""
+    entity_uris = semantic_uri_maps(semantic_records)["entity"]
+    mappings = config.get("relation_mappings", {})
+    namespaces = config.get("namespaces", {})
+    fallback_prefix = config.get("export_policy", {}).get("unmapped_relation_prefix", "")
+    triples = []
+    fallback_counts = defaultdict(int)
+    unsafe = []
+
+    for row in sorted(
+        relationships,
+        key=lambda item: (item.get("src_id", ""), item.get("relation", ""), item.get("dst_id", "")),
+    ):
+        relation = row.get("relation", "")
+        predicate = mappings.get(relation)
+        used_fallback = False
+        if not predicate:
+            if not re.fullmatch(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)*", relation) or fallback_prefix not in namespaces:
+                unsafe.append({"relation": relation, "reason": "无法构造受控 camelCase fallback"})
+                continue
+            parts = relation.split("_")
+            local_name = parts[0] + "".join(part[:1].upper() + part[1:] for part in parts[1:])
+            predicate = f"{fallback_prefix}:{local_name}"
+            used_fallback = True
+        try:
+            validate_turtle_curie(predicate, namespaces)
+        except ValueError as exc:
+            unsafe.append({"relation": relation, "reason": str(exc)})
+            continue
+
+        subject_uri = entity_uris.get(row.get("src_id", ""))
+        object_uri = entity_uris.get(row.get("dst_id", ""))
+        if not subject_uri or not object_uri:
+            unsafe.append({
+                "relation": relation,
+                "reason": f"关系端点缺少 URI：{row.get('src_id', '')} → {row.get('dst_id', '')}",
+            })
+            continue
+        triples.append((subject_uri, predicate, ("uri", object_uri)))
+        if used_fallback:
+            fallback_counts[(relation, predicate)] += 1
+
+    fallbacks = [
+        {"relation": relation, "predicate": predicate, "count": count}
+        for (relation, predicate), count in sorted(fallback_counts.items())
+    ]
+    unsafe.sort(key=lambda item: (item["relation"], item["reason"]))
+    return sorted(triples), fallbacks, unsafe
+
+
+def build_turtle_sample(entity_graph, limit, namespaces, relationship_triples=None):
     """从排序后的 JSON-LD 实体生成有上限的确定性 Turtle 样例。"""
     triples = []
     for entity in entity_graph[:limit]:
@@ -289,6 +340,7 @@ def build_turtle_sample(entity_graph, limit, namespaces):
             triples.append((subject, "skos:definition", ("literal", entity["skos:definition"])))
         for source_uri in entity.get("prov:wasDerivedFrom", []):
             triples.append((subject, "prov:wasDerivedFrom", ("uri", source_uri)))
+    triples.extend(relationship_triples or [])
     return serialize_turtle(triples, namespaces)
 
 
@@ -324,11 +376,7 @@ def build_diagnostics(entities, sources, semantic_records, relationships, entity
     for row in sources:
         unmapped_fields.update(f"source.{key}" for key in row if key not in mapped_source_fields)
 
-    mapped_relations = set(config.get("relation_mappings", {}))
-    unmapped_relations = sorted({
-        row.get("relation", "") for row in relationships
-        if row.get("relation") and row.get("relation") not in mapped_relations
-    })
+    _, fallback_relations, unsafe_relations = build_relationship_triples(relationships, semantic_records, config)
     by_uri = defaultdict(list)
     for row in semantic_records:
         if row.get("uri"):
@@ -349,7 +397,8 @@ def build_diagnostics(entities, sources, semantic_records, relationships, entity
     return {
         "coverage": {prefix: prefix_coverage(prefix) for prefix in ("skos", "prov", "bgpkb")},
         "unmapped_fields": sorted(unmapped_fields),
-        "unmapped_relations": unmapped_relations,
+        "fallback_relations": fallback_relations,
+        "unsafe_relations": unsafe_relations,
         "duplicate_uris": duplicate_uris,
         "source_errors": source_errors,
         "prov_predicate_count": sum(row.get("predicate", "").startswith("prov:") for row in provenance),
@@ -360,9 +409,13 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
     """生成中文标准化出口摘要。"""
     diagnostics = diagnostics or {
         "coverage": {prefix: {"count": 0, "percent": 0.0} for prefix in ("skos", "prov", "bgpkb")},
-        "unmapped_fields": [], "unmapped_relations": [], "duplicate_uris": [], "source_errors": [],
+        "unmapped_fields": [], "fallback_relations": [], "unsafe_relations": [],
+        "duplicate_uris": [], "source_errors": [],
     }
-    conclusion = "阻塞" if unresolved else "通过"
+    blocked = bool(
+        unresolved or diagnostics["duplicate_uris"] or diagnostics["source_errors"] or diagnostics["unsafe_relations"]
+    )
+    conclusion = "阻塞" if blocked else "通过"
     lines = [
         "# 标准化出口报告",
         "",
@@ -386,7 +439,8 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
         "## 映射与完整性",
         "",
         f"- 未映射字段：{len(diagnostics['unmapped_fields'])} 个",
-        f"- 未映射关系：{len(diagnostics['unmapped_relations'])} 个",
+        f"- 自定义回退关系：{len(diagnostics['fallback_relations'])} 个",
+        f"- 无法安全回退关系：{len(diagnostics['unsafe_relations'])} 条",
         f"- 重复 URI：{len(diagnostics['duplicate_uris'])} 组",
         f"- 来源解析错误：{len(diagnostics['source_errors'])} 条",
         "",
@@ -401,13 +455,21 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
         "",
         "这些文件是兼容 JSON-LD、PROV-O、SKOS 与 Turtle 的派生出口，不替代现有主发布格式，也不改变复核状态。",
     ]
-    for label, items in (
-        ("未映射字段", diagnostics["unmapped_fields"]),
-        ("未映射关系", diagnostics["unmapped_relations"]),
-    ):
-        if items:
-            lines.extend(["", f"### {label}明细", ""])
-            lines.extend(f"- `{item}`" for item in items)
+    if diagnostics["unmapped_fields"]:
+        lines.extend(["", "### 未映射字段明细", ""])
+        lines.extend(f"- `{item}`" for item in diagnostics["unmapped_fields"])
+    if diagnostics["fallback_relations"]:
+        lines.extend(["", "### 自定义回退关系明细", ""])
+        lines.extend(
+            f"- `{item['relation']}` → `{item['predicate']}`（{item['count']} 条）"
+            for item in diagnostics["fallback_relations"]
+        )
+    if diagnostics["unsafe_relations"]:
+        lines.extend(["", "### 无法安全回退关系明细", ""])
+        lines.extend(
+            f"- `{item['relation']}`：{item['reason']}"
+            for item in diagnostics["unsafe_relations"]
+        )
     if diagnostics["duplicate_uris"]:
         lines.extend(["", "### 重复 URI 明细", ""])
         lines.extend(f"- `{item['uri']}`：{', '.join(item['resources'])}" for item in diagnostics["duplicate_uris"])
@@ -475,6 +537,7 @@ def generate_standard_exports(root, config):
         key=lambda item: item["@id"],
     )
     provenance, unresolved = build_provenance_chain_records(included_sources, evidence, semantic_records)
+    relationship_triples, _, _ = build_relationship_triples(relationships, semantic_records, config)
 
     context = dict(sorted(config["namespaces"].items()))
     sample_limit = config.get("export_policy", {}).get("turtle_sample_limit", 25)
@@ -490,8 +553,12 @@ def generate_standard_exports(root, config):
         ),
         encoding="utf-8",
     )
-    if unresolved:
-        print(f"Blocked: {len(unresolved)} unresolved provenance references")
+    blocking_count = (
+        len(unresolved) + len(diagnostics["duplicate_uris"]) + len(diagnostics["source_errors"])
+        + len(diagnostics["unsafe_relations"])
+    )
+    if blocking_count:
+        print(f"Blocked: {blocking_count} standard export integrity issues")
         print(f"Wrote {outputs['report']}")
         return 1
 
@@ -501,7 +568,7 @@ def generate_standard_exports(root, config):
     turtle_path = root / outputs["turtle_sample"]
     turtle_path.parent.mkdir(parents=True, exist_ok=True)
     turtle_path.write_text(
-        build_turtle_sample(entity_graph, sample_limit, config["namespaces"]), encoding="utf-8"
+        build_turtle_sample(entity_graph, sample_limit, config["namespaces"], relationship_triples), encoding="utf-8"
     )
 
     for output_key in ("entity_catalog", "source_catalog", "provenance_map", "turtle_sample", "report"):
