@@ -118,6 +118,11 @@ reports:
     category: publishing
     retention: generated
     human_entry: false
+  standard_mapping_candidate_report:
+    path: data/generated/reports/review/standard_mapping_candidate_report.md
+    category: review
+    retention: generated
+    human_entry: false
   data_management_report:
     path: data/generated/reports/knowledge/data_management_report.md
     category: knowledge

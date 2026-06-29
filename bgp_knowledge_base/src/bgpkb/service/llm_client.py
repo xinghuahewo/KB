@@ -53,6 +53,98 @@ class DeepSeekClient:
             ],
         }
 
+    def build_standard_mapping_payload(self, items, prompt_version):
+        """构建与问答提示隔离的标准映射结构化请求。"""
+        required_fields = [
+            "candidate_type", "local_value", "suggested_mapping",
+            "source_refs", "confidence", "reason",
+        ]
+        return {
+            "model": self.model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是标准语义映射候选生成器。只输出一个 JSON 对象，唯一顶层字段为 candidates。"
+                        "每个候选必须只使用输入中的本地项和来源证据，并包含指定字段；"
+                        "不得输出 candidate_id、input_fingerprint、provider、model、prompt_version、"
+                        "status 或 generated_at；这些治理字段由系统生成，并把状态固定为 pending_review。"
+                        "不得批准候选或修改主数据。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "prompt_version": prompt_version,
+                            "required_fields": required_fields,
+                            "provider": "deepseek",
+                            "model": self.model,
+                            "items": items,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                },
+            ],
+        }
+
+    def _post_payload(self, payload):
+        request = urllib.request.Request(
+            self.base_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                response_payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            return None, {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "http_error",
+                "error": f"DeepSeek API returned HTTP {exc.code}.",
+            }
+        except Exception as exc:
+            return None, {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "request_failed",
+                "error": str(exc),
+            }
+        return response_payload, None
+
+    def generate_standard_mapping_candidates(self, items, prompt_version):
+        """请求结构化待审核映射候选。"""
+        if not self.api_key:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "missing_api_key",
+                "error": "DEEPSEEK_API_KEY is not configured.",
+            }
+        payload, error = self._post_payload(self.build_standard_mapping_payload(items, prompt_version))
+        if error:
+            return error
+        choices = payload.get("choices", [])
+        content = choices[0].get("message", {}).get("content", "") if choices else ""
+        return {
+            "ok": bool(content),
+            "provider": "deepseek",
+            "model": self.model,
+            "content": content,
+            "raw_usage": payload.get("usage", {}),
+        }
+
     def generate_answer(self, query, context_items):
         if not self.api_key:
             return {
@@ -63,34 +155,9 @@ class DeepSeekClient:
                 "error": "DEEPSEEK_API_KEY is not configured.",
             }
 
-        request = urllib.request.Request(
-            self.base_url,
-            data=json.dumps(self.build_payload(query, context_items), ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            return {
-                "ok": False,
-                "provider": "deepseek",
-                "model": self.model,
-                "error_code": "http_error",
-                "error": f"DeepSeek API returned HTTP {exc.code}.",
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "provider": "deepseek",
-                "model": self.model,
-                "error_code": "request_failed",
-                "error": str(exc),
-            }
+        payload, error = self._post_payload(self.build_payload(query, context_items))
+        if error:
+            return error
 
         choices = payload.get("choices", [])
         content = ""
