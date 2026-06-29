@@ -15,6 +15,7 @@ last_reviewed: "2026-06-20"
 3. 需要执行下一步时，读 [roadmap/next_stage_plan_v1.md](roadmap/next_stage_plan_v1.md)。
 4. 需要阶段细节时，只进入对应 `stages/` 文档。
 5. 需要落地开发时，再读 `docs/superpowers/plans/` 下的实施计划。
+6. 需要查看不插入阶段链的独立产品化工作时，读 `docs/projects/` 下的项目分支文档。
 
 ## 当前主线
 
@@ -36,6 +37,7 @@ last_reviewed: "2026-06-20"
 | `stages/` | 单阶段目标、边界、交付物和验收标准。 | 每个阶段一篇主文档，历史文档保留但不扩写。 |
 | `governance/` | 数据治理、生命周期、语义质量和语义标识规则。 | 只写治理规则，不承载阶段实施计划。 |
 | `rules/` | 文档维护规则。 | 只约束 Markdown CRUD 和索引维护。 |
+| `projects/` | 独立项目分支、产品化实验和不计入阶段验收链的开发计划。 | 不写阶段编号，不修改阶段验收标准。 |
 | `superpowers/plans/` | 可执行实施计划。 | 只放开发任务拆解，不写路线图背景。 |
 
 ## 核心文档
@@ -45,6 +47,7 @@ last_reviewed: "2026-06-20"
 | [roadmap/phase_solution_matrix_v1.md](roadmap/phase_solution_matrix_v1.md) | 当前阶段采用较优解还是简易版的决策表。 |
 | [roadmap/next_stage_plan_v1.md](roadmap/next_stage_plan_v1.md) | 近期下一步建设计划。 |
 | [stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md](stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md) | 阶段 4.5 终极目标、技术选型、边界和验收标准。 |
+| [projects/chat_frontend_project_branch_v1.md](projects/chat_frontend_project_branch_v1.md) | 对话前端独立项目分支开发文档，不插入阶段四或后续阶段。 |
 | [superpowers/plans/2026-06-20-phase-4-5-bge-m3-hybrid.md](superpowers/plans/2026-06-20-phase-4-5-bge-m3-hybrid.md) | 阶段 4.5 可执行开发计划。 |
 
 ## 维护规则
