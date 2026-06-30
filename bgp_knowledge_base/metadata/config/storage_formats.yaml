@@ -1,0 +1,75 @@
+layers:
+  raw_sources:
+    name: "原始资料层"
+    directories:
+      - data/sources/raw/
+    allowed_formats:
+      - pdf
+      - docx
+      - html
+      - md
+      - txt
+    notes: "Raw files are immutable. Keep original downloaded or manually collected files unchanged."
+
+  cleaned_text:
+    name: "清洗文本层"
+    directories:
+      - data/corpus/cleaned/
+    allowed_formats:
+      - md
+    notes: "Cleaned text is normalized Markdown with source references preserved."
+
+  knowledge_chunks:
+    name: "知识片段层"
+    directories:
+      - data/corpus/chunks/
+    allowed_formats:
+      - jsonl
+    notes: "Each line is one chunk record conforming to metadata/schemas/chunk.schema.json."
+
+  structured_entities:
+    name: "结构化实体层"
+    directories:
+      - data/knowledge/entities/
+    allowed_formats:
+      - jsonl
+      - postgresql
+    notes: "JSONL is the file-based MVP format. PostgreSQL is allowed for production-scale entity storage."
+
+  relationship_graph:
+    name: "关系图谱层"
+    directories:
+      - data/knowledge/relationships/
+    allowed_formats:
+      - jsonl
+      - sqlite
+      - postgresql
+      - neo4j
+    notes: "JSONL is the file-based MVP format. SQLite/PostgreSQL/Neo4j are allowed once graph queries or scale require them."
+
+  large_structured_data:
+    name: "大规模结构化数据层"
+    directories:
+      - data/derived/datasets/
+    allowed_formats:
+      - csv
+      - parquet
+    notes: "Use for large tables such as BGP observations, AS relationship snapshots, collector inventories, or field-level exports."
+
+  config:
+    name: "配置层"
+    directories:
+      - metadata/config/
+    allowed_formats:
+      - yaml
+      - yml
+    notes: "Configuration should remain human-readable YAML."
+
+  schemas:
+    name: "Schema 层"
+    directories:
+      - metadata/schemas/
+    allowed_formats:
+      - json
+    notes: "Schema files use JSON Schema."
+

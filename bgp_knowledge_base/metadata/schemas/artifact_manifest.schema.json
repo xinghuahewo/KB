@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ArtifactManifest",
+  "type": "object",
+  "required": [
+    "artifact_path",
+    "artifact_group",
+    "extension",
+    "size_bytes",
+    "line_count",
+    "is_binary",
+    "sha256",
+    "generated_by"
+  ],
+  "properties": {
+    "artifact_path": {"type": "string"},
+    "artifact_group": {"type": "string"},
+    "extension": {"type": "string"},
+    "size_bytes": {"type": "integer"},
+    "line_count": {"type": "integer"},
+    "is_binary": {"type": "boolean"},
+    "sha256": {"type": "string"},
+    "generated_by": {"type": "string"},
+    "report_id": {"type": "string"},
+    "report_category": {"type": "string"},
+    "report_retention": {"type": "string", "enum": ["curated", "generated", "snapshot"]},
+    "report_human_entry": {"type": "boolean"}
+  }
+}

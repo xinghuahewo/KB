@@ -1,11 +1,13 @@
 from pathlib import Path
+
+from bgpkb import paths
 import json
 import runpy
 
 
-ROOT = Path(__file__).resolve().parents[1]
-RUNNER = ROOT / "scripts" / "run_deepseek_rag_answer_eval.py"
-ANALYSIS = ROOT / "scripts" / "build_rag_answer_failure_analysis.py"
+ROOT = paths.PROJECT_ROOT
+RUNNER = paths.PIPELINE_DIR / "run_deepseek_rag_answer_eval.py"
+ANALYSIS = paths.PIPELINE_DIR / "build_rag_answer_failure_analysis.py"
 
 
 class FakeDeepSeekClient:
@@ -77,7 +79,7 @@ def test_failure_analysis_groups_failed_checks_and_renders_chinese_report(tmp_pa
     ]
 
     summary = namespace["summarize_failures"](rows)
-    report = namespace["render_report"](rows, summary, source_path="datasets/deepseek_rag_answer_eval_results.jsonl")
+    report = namespace["render_report"](rows, summary, source_path="data/derived/datasets/deepseek_rag_answer_eval_results.jsonl")
 
     assert summary["total"] == 2
     assert summary["failed"] == 1

@@ -3,17 +3,19 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
+
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DOC = ROOT / "docs" / "governance" / "lifecycle_metadata_v1.md"
-CONFIG = ROOT / "config" / "lifecycle_policy.yaml"
-REPORT = ROOT / "reports" / "lifecycle_report.md"
-INVENTORY = ROOT / "datasets" / "lifecycle_inventory.jsonl"
-SCRIPT = ROOT / "scripts" / "build_lifecycle_report.py"
-PIPELINE = ROOT / "scripts" / "run_pipeline.py"
-ACCEPTANCE = ROOT / "config" / "stage_acceptance_gates.yaml"
+ROOT = paths.PROJECT_ROOT
+DOC = paths.DOCS_DIR / "governance" / "lifecycle_metadata_v1.md"
+CONFIG = paths.CONFIG_DIR / "lifecycle_policy.yaml"
+REPORT = paths.report_path("lifecycle_report")
+INVENTORY = paths.DATASETS_DIR / "lifecycle_inventory.jsonl"
+SCRIPT = paths.PIPELINE_DIR / "build_lifecycle_report.py"
+PIPELINE = paths.PIPELINE_DIR / "run_pipeline.py"
+ACCEPTANCE = paths.CONFIG_DIR / "stage_acceptance_gates.yaml"
 
 EXPECTED_STATUSES = ["draft", "candidate", "reviewed", "approved", "deprecated", "archived"]
 
@@ -31,8 +33,8 @@ def test_lifecycle_policy_defines_state_model_and_rules():
     data = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
 
     assert data["version"] == "lifecycle_metadata_v1"
-    assert data["generated_policy"]["report_path"] == "reports/lifecycle_report.md"
-    assert data["generated_policy"]["inventory_path"] == "datasets/lifecycle_inventory.jsonl"
+    assert data["generated_policy"]["report_path"] == "data/generated/reports/knowledge/lifecycle_report.md"
+    assert data["generated_policy"]["inventory_path"] == "data/derived/datasets/lifecycle_inventory.jsonl"
     assert [state["id"] for state in data["states"]] == EXPECTED_STATUSES
     assert {"review_status", "source_refs", "review_packet", "evidence_index", "next_action"} <= set(
         data["metadata_fields"]
@@ -89,8 +91,8 @@ def test_lifecycle_step_is_registered_in_pipeline_and_stage_acceptance():
     stage = stages["phase_2_lifecycle_metadata_v1"]
     assert stage["name"] == "生命周期与元数据治理 v1"
     assert "docs/governance/lifecycle_metadata_v1.md" in stage["required_files"]
-    assert "reports/lifecycle_report.md" in stage["required_files"]
-    assert "datasets/lifecycle_inventory.jsonl" in stage["required_files"]
+    assert "data/generated/reports/knowledge/lifecycle_report.md" in stage["required_files"]
+    assert "data/derived/datasets/lifecycle_inventory.jsonl" in stage["required_files"]
     assert len(stage["effect_review"]["new_capabilities"]) >= 3
     assert len(stage["effect_review"]["user_can_now"]) >= 3
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3

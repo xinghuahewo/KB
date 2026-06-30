@@ -1,12 +1,15 @@
 from pathlib import Path
+import json
+
+from bgpkb import paths
 import sys
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = paths.PROJECT_ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from service import llm_client  # noqa: E402
+from bgpkb.service import llm_client  # noqa: E402
 
 
 def test_deepseek_client_reports_unavailable_without_api_key(monkeypatch):
@@ -41,3 +44,27 @@ def test_deepseek_client_builds_traceable_openai_compatible_payload(monkeypatch)
     assert "必须基于引用证据回答" in payload["messages"][0]["content"]
     assert "chunk_001" in payload["messages"][1]["content"]
     assert "rfc7908" in payload["messages"][1]["content"]
+
+
+def test_deepseek_client_builds_dedicated_structured_mapping_prompt():
+    client = llm_client.DeepSeekClient(api_key="test-key")
+    items = [{
+        "candidate_type": "relation",
+        "local_value": "secures",
+        "source_refs": ["rfc8205"],
+        "evidence_summary": "BGPsec 关系证据。",
+        "examples": [{"src_id": "bgpsec", "dst_id": "as_path"}],
+    }]
+
+    payload = client.build_standard_mapping_payload(items, "standard_mapping_v1")
+
+    assert payload["response_format"] == {"type": "json_object"}
+    assert payload["temperature"] == 0
+    assert "pending_review" in payload["messages"][0]["content"]
+    assert "问答助手" not in payload["messages"][0]["content"]
+    assert "standard_mapping_v1" in payload["messages"][1]["content"]
+    assert "rfc8205" in payload["messages"][1]["content"]
+    user_payload = json.loads(payload["messages"][1]["content"])
+    assert "candidate_id" not in user_payload["required_fields"]
+    assert "input_fingerprint" not in user_payload["required_fields"]
+    assert "status" not in user_payload["required_fields"]

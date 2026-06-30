@@ -3,15 +3,17 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
+
 import yaml
 
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "config" / "semantic_identity.yaml"
-CONTEXT = ROOT / "published" / "jsonld_context.json"
-ID_MAP = ROOT / "published" / "semantic_id_map.jsonl"
-REPORT = ROOT / "reports" / "semantic_identity_report.md"
-SCRIPT = ROOT / "scripts" / "build_semantic_identity.py"
+ROOT = paths.PROJECT_ROOT
+CONFIG = paths.CONFIG_DIR / "semantic_identity.yaml"
+CONTEXT = paths.PUBLISHED_DIR / "jsonld_context.json"
+ID_MAP = paths.PUBLISHED_DIR / "semantic_id_map.jsonl"
+REPORT = paths.report_path("semantic_identity_report")
+SCRIPT = paths.PIPELINE_DIR / "build_semantic_identity.py"
 
 
 def load_config():

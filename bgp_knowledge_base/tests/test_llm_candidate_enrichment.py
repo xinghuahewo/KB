@@ -4,12 +4,14 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "build_llm_candidate_enrichment.py"
-CHUNK_CANDIDATES = ROOT / "datasets" / "chunk_enrichment_candidates.jsonl"
-ENTITY_LINK_CANDIDATES = ROOT / "datasets" / "entity_link_candidates.jsonl"
-ENTITY_FILE = ROOT / "entities" / "anomaly_types.jsonl"
+
+ROOT = paths.PROJECT_ROOT
+SCRIPT = paths.PIPELINE_DIR / "build_llm_candidate_enrichment.py"
+CHUNK_CANDIDATES = paths.DATASETS_DIR / "chunk_enrichment_candidates.jsonl"
+ENTITY_LINK_CANDIDATES = paths.DATASETS_DIR / "entity_link_candidates.jsonl"
+ENTITY_FILE = paths.ENTITIES_DIR / "anomaly_types.jsonl"
 
 
 def load_jsonl(path):
@@ -38,7 +40,7 @@ def test_mock_candidate_generation_is_offline_traceable_and_does_not_edit_entiti
     assert all(record["review_status"] == "pending_review" for record in chunks)
     assert all(record["provider"] == "mock" for record in chunks)
     assert all(record["chunk_id"] and record["source_ref"] for record in chunks)
-    assert all(record["generated_by"] == "scripts/build_llm_candidate_enrichment.py" for record in chunks)
+    assert all(record["generated_by"] == "src/bgpkb/pipeline/build_llm_candidate_enrichment.py" for record in chunks)
     assert any("route" in " ".join(record["keywords"]).lower() for record in chunks)
     assert all(record["review_status"] == "pending_review" for record in links)
     assert all(record["chunk_id"] and record["entity_id"] and record["source_ref"] for record in links)

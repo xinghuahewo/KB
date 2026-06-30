@@ -1,0 +1,103 @@
+version: standard_exports_v1
+semantic_identity_config: metadata/config/semantic_identity.yaml
+outputs:
+  entity_catalog: data/published/entity_catalog.jsonld
+  source_catalog: data/published/source_catalog.jsonld
+  provenance_map: data/published/provenance_map.jsonl
+  turtle_sample: data/published/standard_exports/bgp_knowledge_sample.ttl
+  report: data/generated/reports/publishing/standardization_report.md
+  candidates: data/derived/datasets/standard_mapping_candidates.jsonl
+  candidate_errors: data/derived/datasets/standard_mapping_candidate_errors.jsonl
+  decision_audit: data/derived/datasets/standard_mapping_decision_audit.jsonl
+  apply_preview: data/derived/datasets/standard_mapping_apply_preview.jsonl
+  approved_mappings: data/derived/datasets/approved_standard_mappings.jsonl
+  decisions: data/review_inputs/standard_mapping_decisions.csv
+  decision_audit_report: data/generated/reports/review/standard_mapping_decision_audit_report.md
+  decision_apply_report: data/generated/reports/review/standard_mapping_decision_apply_report.md
+namespaces:
+  bgpkb: https://w3id.org/bgpkb/vocab#
+  skos: http://www.w3.org/2004/02/skos/core#
+  prov: http://www.w3.org/ns/prov#
+  dcterms: http://purl.org/dc/terms/
+  schema: https://schema.org/
+  xsd: http://www.w3.org/2001/XMLSchema#
+entity_type_mappings:
+  BGPConcept:
+    - bgpkb:BGPConcept
+    - skos:Concept
+  AnomalyType:
+    - bgpkb:AnomalyType
+    - skos:Concept
+  DataField:
+    - bgpkb:DataField
+    - skos:Concept
+  DataSource:
+    - bgpkb:DataSource
+    - schema:Dataset
+  EvidenceTemplate:
+    - bgpkb:EvidenceTemplate
+    - prov:Entity
+  RoutingMechanism:
+    - bgpkb:RoutingMechanism
+    - skos:Concept
+  FalsePositivePattern:
+    - bgpkb:FalsePositivePattern
+    - skos:Concept
+  Case:
+    - bgpkb:Case
+    - schema:Event
+  PaperMethod:
+    - bgpkb:PaperMethod
+    - schema:ScholarlyArticle
+relation_mappings:
+  derived_from: prov:wasDerivedFrom
+  related_to: skos:related
+  instance_of: dcterms:type
+  belongs_to: dcterms:isPartOf
+  depends_on: dcterms:requires
+  supported_by: prov:wasDerivedFrom
+  provides: bgpkb:provides
+  retrieves: bgpkb:retrieves
+  requires_evidence: bgpkb:requiresEvidence
+  may_explain: bgpkb:mayExplain
+  validates: bgpkb:validates
+  does_not_validate_full: bgpkb:doesNotValidateFull
+  supports: bgpkb:supports
+  uses: bgpkb:uses
+  guards_against_overclaiming: bgpkb:guardsAgainstOverclaiming
+  represented_by: bgpkb:representedBy
+  produces: bgpkb:produces
+  outputs: bgpkb:outputs
+export_policy:
+  include_review_statuses:
+    - approved
+    - pending
+  preserve_review_status: true
+  preserve_lifecycle_status: true
+  preserve_unmapped_fields: true
+  unmapped_relation_prefix: bgpkb
+  turtle_sample_limit: 25
+model_policy:
+  default_provider: mock
+  allowed_providers:
+    - mock
+    - deepseek
+  allowed_target_prefixes:
+    - bgpkb
+    - skos
+    - prov
+    - dcterms
+    - schema
+  default_candidate_status: pending_review
+  minimum_confidence: 0.5
+  prompt_version: standard_mapping_v1
+  writes_primary_entities: false
+  writes_primary_relationships: false
+  approves_candidates: false
+review_policy:
+  allowed_decisions:
+    - unreviewed
+    - approved
+    - rejected
+    - needs_evidence
+  write_requires_explicit_flag: true

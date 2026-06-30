@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: #f5f3ee;
+  --panel: #fffefa;
+  --ink: #171717;
+  --muted: #67645d;
+  --line: #d8d1c3;
+  --line-strong: #a99f8c;
+  --green: #14745a;
+  --blue: #215d8c;
+  --red: #a33a2a;
+  --amber: #996515;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: #215d8c;
+  color: white;
+}
+
+.mono {
+  font-family: "SFMono-Regular", "Cascadia Code", "Liberation Mono", monospace;
+}

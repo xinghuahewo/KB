@@ -3,10 +3,12 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-INDEX_SCRIPT = ROOT / "scripts" / "build_rag_indexes.py"
-QUERY_SCRIPT = ROOT / "scripts" / "query_rag.py"
+
+ROOT = paths.PROJECT_ROOT
+INDEX_SCRIPT = paths.PIPELINE_DIR / "build_rag_indexes.py"
+QUERY_SCRIPT = paths.PIPELINE_DIR / "query_rag.py"
 
 
 def run_script(path, *args):

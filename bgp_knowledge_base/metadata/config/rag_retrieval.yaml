@@ -1,0 +1,139 @@
+version: rag_retrieval_v1
+default_mode: offline_framework
+trusted_collection:
+  lifecycle_status:
+    - approved
+  exclude_lifecycle_status:
+    - deprecated
+    - archived
+  exclude_semantic_blocker: true
+embedding:
+  default_provider: siliconflow_bge_m3
+  offline_fallback_provider: deterministic_mock
+  local_model_enabled: false
+  providers:
+    deterministic_mock:
+      enabled: true
+      dimensions: 32
+      downloads_model: false
+      requires_network: false
+      runs_on_current_device: false
+    siliconflow_bge_m3:
+      enabled: true
+      model: BAAI/bge-m3
+      base_url: https://api.siliconflow.cn/v1/embeddings
+      base_url_env: SILICONFLOW_BASE_URL
+      api_key_env: SILICONFLOW_API_KEY
+      timeout_seconds: 30
+      batch_size: 32
+      payload_style: openai_compatible
+      downloads_model: false
+      requires_network: true
+      runs_on_current_device: false
+    aliyun_eas_bge_m3:
+      enabled: true
+      model: BAAI/bge-m3
+      endpoint_env: ALIYUN_BGE_M3_ENDPOINT
+      api_key_env: ALIYUN_BGE_M3_API_KEY
+      timeout_seconds: 30
+      batch_size: 32
+      payload_style: eas_dense
+      downloads_model: false
+      requires_network: true
+      runs_on_current_device: false
+    local_bge_m3:
+      enabled: false
+      model: BAAI/bge-m3
+      device: cpu
+      use_fp16: false
+      max_length: 8192
+      downloads_model: true
+      requires_network: false
+      runs_on_current_device: true
+      outputs:
+        dense: true
+        sparse: true
+        colbert: false
+    bge_m3:
+      enabled: false
+      model: BAAI/bge-m3
+      deprecated_alias_for: local_bge_m3
+      device: cpu
+      use_fp16: false
+      max_length: 8192
+      downloads_model: true
+      requires_network: false
+      runs_on_current_device: true
+      outputs:
+        dense: true
+        sparse: true
+        colbert: false
+    qwen_embedding:
+      enabled: false
+      model: Qwen/Qwen3-Embedding
+      reserved_for: future_remote_or_deployment_stage
+      runs_on_current_device: false
+      downloads_model: false
+      requires_network: false
+vector_store:
+  default_provider: mock_jsonl
+  providers:
+    mock_jsonl:
+      enabled: true
+      path: data/published/rag_mock_vector_index.jsonl
+    milvus_lite:
+      enabled: false
+      uri: data/published/rag_milvus.db
+      collection: bgp_chunks
+    milvus_standalone:
+      enabled: false
+      uri: http://localhost:19530
+      collection: bgp_chunks
+hybrid_retrieval:
+  lexical_top_k: 50
+  vector_top_k: 50
+  rrf_k: 60
+  fused_top_k: 20
+  context_top_k: 8
+  min_vector_similarity: 0.5
+lexical_fallback:
+  provider: sqlite_fts5
+  enabled: true
+query_expansions:
+  路由泄露:
+    - route leak
+    - route leaks
+    - RFC 7908
+  前缀劫持:
+    - prefix hijack
+    - BGP hijack
+  子前缀劫持:
+    - subprefix hijack
+    - more-specific prefix hijack
+  路由震荡:
+    - route flap
+    - route flapping
+  起源 AS:
+    - origin AS
+  AS 路径:
+    - AS_PATH
+  RPKI:
+    - resource public key infrastructure
+    - route origin validation
+  ROA:
+    - route origin authorization
+  ASPA:
+    - autonomous system provider authorization
+  劫持:
+    - hijack
+    - BGP hijack
+context_pack:
+  max_results: 8
+  max_chars: 6000
+  generates_final_answer: false
+generated_policy:
+  embedding_manifest_path: data/published/embedding_manifest.json
+  vector_index_path: data/published/rag_mock_vector_index.jsonl
+  retrieval_index_path: data/published/rag_retrieval_index.json
+  eval_path: data/derived/datasets/rag_query_eval.jsonl
+  report_path: data/generated/reports/rag/rag_readiness_report.md

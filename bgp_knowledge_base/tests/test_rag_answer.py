@@ -1,12 +1,14 @@
 from pathlib import Path
+
+from bgpkb import paths
 import sys
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = paths.PROJECT_ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from service import rag_answer  # noqa: E402
+from bgpkb.service import rag_answer  # noqa: E402
 
 
 class SuccessfulClient:
@@ -43,6 +45,9 @@ def test_answer_question_generates_traceable_answer_when_evidence_exists():
     assert payload["answer"].startswith("基于")
     assert payload["citations"]
     assert payload["context_pack"]["results"]
+    assert payload["context_pack"]["generated_by"] == "src/bgpkb/service/hybrid_retrieval.py"
+    assert payload["context_pack"]["trusted_chunk_policy"] == "approved_entity_evidence_or_processed_source_with_traceability"
+    assert all(item["trusted"] is True for item in payload["context_pack"]["results"])
     assert payload["model_provider"] == "deepseek"
     assert payload["guardrails"]["requires_citations"] is True
 

@@ -3,13 +3,15 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "build_rag_indexes.py"
-MANIFEST = ROOT / "published" / "embedding_manifest.json"
-VECTOR_INDEX = ROOT / "published" / "rag_mock_vector_index.jsonl"
-RETRIEVAL_INDEX = ROOT / "published" / "rag_retrieval_index.json"
-CHUNK_CATALOG = ROOT / "published" / "chunk_catalog.jsonl"
+
+ROOT = paths.PROJECT_ROOT
+SCRIPT = paths.PIPELINE_DIR / "build_rag_indexes.py"
+MANIFEST = paths.PUBLISHED_DIR / "embedding_manifest.json"
+VECTOR_INDEX = paths.PUBLISHED_DIR / "rag_mock_vector_index.jsonl"
+RETRIEVAL_INDEX = paths.PUBLISHED_DIR / "rag_retrieval_index.json"
+CHUNK_CATALOG = paths.PUBLISHED_DIR / "chunk_catalog.jsonl"
 
 
 def load_jsonl(path):

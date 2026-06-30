@@ -14,14 +14,14 @@ last_reviewed: "2026-06-19"
 
 ## 2. 交付物
 
-- `config/rag_retrieval.yaml`
-- `config/llm_candidate_enrichment.yaml`
-- `scripts/build_llm_candidate_enrichment.py`
-- `scripts/build_rag_indexes.py`
-- `scripts/query_rag.py`
-- `scripts/build_rag_readiness_report.py`
-- `service/retrieval_framework.py`
-- `reports/rag_readiness_report.md`
+- `metadata/config/rag_retrieval.yaml`
+- `metadata/config/llm_candidate_enrichment.yaml`
+- `src/bgpkb/pipeline/build_llm_candidate_enrichment.py`
+- `src/bgpkb/pipeline/build_rag_indexes.py`
+- `src/bgpkb/pipeline/query_rag.py`
+- `src/bgpkb/pipeline/build_rag_readiness_report.py`
+- `src/bgpkb/service/retrieval_framework.py`
+- `data/generated/reports/rag/rag_readiness_report.md`
 - `/api/v1/retrieval/search`
 - `/api/v1/retrieval/evidence`
 - `/api/v1/retrieval/context-pack`

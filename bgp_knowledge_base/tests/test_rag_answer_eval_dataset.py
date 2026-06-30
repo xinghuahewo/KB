@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "datasets" / "rag_answer_eval_questions.jsonl"
+
+ROOT = paths.PROJECT_ROOT
+DATASET = paths.DATASETS_DIR / "rag_answer_eval_questions.jsonl"
 
 
 REQUIRED_FIELDS = {

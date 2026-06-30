@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "required": [
+    "audit_id",
+    "workbook_id",
+    "entity_id",
+    "entity_type",
+    "display_name",
+    "entity_file",
+    "current_review_status",
+    "review_decision",
+    "target_review_status",
+    "application_status",
+    "can_apply",
+    "blocking_reason",
+    "needs_llm",
+    "decision_source",
+    "generated_by"
+  ],
+  "properties": {
+    "audit_id": {"type": "string"},
+    "workbook_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "entity_file": {"type": "string"},
+    "current_review_status": {"type": "string"},
+    "review_decision": {
+      "type": "string",
+      "enum": ["unreviewed", "approved", "rejected", "needs_source", "needs_semantic_review"]
+    },
+    "target_review_status": {"type": "string"},
+    "application_status": {
+      "type": "string",
+      "enum": ["no_op", "ready_to_apply", "manual_followup", "blocked_by_llm", "blocked_invalid_entity"]
+    },
+    "can_apply": {"type": "boolean"},
+    "blocking_reason": {"type": "string"},
+    "needs_llm": {"type": "boolean"},
+    "decision_source": {
+      "type": "string",
+      "enum": ["workbook_default", "data/review_inputs/human_review_decisions.csv"]
+    },
+    "decision_reviewer": {"type": "string"},
+    "decision_reviewed_at": {"type": "string"},
+    "decision_note": {"type": "string"},
+    "generated_by": {"type": "string", "const": "src/bgpkb/pipeline/build_human_review_decision_audit.py"}
+  }
+}

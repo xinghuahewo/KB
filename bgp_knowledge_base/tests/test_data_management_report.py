@@ -2,11 +2,13 @@ import runpy
 import sys
 from pathlib import Path
 
+from bgpkb import paths
 
-ROOT = Path(__file__).resolve().parents[1]
-CONFIG = ROOT / "config" / "data_management_capabilities.yaml"
-REPORT = ROOT / "reports" / "data_management_report.md"
-SCRIPT = ROOT / "scripts" / "build_data_management_report.py"
+
+ROOT = paths.PROJECT_ROOT
+CONFIG = paths.CONFIG_DIR / "data_management_capabilities.yaml"
+REPORT = paths.report_path("data_management_report")
+SCRIPT = paths.PIPELINE_DIR / "build_data_management_report.py"
 
 ALLOWED_STATUSES = {"achieved", "partial", "planned", "not_started", "deferred"}
 REQUIRED_ASSET_GROUPS = {
@@ -55,7 +57,7 @@ def test_data_management_capabilities_yaml_is_valid():
 
     assert data["version"] == "data_management_v1"
     assert set(data["allowed_statuses"]) == ALLOWED_STATUSES
-    assert data["generated_policy"]["report_path"] == "reports/data_management_report.md"
+    assert data["generated_policy"]["report_path"] == "data/generated/reports/knowledge/data_management_report.md"
 
 
 def test_asset_groups_have_required_fields_and_valid_statuses():
@@ -87,8 +89,8 @@ def test_rag_framework_is_registered_with_offline_boundaries():
 
     rag_asset = assets["rag_retrieval_framework"]
     assert rag_asset["status"] == "achieved"
-    assert "config/rag_retrieval.yaml" in rag_asset["paths"]
-    assert "reports/rag_readiness_report.md" in rag_asset["evidence"]
+    assert "metadata/config/rag_retrieval.yaml" in rag_asset["paths"]
+    assert "data/generated/reports/rag/rag_readiness_report.md" in rag_asset["evidence"]
 
     rag_capability = capabilities["rag_retrieval"]
     assert rag_capability["status"] == "achieved"
