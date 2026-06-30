@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+.worktrees/
 bgp_knowledge_base/.env
 bgp_visual_output/
 bgp_knowledge_base/.env
