@@ -37,6 +37,24 @@ def test_quality_check_loads_phase_a_schemas_and_blocks_only_deterministic_issue
         {"doc_id": "blocked", "blocking_issues": ["replacement_character"], "warnings": []},
     ]) == ["blocked -> replacement_character"]
 
+    empty_but_present = {
+        field: [] if schemas["corpus_profile"]["properties"].get(field, {}).get("type") == "array" else False
+        for field in schemas["corpus_profile"]["required"]
+    }
+    empty_but_present.update({
+        "doc_id": "doc",
+        "metrics": {},
+        "generated_by": "src/bgpkb/pipeline/profile_cleaned_corpus.py",
+    })
+    errors = quality.validate_schema(
+        empty_but_present,
+        schemas["corpus_profile"],
+        "profile",
+        allow_empty_required=True,
+    )
+    assert not any("missing required blocking_issues" in error for error in errors)
+    assert not any("missing required warnings" in error for error in errors)
+
 
 def test_deterministic_pipeline_runs_profile_then_disabled_ocr_after_chunks():
     pipeline = importlib.import_module("bgpkb.pipeline.run_pipeline")

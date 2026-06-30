@@ -631,14 +631,18 @@ def type_matches(value, expected_type):
     return True
 
 
-def validate_schema(record, schema, label):
+def validate_schema(record, schema, label, allow_empty_required=False):
     errors = []
     if schema.get("type") and not type_matches(record, schema["type"]):
         errors.append(f"{label}: record type is not {schema['type']}")
         return errors
 
     for field in schema.get("required", []):
-        if missing_or_empty(record, field):
+        if (
+            field not in record
+            or record[field] is None
+            or (not allow_empty_required and missing_or_empty(record, field))
+        ):
             errors.append(f"{label}: missing required {field}")
 
     properties = schema.get("properties", {})
@@ -988,11 +992,13 @@ def main():
     schema_errors = []
     for index, record in enumerate(corpus_profiles, start=1):
         schema_errors.extend(validate_schema(
-            record, schemas["corpus_profile"], f"corpus_profile:{index}"
+            record, schemas["corpus_profile"], f"corpus_profile:{index}",
+            allow_empty_required=True,
         ))
     for index, record in enumerate(corpus_ocr_assessments, start=1):
         schema_errors.extend(validate_schema(
-            record, schemas["corpus_ocr_assessment"], f"corpus_ocr_assessment:{index}"
+            record, schemas["corpus_ocr_assessment"], f"corpus_ocr_assessment:{index}",
+            allow_empty_required=True,
         ))
     corpus_profile_blockers = corpus_profile_blocking_issues(corpus_profiles)
     parsed_document_missing_fields = []
