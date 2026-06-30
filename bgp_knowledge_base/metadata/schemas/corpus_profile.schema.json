@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/corpus-profile-v1.json",
+  "title": "BGP 知识库语料质量画像",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "doc_id",
+    "parsed_exists",
+    "cleaned_exists",
+    "chunks_exist",
+    "parsed_paths",
+    "cleaned_paths",
+    "chunk_files",
+    "metrics",
+    "blocking_issues",
+    "warnings",
+    "generated_by"
+  ],
+  "properties": {
+    "doc_id": {"type": "string", "minLength": 1},
+    "parsed_exists": {"type": "boolean"},
+    "cleaned_exists": {"type": "boolean"},
+    "chunks_exist": {"type": "boolean"},
+    "parsed_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "cleaned_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "chunk_files": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "character_count",
+        "paragraph_count",
+        "average_paragraph_chars",
+        "section_count",
+        "chunk_count",
+        "replacement_character_count",
+        "suspected_table_line_count",
+        "abnormal_symbol_count",
+        "abnormal_symbol_ratio",
+        "empty_heading_count",
+        "duplicate_heading_count"
+      ],
+      "properties": {
+        "character_count": {"type": "integer", "minimum": 0},
+        "paragraph_count": {"type": "integer", "minimum": 0},
+        "average_paragraph_chars": {"type": "number", "minimum": 0},
+        "section_count": {"type": "integer", "minimum": 0},
+        "chunk_count": {"type": "integer", "minimum": 0},
+        "replacement_character_count": {"type": "integer", "minimum": 0},
+        "suspected_table_line_count": {"type": "integer", "minimum": 0},
+        "abnormal_symbol_count": {"type": "integer", "minimum": 0},
+        "abnormal_symbol_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "empty_heading_count": {"type": "integer", "minimum": 0},
+        "duplicate_heading_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "blocking_issues": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "duplicate_doc_id",
+          "empty_cleaned_content",
+          "orphan_chunk_document",
+          "replacement_character"
+        ]
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "abnormal_symbols",
+          "duplicate_heading",
+          "empty_heading",
+          "long_document",
+          "missing_chunks",
+          "missing_cleaned",
+          "missing_parsed",
+          "short_document",
+          "suspected_table"
+        ]
+      }
+    },
+    "generated_by": {"const": "src/bgpkb/pipeline/profile_cleaned_corpus.py"}
+  }
+}
+
