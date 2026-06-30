@@ -91,6 +91,33 @@ class DeepSeekClient:
             ],
         }
 
+    def build_corpus_ocr_payload(self, item, prompt_version):
+        """构建与问答、标准映射隔离的语料 OCR 质量评估请求。"""
+        return {
+            "model": self.model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是技术语料 OCR 质量评估器。只输出一个 JSON 对象，且只能包含 "
+                        "risk_level、reason、recommendation。risk_level 只能是 low、medium 或 high。"
+                        "判断字符断裂、乱码、阅读顺序和疑似 OCR 噪声；不得改写文本或给出治理状态。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        "doc_id": item.get("doc_id", ""),
+                        "input_fingerprint": item.get("input_fingerprint", ""),
+                        "prompt_version": prompt_version,
+                        "sample": item.get("sample", ""),
+                    }, ensure_ascii=False, sort_keys=True),
+                },
+            ],
+        }
+
     def _post_payload(self, payload):
         request = urllib.request.Request(
             self.base_url,
@@ -143,6 +170,28 @@ class DeepSeekClient:
             "model": self.model,
             "content": content,
             "raw_usage": payload.get("usage", {}),
+        }
+
+    def generate_corpus_ocr_assessment(self, item, prompt_version):
+        """请求单篇语料的结构化 OCR 风险建议。"""
+        if not self.api_key:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "missing_api_key",
+                "error": "OCR quality provider is not configured.",
+            }
+        payload, error = self._post_payload(self.build_corpus_ocr_payload(item, prompt_version))
+        if error:
+            return error
+        choices = payload.get("choices", [])
+        content = choices[0].get("message", {}).get("content", "") if choices else ""
+        return {
+            "ok": bool(content),
+            "provider": "deepseek",
+            "model": self.model,
+            "content": content,
         }
 
     def generate_answer(self, query, context_items):
