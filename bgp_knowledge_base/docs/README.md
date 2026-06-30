@@ -36,6 +36,7 @@ last_reviewed: "2026-06-29"
 | [RAG 就绪框架](stages/phase_4_rag_framework_v1.md) | 已交付；记录检索框架、Provider 边界和离线验收。 |
 | [RAG 答案质量评测](stages/phase_4_3_rag_answer_eval_v1.md) | 现行；记录固定评测集和质量门槛。 |
 | [DeepSeek 批量评测](stages/phase_4_4_deepseek_eval_analysis_v1.md) | 现行；记录真实模型评测和失败分析边界。 |
+| [BGE-M3 混合检索](stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md) | 已交付并通过真实向量评测；记录远程 embedding、融合检索和验收边界。 |
 | [轻量标准化出口](stages/phase_5_standard_exports_v1.md) | 已交付并通过验收；记录确定性标准出口、模型候选和人工审核闸门。 |
 
 ## 后续路线

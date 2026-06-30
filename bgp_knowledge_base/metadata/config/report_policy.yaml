@@ -278,6 +278,16 @@ reports:
     category: rag
     retention: generated
     human_entry: false
+  bge_m3_embedding_report:
+    path: data/generated/reports/rag/bge_m3_embedding_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  hybrid_retrieval_eval_report:
+    path: data/generated/reports/rag/hybrid_retrieval_eval_report.md
+    category: rag
+    retention: generated
+    human_entry: false
   rag_answer_smoke_test_report:
     path: data/generated/reports/rag/rag_answer_smoke_test_report.md
     category: rag

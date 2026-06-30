@@ -89,6 +89,22 @@ def test_stage_acceptance_config_registers_phase_4_4_deepseek_eval_analysis():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_4_5_bge_m3_hybrid_retrieval():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_4_5_bge_m3_hybrid_retrieval_v1"]
+
+    assert stage["name"] == "BGE-M3 混合检索 v1"
+    assert "src/bgpkb/service/bge_m3_remote_client.py" in stage["required_files"]
+    assert "src/bgpkb/service/hybrid_retrieval.py" in stage["required_files"]
+    assert "data/published/bge_m3_embedding_manifest.json" in stage["required_files"]
+    assert "data/generated/reports/rag/hybrid_retrieval_eval_report.md" in stage["required_files"]
+    assert any(command["id"] == "bge_m3_embedding_build" for command in stage["commands"])
+    assert any(command["id"] == "hybrid_retrieval_eval" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_config_registers_phase_5_standard_exports():
     data = load_config()
     stages = {stage["id"]: stage for stage in data["stages"]}

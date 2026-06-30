@@ -1,4 +1,4 @@
-from . import llm_client, retrieval_framework
+from . import hybrid_retrieval, llm_client
 
 
 def _guardrails(blocked_reason=""):
@@ -14,7 +14,7 @@ def _guardrails(blocked_reason=""):
 
 
 def answer_question(query, limit=8, client=None):
-    pack = retrieval_framework.context_pack(query, limit=limit)
+    pack = hybrid_retrieval.context_pack(query, limit=limit)
     citations = pack.get("citations", [])
     if not citations:
         return {

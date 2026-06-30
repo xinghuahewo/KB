@@ -153,6 +153,10 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/run_deepseek_rag_answer_eval.py"
     if rel.startswith("data/derived/datasets/rag_answer_smoke_test_results."):
         return "src/bgpkb/pipeline/run_rag_answer_smoke_test.py"
+    if rel.startswith("data/derived/datasets/hybrid_retrieval_eval_questions."):
+        return "manual_eval_dataset"
+    if rel.startswith("data/derived/datasets/hybrid_retrieval_eval_results."):
+        return "src/bgpkb/pipeline/run_hybrid_retrieval_eval.py"
     if rel == "data/review_inputs/human_review_decisions_template.csv":
         return "src/bgpkb/pipeline/build_human_review_decision_template.py"
     if rel.startswith("data/review_inputs/human_review_session_decision_templates/"):
@@ -164,6 +168,11 @@ def producer_for(rel):
     if rel.startswith("data/derived/datasets/glossary."):
         return "src/bgpkb/pipeline/build_glossary.py"
     if rel.startswith("data/published/"):
+        if rel in {
+            "data/published/bge_m3_embedding_manifest.json",
+            "data/published/bge_m3_vector_index.jsonl",
+        }:
+            return "src/bgpkb/pipeline/build_bge_m3_index.py"
         if rel in {
             "data/published/entity_catalog.jsonld",
             "data/published/source_catalog.jsonld",
@@ -261,6 +270,10 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_rag_answer_failure_analysis.py"
     if rel.startswith("data/generated/reports/rag/rag_answer_smoke_test_report.md"):
         return "src/bgpkb/pipeline/run_rag_answer_smoke_test.py"
+    if rel.startswith("data/generated/reports/rag/bge_m3_embedding_report.md"):
+        return "src/bgpkb/pipeline/build_bge_m3_index.py"
+    if rel.startswith("data/generated/reports/rag/hybrid_retrieval_eval_report.md"):
+        return "src/bgpkb/pipeline/run_hybrid_retrieval_eval.py"
     if rel.startswith("data/generated/reports/review/human_review_session_decision_templates_report.md"):
         return "src/bgpkb/pipeline/build_human_review_session_decision_templates.py"
     if rel.startswith("data/generated/reports/review/human_review_session_guides/"):

@@ -448,6 +448,84 @@ stages:
       non_blocking_items:
         - 真实 DeepSeek 输出仍需人工抽样判断语义准确性。
         - 当前失败分析基于自动检查项，不替代专家评审。
+  - id: phase_4_5_bge_m3_hybrid_retrieval_v1
+    name: BGE-M3 混合检索 v1
+    acceptance_mode: deterministic_with_effect_review
+    required_files:
+      - docs/stages/phase_4_5_bge_m3_hybrid_retrieval_v1.md
+      - metadata/config/rag_retrieval.yaml
+      - src/bgpkb/service/bge_m3_remote_client.py
+      - src/bgpkb/service/hybrid_retrieval.py
+      - src/bgpkb/pipeline/build_bge_m3_index.py
+      - src/bgpkb/pipeline/query_hybrid_rag.py
+      - src/bgpkb/pipeline/run_hybrid_retrieval_eval.py
+      - data/published/bge_m3_embedding_manifest.json
+      - data/derived/datasets/hybrid_retrieval_eval_questions.jsonl
+      - data/derived/datasets/hybrid_retrieval_eval_results.jsonl
+      - data/generated/reports/rag/bge_m3_embedding_report.md
+      - data/generated/reports/rag/hybrid_retrieval_eval_report.md
+      - tests/test_bge_m3_remote_client.py
+      - tests/test_build_bge_m3_index.py
+      - tests/test_hybrid_retrieval.py
+      - tests/test_hybrid_retrieval_eval.py
+    commands:
+      - id: bge_m3_embedding_build
+        name: 构建或结构化跳过 BGE-M3 远程向量索引
+        command: python3 -m bgpkb.pipeline.build_bge_m3_index
+      - id: hybrid_retrieval_eval
+        name: 运行混合检索评测
+        command: python3 -m bgpkb.pipeline.run_hybrid_retrieval_eval
+      - id: hybrid_retrieval_tests
+        name: 运行 BGE-M3 与混合检索测试
+        command: python3 -m pytest tests/test_embedding_provider.py tests/test_bge_m3_remote_client.py tests/test_build_bge_m3_index.py tests/test_hybrid_retrieval.py tests/test_hybrid_retrieval_eval.py tests/test_service_api.py -v
+    report_checks:
+      - id: bge_m3_embedding_report_summary
+        path: data/generated/reports/rag/bge_m3_embedding_report.md
+        must_contain:
+          - "# BGE-M3 Embedding 构建报告"
+          - "当前设备未运行本地模型"
+          - "未修改实体、关系、chunk、术语表或复核状态"
+          - "## 输入数据"
+      - id: hybrid_retrieval_eval_summary
+        path: data/generated/reports/rag/hybrid_retrieval_eval_report.md
+        must_contain:
+          - "# 阶段 4.5 混合检索评测报告"
+          - "通过数：20"
+          - "失败数：0"
+          - "无证据拒答率：100.00%"
+          - "## 逐题结果"
+      - id: pipeline_report
+        path: data/reports/gates/pipeline_report.md
+        must_contain:
+          - "总体状态：通过"
+          - "构建 BGE-M3 远程向量索引"
+          - "运行混合检索评测"
+      - id: quality_report
+        path: data/reports/gates/quality_report.md
+        must_contain:
+          - "JSON 错误数：0"
+          - "Schema 错误数：0"
+          - "制品清单未登记文件数：0"
+    effect_review:
+      one_line: 当前 KB 已具备可替换远程 BGE-M3 provider、可解释融合排序、可信来源边界和固定检索评测体系。
+      new_capabilities:
+        - 建立了 SiliconFlow 优先、阿里云 PAI/EAS 兼容的远程 BGE-M3 客户端。
+        - 建立了 chunk、entity、glossary、evidence template 四类数据的 embedding 文档和 manifest。
+        - 建立了关键词、向量、元数据意图和 RRF 的可解释混合检索。
+        - 建立了 20 题检索评测，覆盖 Recall@5、Recall@8、MRR、来源类型和无证据拒答。
+      user_can_now:
+        - 无 API key 时离线验证完整框架和排序边界。
+        - 配置 SiliconFlow key 后构建真实 BGE-M3 文件化向量索引。
+        - 通过 CLI、API 和 RAG Answer 使用同一 hybrid context pack。
+      downstream_dependencies:
+        - 后续可在不改检索契约的情况下切换阿里云 PAI/EAS 或其它 OpenAI-compatible embedding 服务。
+        - 数据规模扩大后可把文件化向量索引替换为 Milvus 或 Qdrant。
+        - 阶段五可复用当前 source_ref、chunk_id、review_status 和排序解释做标准化出口。
+    human_review_policy:
+      allow_needs_human: true
+      non_blocking_items:
+        - 真实 BGE-M3 向量效果已完成固定评测，仍建议对业务查询做持续人工抽样。
+        - pending chunk 只在已批准实体 evidence 或已确定性处理来源的可追溯边界内进入检索，不会被改写为 approved。
   - id: phase_5_standard_exports_v1
     name: 轻量标准化出口 v1
     acceptance_mode: deterministic_with_effect_review

@@ -268,6 +268,22 @@ python3 -m bgpkb.pipeline.build_rag_answer_failure_analysis
 - `data/generated/reports/rag/deepseek_rag_answer_eval_report.md`
 - `data/generated/reports/rag/rag_answer_failure_analysis_report.md`
 
+阶段 4.5 使用远程 BGE-M3、关键词和元数据做 RRF 混合检索。默认使用 SiliconFlow `BAAI/bge-m3`；当前设备不下载或运行本地模型。无密钥时可验证离线检索边界和评测框架：
+
+```bash
+python3 -m bgpkb.pipeline.build_bge_m3_index
+python3 -m bgpkb.pipeline.query_hybrid_rag search "路由泄露" --top-k 5 --no-vector
+python3 -m bgpkb.pipeline.run_hybrid_retrieval_eval
+```
+
+配置 `SILICONFLOW_API_KEY` 后，可运行真实远程向量索引构建。产物位于：
+
+- `data/published/bge_m3_embedding_manifest.json`
+- `data/published/bge_m3_vector_index.jsonl`
+- `data/derived/datasets/hybrid_retrieval_eval_results.jsonl`
+- `data/generated/reports/rag/bge_m3_embedding_report.md`
+- `data/generated/reports/rag/hybrid_retrieval_eval_report.md`
+
 自动化测试：
 
 ```bash
@@ -278,6 +294,7 @@ pytest tests -v
 
 - 只读访问 SQLite，缺失数据库时通过 `/health` 和 API 错误返回清晰状态。
 - 阶段 4.1 提供 `POST /api/v1/rag/answer`，只做检索、context pack 和可追溯答案编排。
+- 阶段 4.5 提供 `/api/v1/hybrid/search` 和 `/api/v1/hybrid/context-pack`，RAG Answer 复用同一混合检索 context pack。
 - DeepSeek API 只从环境变量 `DEEPSEEK_API_KEY` 读取密钥；仓库只提供 `.env.example`，不保存真实密钥。
 - 当前设备不运行本地模型；`metadata/config/rag_retrieval.yaml` 中 `embedding.local_model_enabled=false`，Qwen embedding 只预留后续部署字段。
 - LLM 不可用或没有证据时不会编造答案，会返回检索证据、引用和失败状态。

@@ -70,10 +70,12 @@ def query_intent(normalized_query):
     text = normalized_query.lower()
     if any(term in text for term in ["incident", "outage", "case", "war story", "youtube", "cloudflare", "verizon", "aws", "facebook"]):
         return "case"
-    if any(term in text for term in ["rfc", "what is", "definition", "validation", "roa", "rpki", "aspa", "route flap"]):
-        return "standard"
+    if any(term in text for term in ["routeviews", "ripe ris", "bgpstream", "asrank", "aspa", "data source", "raw data"]):
+        return "data"
     if any(term in text for term in ["detect", "detection", "method", "analysis", "artemis", "bear", "beam"]):
         return "paper"
+    if any(term in text for term in ["rfc", "what is", "definition", "validation", "roa", "rpki", "route flap"]):
+        return "standard"
     return ""
 
 
@@ -87,10 +89,28 @@ def source_type_bonus(chunk, normalized_query):
         bonus += 3.0
     if intent == "paper" and source_type == "paper":
         bonus += 2.0
+    if intent == "data" and source_type in {"data_doc", "tool_doc"}:
+        bonus += 2.0
     title = chunk.get("title", "").lower()
     doc_id = chunk.get("doc_id", "").lower()
+    named_terms = {
+        "artemis",
+        "aspa",
+        "asrank",
+        "bear",
+        "beam",
+        "bgpstream",
+        "cloudflare",
+        "ris",
+        "route53",
+        "routeviews",
+        "verizon",
+        "youtube",
+    }
     for term in token_set(normalized_query):
-        if len(term) >= 4 and (term in title or term in doc_id):
+        if term in named_terms and (term in title or term in doc_id):
+            bonus += 8.0
+        elif len(term) >= 4 and (term in title or term in doc_id):
             bonus += 0.5
     return bonus
 

@@ -49,6 +49,8 @@ GENERATED_REPORT_IDS_TO_CLEAN = [
     "rag_readiness_report",
     "rag_answer_eval_report",
     "rag_answer_failure_analysis_report",
+    "bge_m3_embedding_report",
+    "hybrid_retrieval_eval_report",
     "artifact_manifest_report",
 ]
 
@@ -90,6 +92,7 @@ STEPS = [
     ("生成阶段五标准化出口", "build_standard_exports.py"),
     ("构建 LLM 候选增强框架", "build_llm_candidate_enrichment.py"),
     ("构建 RAG 检索索引框架", "build_rag_indexes.py"),
+    ("构建 BGE-M3 远程向量索引", "build_bge_m3_index.py"),
     ("构建 SQLite 知识库", "build_sqlite_knowledge_base.py"),
     ("构建查询样例报告", "build_query_examples.py"),
     ("校验发布完整性", "build_published_integrity_report.py"),
@@ -101,6 +104,7 @@ STEPS = [
     ("构建语义质量治理报告", "build_semantic_quality_report.py"),
     ("构建 RAG 就绪框架报告", "build_rag_readiness_report.py"),
     ("运行 RAG 答案质量评测", "run_rag_answer_eval.py"),
+    ("运行混合检索评测", "run_hybrid_retrieval_eval.py"),
     ("构建 RAG 答案失败样本分析", "build_rag_answer_failure_analysis.py"),
     ("构建制品清单", "build_artifact_manifest.py"),
     ("运行质量检查", "quality_check.py"),

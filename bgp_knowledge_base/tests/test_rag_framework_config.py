@@ -21,15 +21,19 @@ def test_rag_and_llm_configs_lock_offline_defaults_and_real_provider_boundaries(
     assert rag["default_mode"] == "offline_framework"
     assert rag["trusted_collection"]["lifecycle_status"] == ["approved"]
     assert rag["trusted_collection"]["exclude_lifecycle_status"] == ["deprecated", "archived"]
-    assert rag["embedding"]["default_provider"] == "deterministic_mock"
-    assert rag["embedding"]["providers"]["bge_m3"]["enabled"] is False
-    assert rag["embedding"]["providers"]["bge_m3"]["model"] == "BAAI/bge-m3"
-    assert rag["embedding"]["providers"]["bge_m3"]["outputs"] == {
+    assert rag["embedding"]["default_provider"] == "siliconflow_bge_m3"
+    assert rag["embedding"]["offline_fallback_provider"] == "deterministic_mock"
+    assert rag["embedding"]["providers"]["siliconflow_bge_m3"]["api_key_env"] == "SILICONFLOW_API_KEY"
+    assert rag["embedding"]["providers"]["siliconflow_bge_m3"]["model"] == "BAAI/bge-m3"
+    assert rag["embedding"]["providers"]["aliyun_eas_bge_m3"]["endpoint_env"] == "ALIYUN_BGE_M3_ENDPOINT"
+    assert rag["embedding"]["providers"]["local_bge_m3"]["enabled"] is False
+    assert rag["embedding"]["providers"]["local_bge_m3"]["outputs"] == {
         "dense": True,
         "sparse": True,
         "colbert": False,
     }
     assert rag["vector_store"]["default_provider"] == "mock_jsonl"
+    assert rag["hybrid_retrieval"]["min_vector_similarity"] == 0.5
     assert rag["vector_store"]["providers"]["milvus_lite"]["enabled"] is False
     assert rag["lexical_fallback"]["provider"] == "sqlite_fts5"
     assert rag["context_pack"]["generates_final_answer"] is False
