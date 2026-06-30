@@ -12,6 +12,7 @@ ROOT = paths.PROJECT_ROOT
 REPORT = paths.report_path("pipeline_report")
 GENERATED_REPORT_IDS_TO_CLEAN = [
     "parse_report",
+    "corpus_profile_report",
     "source_processing_status_report",
     "source_gap_queue_report",
     "case_observation_report",
@@ -57,6 +58,8 @@ GENERATED_REPORT_IDS_TO_CLEAN = [
 STEPS = [
     ("解析原始文档", "parse_documents.py"),
     ("构建知识片段", "build_chunks.py"),
+    ("生成语料质量画像", "profile_cleaned_corpus.py"),
+    ("记录可选 OCR 评估状态", "assess_corpus_ocr_quality.py"),
     ("抽取案例观察值", "extract_case_observations.py"),
     ("构建来源处理状态", "build_source_processing_status.py"),
     ("构建来源缺口队列", "build_source_gap_queue.py"),

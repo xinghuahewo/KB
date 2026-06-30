@@ -355,6 +355,17 @@ python3 -m bgpkb.pipeline.build_semantic_quality_report
 
 该步骤只做 blocker、warning、info 分级扫描，不自动修改实体、关系、chunk、来源或发布包。后续 RAG 默认可信集合应优先使用 `lifecycle_status=approved` 且无 blocker 的实体。
 
+## 阶段 A 语料质量画像
+
+阶段 A 对 parsed、cleaned 和 chunks 的逻辑 `doc_id` 并集生成确定性画像，报告字符、段落、section、chunk、表格、标题和字符异常。空正文、替换字符、重复标识和孤儿 chunk 会阻断流水线；启发式异常只告警。
+
+```bash
+PYTHONPATH=src python3 -m bgpkb.pipeline.profile_cleaned_corpus
+PYTHONPATH=src python3 -m bgpkb.pipeline.assess_corpus_ocr_quality --provider mock
+```
+
+真实 OCR 模型评估必须显式选择 Provider。模型只接收首、中、尾固定抽样，结果写入独立数据集，不参与确定性门禁。完整边界见 `docs/stages/phase_a_corpus_profiling_v1.md`。
+
 ## 阶段五标准化出口
 
 阶段五在现有 JSONL、CSV 和 SQLite 发布包之外生成 JSON-LD、SKOS、PROV-O 与 Turtle 派生出口。正式出口保持确定性；模型只生成 `pending_review` 映射候选，未经人工审计和显式应用不会影响发布结果。
@@ -407,6 +418,12 @@ python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_3_semantic_quality_
 
 ```bash
 python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_5_standard_exports_v1
+```
+
+运行阶段 A 验收：
+
+```bash
+python3 -m bgpkb.pipeline.run_stage_acceptance --stage phase_a_corpus_profiling_v1
 ```
 
 输出：

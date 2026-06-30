@@ -577,10 +577,20 @@ def load_schemas():
         "human_review_task_board": load_schema("human_review_task_board.schema.json"),
         "human_review_handoff": load_schema("human_review_handoff.schema.json"),
         "source_gap_queue": load_schema("source_gap_queue.schema.json"),
+        "corpus_profile": load_schema("corpus_profile.schema.json"),
+        "corpus_ocr_assessment": load_schema("corpus_ocr_assessment.schema.json"),
     }
     for entity_type, filename in SCHEMA_BY_ENTITY_TYPE.items():
         schemas[entity_type] = load_schema(filename)
     return schemas
+
+
+def corpus_profile_blocking_issues(records):
+    return sorted(
+        f"{record.get('doc_id', '<missing doc_id>')} -> {issue}"
+        for record in records
+        for issue in record.get("blocking_issues", [])
+    )
 
 
 def parse_output_dirs(raw_path):
@@ -912,6 +922,13 @@ def main():
     artifact_manifest_records, artifact_manifest_errors = load_jsonl(DATASET_DIR / "artifact_manifest.jsonl")
     errors.extend(artifact_manifest_errors)
 
+    corpus_profiles, corpus_profile_errors = load_jsonl(DATASET_DIR / "corpus_profile.jsonl")
+    errors.extend(corpus_profile_errors)
+    corpus_ocr_assessments, corpus_ocr_errors = load_jsonl(
+        DATASET_DIR / "corpus_ocr_assessments.jsonl"
+    )
+    errors.extend(corpus_ocr_errors)
+
     parsed_documents = []
     parsed_document_counts_by_subdir = Counter()
     for path in sorted(PARSED_DIR.glob("*/*.json")):
@@ -969,6 +986,15 @@ def main():
     raw_files_without_inventory = sorted(raw_files - inventory_paths)
 
     schema_errors = []
+    for index, record in enumerate(corpus_profiles, start=1):
+        schema_errors.extend(validate_schema(
+            record, schemas["corpus_profile"], f"corpus_profile:{index}"
+        ))
+    for index, record in enumerate(corpus_ocr_assessments, start=1):
+        schema_errors.extend(validate_schema(
+            record, schemas["corpus_ocr_assessment"], f"corpus_ocr_assessment:{index}"
+        ))
+    corpus_profile_blockers = corpus_profile_blocking_issues(corpus_profiles)
     parsed_document_missing_fields = []
     parsed_document_duplicate_doc_ids = []
     parsed_document_unknown_doc_ids = []
@@ -2649,6 +2675,9 @@ def main():
         f"- 人工复核交接清单记录数：{len(human_review_handoff_items)}",
         f"- 术语表记录数：{len(glossary_entries)}",
         f"- 制品清单记录数：{len(artifact_manifest_records)}",
+        f"- 语料画像记录数：{len(corpus_profiles)}",
+        f"- OCR 质量评估记录数：{len(corpus_ocr_assessments)}",
+        f"- 语料画像阻断问题数：{len(corpus_profile_blockers)}",
         f"- 报告策略登记数：{len(report_policy_status['registered_paths'])}",
         f"- 关系记录数：{len(relationships)}",
         f"- JSON 错误数：{len(errors)}",
@@ -2902,6 +2931,7 @@ def main():
     sections = [
         ("JSON 错误", errors),
         ("Schema 错误", schema_errors),
+        ("语料画像阻断问题", corpus_profile_blockers),
         ("重复 source_id", duplicate_source_ids),
         ("重复实体 ID", duplicate_ids),
         ("重复 chunk ID", duplicate_chunk_ids),

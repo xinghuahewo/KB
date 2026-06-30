@@ -78,6 +78,11 @@ reports:
     category: corpus
     retention: generated
     human_entry: false
+  corpus_profile_report:
+    path: data/generated/reports/corpus/corpus_profile_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
   source_processing_status_report:
     path: data/generated/reports/sources/source_processing_status_report.md
     category: sources

@@ -122,6 +122,21 @@ def test_stage_acceptance_config_registers_phase_5_standard_exports():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_phase_a_corpus_profiling():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["phase_a_corpus_profiling_v1"]
+
+    assert stage["name"] == "语料质量画像 v1"
+    assert "src/bgpkb/pipeline/profile_cleaned_corpus.py" in stage["required_files"]
+    assert "src/bgpkb/pipeline/assess_corpus_ocr_quality.py" in stage["required_files"]
+    assert "data/derived/datasets/corpus_profile.jsonl" in stage["required_files"]
+    assert any(command["id"] == "corpus_profile" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+    assert len(stage["effect_review"]["user_can_now"]) >= 3
+    assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "-m", "bgpkb.pipeline.run_stage_acceptance", "--stage", "phase_1_data_management_v1"],

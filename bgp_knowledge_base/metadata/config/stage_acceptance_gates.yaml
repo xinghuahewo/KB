@@ -611,3 +611,66 @@ stages:
       non_blocking_items:
         - 当前 3 条模型候选保持 pending_review，不自动批准。
         - Turtle v1 仅支持项目所需的 IRI、CURIE 和纯字符串 literal 子集。
+  - id: phase_a_corpus_profiling_v1
+    name: 语料质量画像 v1
+    acceptance_mode: deterministic_with_effect_review
+    required_files:
+      - docs/stages/phase_a_corpus_profiling_v1.md
+      - metadata/config/corpus_profiling.yaml
+      - metadata/schemas/corpus_profile.schema.json
+      - metadata/schemas/corpus_ocr_assessment.schema.json
+      - src/bgpkb/pipeline/profile_cleaned_corpus.py
+      - src/bgpkb/pipeline/assess_corpus_ocr_quality.py
+      - src/bgpkb/service/corpus_ocr_provider.py
+      - data/derived/datasets/corpus_profile.jsonl
+      - data/derived/datasets/corpus_ocr_assessments.jsonl
+      - data/generated/reports/corpus/corpus_profile_report.md
+      - tests/test_corpus_profiling.py
+      - tests/test_corpus_ocr_assessment.py
+      - tests/test_corpus_profiling_integration.py
+    commands:
+      - id: corpus_profile
+        name: 生成确定性语料质量画像
+        command: python3 -m bgpkb.pipeline.profile_cleaned_corpus
+      - id: corpus_ocr_mock
+        name: 生成离线 OCR 质量 mock 评估
+        command: python3 -m bgpkb.pipeline.assess_corpus_ocr_quality --provider mock --generated-at 2026-06-30T00:00:00Z
+      - id: corpus_profile_tests
+        name: 运行阶段 A 画像与 Provider 测试
+        command: python3 -m pytest tests/test_corpus_profiling.py tests/test_corpus_ocr_assessment.py tests/test_corpus_profiling_integration.py tests/test_llm_client.py -v
+    report_checks:
+      - id: corpus_profile_summary
+        path: data/generated/reports/corpus/corpus_profile_report.md
+        must_contain:
+          - "# 语料质量画像报告"
+          - "结论：通过"
+          - "确定性阻断问题：0 条"
+          - "模型评估状态：已生成"
+          - "所有风险结论仅供人工复核，不参与确定性门禁。"
+      - id: quality_report
+        path: data/reports/gates/quality_report.md
+        must_contain:
+          - "JSON 错误数：0"
+          - "Schema 错误数：0"
+          - "语料画像阻断问题数：0"
+          - "制品清单未登记文件数：0"
+    effect_review:
+      one_line: 当前 KB 已具备跨 parsed、cleaned 与 chunks 的确定性语料画像，以及与质量门禁隔离的可选 OCR 模型评估。
+      new_capabilities:
+        - 建立了三层 doc_id 并集、阶段存在性和文档级质量指标。
+        - 建立了空正文、替换字符、重复标识和孤儿 chunk 的确定性门禁。
+        - 建立了固定抽样、预算限制、mock 与 DeepSeek 的通用 OCR Provider 边界。
+        - 建立了稳定 JSONL、中文报告和阶段 A 验收证据。
+      user_can_now:
+        - 离线生成语料长度、section、chunk、表格、标题和字符异常画像。
+        - 在流水线阻断时查看完整文档级诊断，而不是只得到失败状态。
+        - 显式选择模型 Provider 获取 OCR 风险建议，且不会改变确定性质量结论。
+      downstream_dependencies:
+        - 层级 chunk 和检索调参可以复用文档长度、section 与 chunk 基线。
+        - 分类候选可以用画像告警选择优先复核语料。
+        - 后续 CI 和增量构建可以直接复用四类稳定阻断代码。
+    human_review_policy:
+      allow_needs_human: true
+      non_blocking_items:
+        - 超长文档、疑似表格和重复标题仍是启发式告警，不自动阻断。
+        - OCR 模型风险只提供人工建议，不替代原文与解析结果核验。

@@ -89,6 +89,10 @@ def producer_for(rel):
         return "manual_seed"
     if rel.startswith("data/corpus/chunks/"):
         return "src/bgpkb/pipeline/build_chunks.py"
+    if rel == "data/derived/datasets/corpus_profile.jsonl":
+        return "src/bgpkb/pipeline/profile_cleaned_corpus.py"
+    if rel == "data/derived/datasets/corpus_ocr_assessments.jsonl":
+        return "src/bgpkb/pipeline/assess_corpus_ocr_quality.py"
     if rel.startswith("data/derived/datasets/case_observations."):
         return "src/bgpkb/pipeline/extract_case_observations.py"
     if rel.startswith("data/derived/datasets/source_processing_status."):
@@ -206,6 +210,8 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_data_dictionary.py"
     if rel.startswith("data/generated/reports/corpus/parse_report.md"):
         return "src/bgpkb/pipeline/parse_documents.py"
+    if rel == "data/generated/reports/corpus/corpus_profile_report.md":
+        return "src/bgpkb/pipeline/profile_cleaned_corpus.py"
     if rel.startswith("data/generated/reports/knowledge/case_observation_report.md"):
         return "src/bgpkb/pipeline/extract_case_observations.py"
     if rel.startswith("data/generated/reports/review/case_observation_guides/"):

@@ -3,8 +3,8 @@ title: "BGP 知识库工业界对齐改进方案 v1"
 document_type: "规划与治理文档"
 purpose: "基于当前知识清洗、拆分、分类、结构化、追溯和更新能力，给出贴近工业界成熟知识工程实践的本地改进路线。"
 scope: "BGP 知识库数据准备、治理、RAG 就绪和发布维护链路"
-status: "现行参考"
-last_reviewed: "2026-06-25"
+status: "现行参考；阶段 A 已交付"
+last_reviewed: "2026-06-30"
 ---
 # BGP 知识库工业界对齐改进方案 v1
 
@@ -24,7 +24,7 @@ last_reviewed: "2026-06-25"
 
 | 阶段 | 目标 | 本地新增或修改 | 验收方式 |
 | --- | --- | --- | --- |
-| 阶段 A：语料质量画像 | 让清洗质量可量化 | 新增语料 profiling 脚本、报告和指标数据集 | 能看到长度分布、异常文档、表格/替换字符/OCR 风险 |
+| 阶段 A：语料质量画像 | 已交付：让清洗质量可量化 | 已新增语料 profiling、独立 OCR 评估、报告和指标数据集 | 已能看到长度分布、异常文档、表格/替换字符/OCR 风险 |
 | 阶段 B：层级 chunk | 让检索可在段落和章节之间回扩 | 扩展 chunk schema，新增父子 chunk 或 section catalog | 查询命中子 chunk 时可定位父 section |
 | 阶段 C：分类增强 | 让主题标签有置信度和人工闭环 | 新增同义词配置、分类候选数据集和低置信复核队列 | chunk topic 覆盖率、置信度分布和复核队列可报告 |
 | 阶段 D：结构化候选层 | 从人工实体种子升级为“自动候选 + 人工批准” | 新增实体候选、关系候选、字段候选抽取脚本 | 候选不会直接写入主实体，必须经审计和人工复核 |
@@ -34,6 +34,8 @@ last_reviewed: "2026-06-25"
 ## 3. 六个维度的本地落地方案
 
 ### 3.1 知识清洗
+
+交付状态：阶段 A 已于 2026-06-30 完成。确定性画像、四类硬门禁、可选 OCR Provider、派生数据集和中文报告均已进入主流水线与阶段验收。
 
 当前基线：
 
@@ -140,6 +142,8 @@ last_reviewed: "2026-06-25"
 
 ### 3.5 知识追溯
 
+交付状态补充：阶段五已经交付确定性 JSON-LD、SKOS、PROV-O 与 Turtle 出口，覆盖下述 PROV/JSON-LD 样例目标。后续只需补充 run manifest 与 artifact lineage，不重复建设标准化出口。
+
 当前基线：
 
 - 实体有 `source_refs`。
@@ -200,7 +204,7 @@ last_reviewed: "2026-06-25"
 
 ### 第一批：低风险治理增强
 
-1. 语料 profiling。
+1. 语料 profiling（已完成）。
 2. topic synonym 配置。
 3. section catalog。
 4. pipeline dependency 配置。
@@ -256,7 +260,7 @@ last_reviewed: "2026-06-25"
 
 ## 7. 下一步最小落地包
 
-建议先做一个小闭环：
+以下最小闭环中的语料画像部分已于 2026-06-30 完成；下一项转向 topic 分类增强：
 
 1. 新增 `src/bgpkb/pipeline/profile_cleaned_corpus.py`。
 2. 新增 `data/generated/reports/corpus/corpus_profile_report.md` 和 `data/derived/datasets/corpus_profile.jsonl`。

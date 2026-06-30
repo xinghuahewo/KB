@@ -32,6 +32,7 @@ last_reviewed: "2026-06-29"
 
 | 文档 | 状态与用途 |
 | --- | --- |
+| [语料质量画像](stages/phase_a_corpus_profiling_v1.md) | 已交付；记录三层语料画像、确定性门禁和可选 OCR Provider 边界。 |
 | [语义标识前置](stages/phase_3_5_semantic_identity_v1.md) | 已交付；记录语义标识层的交付物和验收边界。 |
 | [RAG 就绪框架](stages/phase_4_rag_framework_v1.md) | 已交付；记录检索框架、Provider 边界和离线验收。 |
 | [RAG 答案质量评测](stages/phase_4_3_rag_answer_eval_v1.md) | 现行；记录固定评测集和质量门槛。 |
