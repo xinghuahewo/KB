@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/cleaning-v2-provenance.json",
+  "title": "CleaningV2Provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_path", "source_sha256", "parser", "runtime", "source_anchor"],
+  "properties": {
+    "source_path": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "parser": {"type": "object"},
+    "runtime": {"type": "object"},
+    "source_anchor": {"type": "string", "minLength": 1},
+    "native_text": {"type": ["string", "null"]},
+    "ocr_text": {"type": ["string", "null"]}
+  }
+}

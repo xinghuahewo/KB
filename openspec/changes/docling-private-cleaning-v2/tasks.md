@@ -7,8 +7,8 @@
 
 ## 2. Canonical Block v2 与 Docling 适配
 
-- [ ] 2.1 新增 Docling 清洗配置及 parsed document、Block、表格、图片资产和追溯 Schema
-- [ ] 2.2 先以失败测试定义稳定 Block ID、父子结构、阅读顺序、bbox、特殊内容与原子输出
+- [x] 2.1 新增 Docling 清洗配置及 parsed document、Block、表格、图片资产和追溯 Schema
+- [x] 2.2 先以失败测试定义稳定 Block ID、父子结构、阅读顺序、bbox、特殊内容与原子输出
 - [ ] 2.3 实现 Docling 输出到项目 Canonical Block v2 的适配器和固定 fixture
 - [ ] 2.4 实现 Docling 默认路由与现有解析器显式 fallback，阻止未审核 fallback 发布
 
