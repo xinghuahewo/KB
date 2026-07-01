@@ -37,10 +37,10 @@
 
 ## 6. v2 派生与差异评测
 
-- [ ] 6.1 从 approved cleaned Block 生成 Markdown v2、assets v2 和 chunks v2
-- [ ] 6.2 先以失败测试定义未批准 Block 排除、来源引用保持和派生稳定性
-- [ ] 6.3 实现逐文档 v1/v2 正文、标题、section、表格、图片、chunk 和来源引用差异
-- [ ] 6.4 实现正文覆盖率、不可归因删除、fallback 和重复运行稳定性门禁
+- [x] 6.1 从 approved cleaned Block 生成 Markdown v2、assets v2 和 chunks v2
+- [x] 6.2 先以失败测试定义未批准 Block 排除、来源引用保持和派生稳定性
+- [x] 6.3 实现逐文档 v1/v2 正文、标题、section、表格、图片、chunk 和来源引用差异
+- [x] 6.4 实现正文覆盖率、不可归因删除、fallback 和重复运行稳定性门禁
 
 ## 7. 全量迁移与人工验收
 
