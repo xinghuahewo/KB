@@ -1,0 +1,32 @@
+{
+  "schema_name": "DoclingDocument",
+  "version": "1.9.0",
+  "name": "table",
+  "body": {"self_ref": "#/body", "children": [{"$ref": "#/texts/0"}, {"$ref": "#/tables/0"}]},
+  "groups": [],
+  "texts": [
+    {"self_ref": "#/texts/0", "label": "section_header", "text": "Validation Results", "orig": "Validation Results", "level": 1, "prov": [{"page_no": 2, "bbox": {"l": 10, "t": 790, "r": 400, "b": 750, "coord_origin": "BOTTOMLEFT"}}]},
+    {"self_ref": "#/texts/1", "label": "caption", "text": "Table 1: Route states", "orig": "Table 1: Route states", "prov": [{"page_no": 2, "bbox": {"l": 10, "t": 400, "r": 400, "b": 380, "coord_origin": "BOTTOMLEFT"}}]}
+  ],
+  "pictures": [],
+  "tables": [
+    {
+      "self_ref": "#/tables/0",
+      "label": "table",
+      "prov": [{"page_no": 2, "bbox": {"l": 10, "t": 720, "r": 560, "b": 420, "coord_origin": "BOTTOMLEFT"}}],
+      "captions": [{"$ref": "#/texts/1"}],
+      "data": {
+        "num_rows": 3,
+        "num_cols": 2,
+        "table_cells": [
+          {"text": "State", "start_row_offset_idx": 0, "end_row_offset_idx": 1, "start_col_offset_idx": 0, "end_col_offset_idx": 1, "column_header": true, "row_header": false},
+          {"text": "Count", "start_row_offset_idx": 0, "end_row_offset_idx": 1, "start_col_offset_idx": 1, "end_col_offset_idx": 2, "column_header": true, "row_header": false},
+          {"text": "Valid", "start_row_offset_idx": 1, "end_row_offset_idx": 3, "start_col_offset_idx": 0, "end_col_offset_idx": 1, "column_header": false, "row_header": true},
+          {"text": "42", "start_row_offset_idx": 1, "end_row_offset_idx": 2, "start_col_offset_idx": 1, "end_col_offset_idx": 2, "column_header": false, "row_header": false},
+          {"text": "7", "start_row_offset_idx": 2, "end_row_offset_idx": 3, "start_col_offset_idx": 1, "end_col_offset_idx": 2, "column_header": false, "row_header": false}
+        ]
+      }
+    }
+  ],
+  "pages": {"2": {"page_no": 2, "size": {"width": 595, "height": 842}}}
+}

@@ -12,6 +12,10 @@
     "runtime": {"type": "object"},
     "blocks": {"type": "array", "items": {"type": "object"}},
     "assets": {"type": "array", "items": {"type": "object"}},
-    "diagnostics": {"type": "array", "items": {"type": "object"}}
+    "diagnostics": {"type": "array", "items": {"type": "object"}},
+    "parser_mode": {"enum": ["docling", "fallback", "docling_failed"]},
+    "fallback_reason": {"type": ["string", "null"]},
+    "fallback_review_status": {"enum": ["not_applicable", "pending_review", "approved", "rejected"]},
+    "document_status": {"enum": ["parsed", "pending_review", "quarantined"]}
   }
 }
