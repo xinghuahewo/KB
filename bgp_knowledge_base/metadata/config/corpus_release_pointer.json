@@ -1,0 +1,1 @@
+{"active":{"authority":"data/corpus/cleaned","chunks":"data/corpus/chunks","input_snapshot":"sha256:bd7c56235d5700c67119e3cc5a809f1fc5a7d8bcaf57802c8a3ea95b356f48b2","markdown":"data/corpus/cleaned","version":"v1"},"history":[{"at":"2026-07-01T00:00:00Z","reason":"建立 v2 切换前的 v1 基线","version":"v1"}],"schema_version":"corpus_release_pointer_v1","updated_at":"2026-07-01T00:00:00Z"}
