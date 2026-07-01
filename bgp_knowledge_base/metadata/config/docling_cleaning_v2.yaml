@@ -17,6 +17,7 @@ ocr:
   adaptive: true
   languages: [ch, en]
   minimum_native_text_chars: 32
+  minimum_text_coverage: 0.15
   maximum_native_replacement_characters: 0
   image_area_ratio_trigger: 0.65
   minimum_confidence: 0.85
