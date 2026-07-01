@@ -41,7 +41,9 @@ def valid_bbox(bbox):
     if any(not isinstance(value, (int, float)) for value in coordinates):
         return False
     left, top, right, bottom = coordinates
-    return left <= right and top <= bottom and bbox["coord_origin"] in {"top_left", "bottom_left"}
+    origin = bbox["coord_origin"]
+    vertical_order_valid = top <= bottom if origin == "top_left" else top >= bottom
+    return left <= right and vertical_order_valid and origin in {"top_left", "bottom_left"}
 
 
 def validate_blocks(blocks):

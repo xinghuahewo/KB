@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bgpkb.local/schemas/cleaning_run_v2.schema.json",
+  "title": "Docling 清洗 v2 批次记录",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "started_at", "finished_at", "runtime", "config_fingerprint", "summary", "documents"],
+  "properties": {
+    "schema_version": {"const": "cleaning_run_v2"},
+    "run_id": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string"},
+    "finished_at": {"type": ["string", "null"]},
+    "runtime": {"type": "object"},
+    "config_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["document_count", "approved_count", "quarantined_count", "skipped_count", "failure_rate", "throughput_documents_per_hour", "duration_p50_seconds", "duration_p95_seconds", "gpu_peak_memory_mb", "ocr_page_count", "fallback_count", "retry_count"],
+      "properties": {
+        "document_count": {"type": "integer", "minimum": 0},
+        "approved_count": {"type": "integer", "minimum": 0},
+        "quarantined_count": {"type": "integer", "minimum": 0},
+        "skipped_count": {"type": "integer", "minimum": 0},
+        "failure_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "throughput_documents_per_hour": {"type": "number", "minimum": 0},
+        "duration_p50_seconds": {"type": "number", "minimum": 0},
+        "duration_p95_seconds": {"type": "number", "minimum": 0},
+        "gpu_peak_memory_mb": {"type": "number", "minimum": 0},
+        "ocr_page_count": {"type": "integer", "minimum": 0},
+        "fallback_count": {"type": "integer", "minimum": 0},
+        "retry_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "documents": {"type": "array", "items": {"type": "object"}}
+  }
+}

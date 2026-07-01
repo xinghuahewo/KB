@@ -131,6 +131,17 @@ def test_contract_validation_rejects_missing_fields_bad_bbox_and_duplicate_ids()
     assert "duplicate_block_id:" + block["block_id"] in contracts.validate_blocks([block, dict(block)])
 
 
+def test_bbox_vertical_order_respects_coordinate_origin():
+    contracts = load_contracts()
+
+    assert contracts.valid_bbox(
+        {"left": 10, "top": 790, "right": 400, "bottom": 750, "coord_origin": "bottom_left"}
+    )
+    assert not contracts.valid_bbox(
+        {"left": 10, "top": 750, "right": 400, "bottom": 790, "coord_origin": "bottom_left"}
+    )
+
+
 def test_blocks_sort_deterministically_by_page_reading_order_and_id():
     contracts = load_contracts()
     blocks = [
