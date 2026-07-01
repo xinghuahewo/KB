@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 import json
 from pathlib import Path
+import re
 
 import yaml
 
@@ -14,6 +15,7 @@ from bgpkb import paths
 
 ALLOWED_DECISIONS = {"unreviewed", "approved", "rejected", "needs_evidence"}
 CONFIG_PATH = paths.CONFIG_DIR / "standard_exports.yaml"
+REVIEWED_AT_TIMEZONE_RE = re.compile(r"(?:Z|[+-]\d{2}:\d{2})$")
 
 
 def read_jsonl(path):
@@ -51,7 +53,7 @@ def load_decision_rows(path):
 
 
 def valid_reviewed_at(value):
-    if not value or "T" not in value:
+    if not value or "T" not in value or REVIEWED_AT_TIMEZONE_RE.search(value) is None:
         return False
     normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
     try:
