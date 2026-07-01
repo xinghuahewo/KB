@@ -1,8 +1,8 @@
 ## 1. 私有运行环境与版本基线
 
-- [ ] 1.1 盘点目标 GPU、驱动、CUDA 与显存，确定并记录兼容的 Python、Docling 和模型版本矩阵
-- [ ] 1.2 新增锁定依赖、GPU 容器、模型 manifest、SBOM 和许可证清单生成入口
-- [ ] 1.3 先以失败测试定义离线启动、模型 hash、GPU 预检和禁止运行时下载边界
+- [x] 1.1 盘点目标 GPU、驱动、CUDA 与显存，确定并记录兼容的 Python、Docling 和模型版本矩阵
+- [x] 1.2 新增锁定依赖、GPU 容器、模型 manifest、SBOM 和许可证清单生成入口
+- [x] 1.3 先以失败测试定义离线启动、模型 hash、GPU 预检和禁止运行时下载边界
 - [ ] 1.4 构建私有镜像并在断网环境完成 Docling fixture 冒烟验证
 
 ## 2. Canonical Block v2 与 Docling 适配

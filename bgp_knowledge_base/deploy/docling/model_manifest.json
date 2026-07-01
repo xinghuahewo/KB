@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_by": "docling-tools 2.107.0 models download",
+  "hash_algorithm": "sha256-tree-v1",
+  "models": [
+    {
+      "name": "RapidOCR PP-OCRv4",
+      "version": "rapidocr-3.9.0",
+      "path": "RapidOcr",
+      "sha256": "2c88c2efa4433521bd67ac0cb330c74f1f0d10f34167a24c2b7b283e99ee9daa",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "docling-project/CodeFormulaV2",
+      "version": "ecedbe111d15c2dc60bfd4a823cbe80127b58af4",
+      "path": "docling-project--CodeFormulaV2",
+      "sha256": "429e191f102dc82e15e4ff453dcc997ff6a0cdebfaee131eedc8c007cc02a253",
+      "license": "CDLA-Permissive-2.0"
+    },
+    {
+      "name": "docling-project/DocumentFigureClassifier-v2.5",
+      "version": "f859dfbff5c9916cd996942d4b0db7fa25808220",
+      "path": "docling-project--DocumentFigureClassifier-v2.5",
+      "sha256": "d3f4c08bee5c066ab6d27c428ef7f7d3065cbbd0c9d029201d888ee01b2e84a1",
+      "license": "MIT"
+    },
+    {
+      "name": "docling-project/docling-layout-heron",
+      "version": "8f39ad3c0b4c58e9c2d2c84a38465abf757272d8",
+      "path": "docling-project--docling-layout-heron",
+      "sha256": "6cc93f99e1bc36a9bf0faa793274cfe076979576e5fea6c6bb0579bae0174028",
+      "license": "Apache-2.0"
+    },
+    {
+      "name": "docling-project/docling-models",
+      "version": "fc0f2d45e2218ea24bce5045f58a389aed16dc23",
+      "path": "docling-project--docling-models",
+      "sha256": "9c8e725403103cab97f3330a612bcd65cb7a57e9e3b35678c8e108a177e51f10",
+      "license": "CDLA-Permissive-2.0"
+    }
+  ]
+}
