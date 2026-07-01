@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from difflib import SequenceMatcher
+from collections import Counter
 import hashlib
 import json
 import os
@@ -43,6 +43,8 @@ def _source_ref(block):
 def _render_block(block, assets_by_id):
     block_type = block.get("block_type")
     text = block.get("cleaned_text", "").strip()
+    if not text and block_type not in {"table", "picture"}:
+        return "", ""
     if block_type in {"title", "heading"}:
         level = max(1, min(6, int(block.get("heading_level") or (1 if block_type == "title" else 2))))
         return f"{'#' * level} {text}", text
@@ -105,7 +107,7 @@ def build_derivatives(document, *, maximum_chunk_chars=1200):
         rendered, chunk_content = _render_block(block, assets_by_id)
         if rendered:
             markdown_parts.append(rendered)
-        if block.get("block_type") in {"title", "heading"}:
+        if block.get("block_type") in {"title", "heading"} and block.get("cleaned_text", "").strip():
             level = int(block.get("heading_level") or 1)
             section_path = section_path[: max(0, level - 1)] + [block.get("cleaned_text", "").strip()]
             if not title:
@@ -170,6 +172,23 @@ def _atomic_text(path, content):
         raise
 
 
+def _atomic_bytes(path, content):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
 def derive_document(document, output_root, *, maximum_chunk_chars=1200):
     """使用临时目录原子发布单篇 Markdown、assets 和 chunks v2。"""
     result = build_derivatives(document, maximum_chunk_chars=maximum_chunk_chars)
@@ -211,7 +230,8 @@ def derive_document(document, output_root, *, maximum_chunk_chars=1200):
 
 
 def publish_derivatives(
-    document, *, markdown_root, assets_root, chunks_root, maximum_chunk_chars=1200
+    document, *, markdown_root, assets_root, chunks_root, maximum_chunk_chars=1200,
+    asset_source_root=None,
 ):
     """按项目版本化目录发布三类只读派生产物。"""
     result = build_derivatives(document, maximum_chunk_chars=maximum_chunk_chars)
@@ -221,6 +241,16 @@ def publish_derivatives(
         Path(assets_root) / doc_id / "assets.json",
         json.dumps(result["assets"], ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
     )
+    if asset_source_root is not None:
+        for asset in result["assets"]:
+            relative = Path(asset["path"])
+            if relative.is_absolute() or ".." in relative.parts:
+                raise ValueError(f"非法资产路径: {relative}")
+            content = (Path(asset_source_root) / relative).read_bytes()
+            expected_sha = asset.get("sha256")
+            if expected_sha and hashlib.sha256(content).hexdigest() != expected_sha:
+                raise ValueError(f"资产 hash 不匹配: {relative}")
+            _atomic_bytes(Path(assets_root) / doc_id / relative, content)
     chunks_content = "".join(
         json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
         for row in result["chunks"]
@@ -236,9 +266,8 @@ def _plain_markdown(markdown):
     return " ".join(text.split())
 
 
-def _deleted_text(v1, v2):
-    matcher = SequenceMatcher(None, v1, v2, autojunk=False)
-    return "".join(v1[i1:i2] for tag, i1, i2, _j1, _j2 in matcher.get_opcodes() if tag in {"delete", "replace"})
+def _tokens(text):
+    return re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
 
 
 def _transformation_deletions(transformations):
@@ -255,17 +284,19 @@ def compare_v1_v2(v1_markdown, v2_document, v1_chunks, v2_chunks, transformation
     v1_plain = _plain_markdown(v1_markdown)
     v2_derivative = build_derivatives(v2_document)
     v2_plain = _plain_markdown(v2_derivative["markdown"])
-    matcher = SequenceMatcher(None, v1_plain, v2_plain, autojunk=False)
-    matching = (
-        min(1.0, sum(block.size for block in matcher.get_matching_blocks()) / len(v1_plain))
-        if v1_plain else (1.0 if not v2_plain else 1.0)
-    )
-    removed = _deleted_text(v1_plain, v2_plain)
-    removed_nonspace = sum(not char.isspace() for char in removed)
-    attributed = 0
+    v1_counts = Counter(_tokens(v1_plain))
+    v2_counts = Counter(_tokens(v2_plain))
+    removed_counts = v1_counts - v2_counts
+    v1_weight = sum(len(token) * count for token, count in v1_counts.items())
+    removed_nonspace = sum(len(token) * count for token, count in removed_counts.items())
+    matching = 1.0 - removed_nonspace / v1_weight if v1_weight else 1.0
+    attributable_counts = Counter()
     for item in _transformation_deletions(transformations):
-        if item in removed:
-            attributed += sum(not char.isspace() for char in item)
+        attributable_counts.update(_tokens(item))
+    attributed = sum(
+        len(token) * min(count, attributable_counts[token])
+        for token, count in removed_counts.items()
+    )
     v2_blocks = publishable_blocks(v2_document.get("blocks", []))
     v1_source_refs = {row.get("source_ref", "") for row in v1_chunks if row.get("source_ref")}
     v2_source_refs = {row.get("source_ref", "") for row in v2_chunks if row.get("source_ref")}

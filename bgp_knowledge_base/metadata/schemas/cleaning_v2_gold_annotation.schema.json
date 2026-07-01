@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bgpkb.local/schemas/cleaning_v2_gold_annotation.schema.json",
+  "title": "清洗 v2 高风险人工验收标注",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["doc_id", "source_path", "source_format", "risk_tags", "annotation_status", "annotator", "headings", "reading_order", "table_cells", "ocr_gold_text", "notes"],
+  "properties": {
+    "doc_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "source_format": {"enum": ["pdf", "html", "txt", "yaml", "md"]},
+    "risk_tags": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "annotation_status": {"enum": ["pending", "in_progress", "completed"]},
+    "annotator": {"type": ["string", "null"]},
+    "headings": {"type": "array", "items": {"type": "object"}},
+    "reading_order": {"type": "array", "items": {"type": "string"}},
+    "table_cells": {"type": "array", "items": {"type": "object"}},
+    "ocr_gold_text": {"type": "string"},
+    "notes": {"type": "string"}
+  }
+}

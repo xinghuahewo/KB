@@ -1,5 +1,6 @@
 version: docling_cleaning_v2
 runtime:
+  pipeline_revision: block_isolation_v2
   default_parser: docling
   python: "3.11"
   docling: "2.107.0"
@@ -10,7 +11,7 @@ runtime:
   artifacts_path: /opt/docling/models
   ocr_backend: torch
 formats:
-  supported: [pdf, html, txt, yaml, yml]
+  supported: [pdf, html, txt, yaml, yml, md]
   pdf_backend: docling_parse
 ocr:
   enabled: true

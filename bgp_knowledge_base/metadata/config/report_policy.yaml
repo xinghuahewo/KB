@@ -83,6 +83,11 @@ reports:
     category: corpus
     retention: generated
     human_entry: false
+  cleaning_v2_migration_report:
+    path: data/generated/reports/corpus/cleaning_v2_migration_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
   source_processing_status_report:
     path: data/generated/reports/sources/source_processing_status_report.md
     category: sources

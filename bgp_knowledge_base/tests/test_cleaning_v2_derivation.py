@@ -86,16 +86,35 @@ def test_derivation_is_stable_and_does_not_mutate_authoritative_document(tmp_pat
     assert all(row["chunk_id"].startswith("chunk_v2_") for row in first["chunks"])
 
 
+def test_empty_textual_blocks_do_not_emit_markdown_markers_or_trailing_spaces():
+    document = _document()
+    document["blocks"] = [
+        _block("empty-title", "title", "", level=1),
+        _block("empty-list", "list_item", ""),
+        _block("body", "paragraph", "Body"),
+    ]
+
+    result = derivation.build_derivatives(document)
+
+    assert result["markdown"] == "Body\n"
+    assert all(line == line.rstrip() for line in result["markdown"].splitlines())
+
+
 def test_publish_derivatives_uses_versioned_markdown_assets_and_chunk_roots(tmp_path):
+    asset_source = tmp_path / "authority"
+    (asset_source / "assets").mkdir(parents=True)
+    (asset_source / "assets" / "figure.png").write_bytes(b"figure")
     result = derivation.publish_derivatives(
         _document(),
         markdown_root=tmp_path / "markdown_v2",
         assets_root=tmp_path / "assets_v2",
         chunks_root=tmp_path / "chunks_v2",
+        asset_source_root=asset_source,
     )
 
     assert (tmp_path / "markdown_v2" / "doc-1.md").is_file()
     assert (tmp_path / "assets_v2" / "doc-1" / "assets.json").is_file()
+    assert (tmp_path / "assets_v2" / "doc-1" / "assets" / "figure.png").read_bytes() == b"figure"
     assert (tmp_path / "chunks_v2" / "doc-1.jsonl").is_file()
     assert result["content_digest"].startswith("sha256:")
 

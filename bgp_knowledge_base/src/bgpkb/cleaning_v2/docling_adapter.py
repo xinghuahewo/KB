@@ -291,6 +291,7 @@ def parse_with_explicit_fallback(
     fallback_parser,
     *,
     allow_fallback=False,
+    payload_preprocessor=None,
 ):
     try:
         payload = docling_parser(source)
@@ -312,6 +313,8 @@ def parse_with_explicit_fallback(
             }
         parsed_document, _text = fallback_parser(source, source_meta["doc_id"])
         return _adapt_fallback_document(parsed_document, source_meta, runtime_meta, str(exc))
+    if payload_preprocessor is not None:
+        payload_preprocessor(payload)
     return adapt_docling_document(payload, source_meta, runtime_meta, config)
 
 

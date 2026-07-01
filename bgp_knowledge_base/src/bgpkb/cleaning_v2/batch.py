@@ -124,10 +124,9 @@ def transition(status: dict, target_state: str, *, reason: str, now=None) -> Non
     status["updated_at"] = timestamp
 
 
-def _document_id(source: Path) -> str:
+def document_id(source: Path) -> str:
     stem = re.sub(r"[^0-9A-Za-z._-]+", "-", source.stem).strip("-") or "document"
-    identity = hashlib.sha256(str(source.resolve()).encode("utf-8")).hexdigest()[:12]
-    return f"{stem}-{identity}"
+    return stem
 
 
 def _percentile(values, percentile):
@@ -187,6 +186,11 @@ class BatchRunner:
             raise ValueError("缺少阶段处理器: " + ", ".join(sorted(missing)))
 
     def run(self, sources, *, run_id=None, resume=False) -> dict:
+        sources = [Path(source) for source in sources]
+        doc_ids = [document_id(source) for source in sources]
+        duplicates = sorted({item for item in doc_ids if doc_ids.count(item) > 1})
+        if duplicates:
+            raise ValueError("重复 doc_id: " + ", ".join(duplicates))
         run_id = run_id or f"cleaning-v2-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:8]}"
         run_dir = self.run_root / run_id
         status_dir = run_dir / "document_status"
@@ -198,9 +202,8 @@ class BatchRunner:
         started_clock = time.monotonic()
         documents = []
 
-        for source_value in sources:
-            source = Path(source_value)
-            doc_id = _document_id(source)
+        for source in sources:
+            doc_id = document_id(source)
             fingerprint = processing_fingerprint(source, self.runtime_identity, self.config)
             authority_status_path = self.output_root / doc_id / "document_status.json"
             if authority_status_path.is_file():

@@ -5,7 +5,7 @@ import pytest
 
 from bgpkb import paths
 from bgpkb.cleaning_v2 import batch
-from bgpkb.cleaning_v2.runtime_pipeline import build_stage_handlers
+from bgpkb.cleaning_v2.runtime_pipeline import build_stage_handlers, materialize_picture_assets
 from bgpkb.pipeline import build_cleaning_v2
 
 
@@ -86,6 +86,19 @@ def test_processing_fingerprint_is_stable_and_config_changes_invalidate_it(tmp_p
 
     assert first == same
     assert changed != first
+
+
+def test_document_identity_matches_corpus_stem_and_duplicate_stems_fail_closed(tmp_path):
+    first = _write_source(tmp_path / "a", "same.pdf", b"a")
+    second = _write_source(tmp_path / "b", "same.html", b"b")
+    runner = batch.BatchRunner(
+        output_root=tmp_path / "output", run_root=tmp_path / "runs",
+        config={}, runtime_identity={}, handlers=_handlers([]),
+    )
+
+    assert batch.document_id(first) == "same"
+    with pytest.raises(ValueError, match="重复 doc_id"):
+        runner.run([first, second], run_id="duplicate")
 
 
 def test_successful_document_advances_in_order_and_publishes_atomically(tmp_path):
@@ -230,6 +243,47 @@ def test_runtime_stage_handlers_build_validated_canonical_outputs_from_docling(t
     assert json.loads((authority / "validation.json").read_text(encoding="utf-8"))["valid"] is True
 
 
+def test_document_can_be_approved_with_risky_picture_block_isolated(tmp_path):
+    source = _write_source(tmp_path / "input", body=b"%PDF-1.7\n")
+    fixture = {
+        "body": {"children": [{"$ref": "#/texts/0"}, {"$ref": "#/pictures/0"}]},
+        "texts": [{"self_ref": "#/texts/0", "label": "text", "text": "Approved body", "prov": []}],
+        "pictures": [{"self_ref": "#/pictures/0", "label": "picture", "prov": []}],
+    }
+    runtime = {"parser": "docling", "docling_version": "2.107.0"}
+    config = {"ocr": {}, "rules": {}}
+    result = batch.BatchRunner(
+        output_root=tmp_path / "output", run_root=tmp_path / "runs", config=config,
+        runtime_identity=runtime,
+        handlers=build_stage_handlers(config=config, runtime_identity=runtime, docling_parser=lambda _: fixture),
+    ).run([source], run_id="partial-approval")
+    authority = tmp_path / "output" / "doc"
+    validation = json.loads((authority / "validation.json").read_text(encoding="utf-8"))
+
+    assert result["documents"][0]["state"] == "approved"
+    assert validation["valid"] is True
+    assert validation["publishable_block_count"] == 1
+    assert len(validation["review_queue"]) == 1
+
+
+def test_runtime_materializes_embedded_picture_assets_with_stable_hash(tmp_path):
+    payload = {
+        "pictures": [
+            {
+                "self_ref": "#/pictures/0",
+                "image": {"mimetype": "image/png", "uri": "data:image/png;base64,cGljdHVyZQ=="},
+            }
+        ]
+    }
+
+    materialize_picture_assets(payload, tmp_path / "assets", "doc-1")
+
+    image = payload["pictures"][0]["image"]
+    assert image["path"] == "assets/picture-0001.png"
+    assert image["sha256"] == "2cea274d0bedc39ec4ab6ba9e59ec889e3ed6fb56a1cf088a64d9b383378dc97"
+    assert (tmp_path / image["path"]).read_bytes() == b"picture"
+
+
 def test_batch_cli_discovers_only_supported_sources_in_stable_order(tmp_path):
     _write_source(tmp_path, "z.pdf")
     _write_source(tmp_path, "a.html")
@@ -238,3 +292,14 @@ def test_batch_cli_discovers_only_supported_sources_in_stable_order(tmp_path):
     sources = build_cleaning_v2.discover_sources(tmp_path, ["pdf", "html"])
 
     assert [path.name for path in sources] == ["a.html", "z.pdf"]
+
+
+def test_batch_cli_legacy_fallback_preserves_explicit_yaml_evidence():
+    source = paths.RAW_DIR / "data_docs" / "peeringdb_api_docs.yaml"
+
+    document, text = build_cleaning_v2.legacy_fallback(source, "peeringdb_api_docs")
+
+    assert document["doc_id"] == "peeringdb_api_docs"
+    assert document["source_format"] == "yaml"
+    assert document["sections"]
+    assert "openapi:" in text

@@ -11,6 +11,7 @@ import yaml
 from bgpkb import paths
 from bgpkb.cleaning_v2.batch import BatchRunner
 from bgpkb.cleaning_v2.runtime_pipeline import build_stage_handlers
+from bgpkb.pipeline import parse_documents
 
 
 DEFAULT_CONFIG = paths.CONFIG_DIR / "docling_cleaning_v2.yaml"
@@ -22,6 +23,37 @@ def discover_sources(input_dir, supported_formats):
         (path for path in Path(input_dir).rglob("*") if path.is_file() and path.suffix.lower() in suffixes),
         key=lambda path: path.as_posix(),
     )
+
+
+def legacy_fallback(source, doc_id):
+    """仅在显式允许时调用现有确定性解析器，并保留原格式证据。"""
+    source = Path(source)
+    suffix = source.suffix.lower()
+    if suffix == ".txt":
+        return parse_documents.parse_txt(source, doc_id)
+    if suffix == ".html":
+        return parse_documents.parse_html(source, doc_id)
+    if suffix in {".yaml", ".yml"}:
+        return parse_documents.parse_yaml(source, doc_id)
+    if suffix == ".pdf":
+        document, text, error = parse_documents.parse_pdf(source, doc_id)
+        if document is None:
+            raise ValueError(error)
+        return document, text
+    if suffix == ".md":
+        text = source.read_text(encoding="utf-8")
+        title = next(
+            (line.lstrip("# ").strip() for line in text.splitlines() if line.startswith("#")),
+            doc_id,
+        )
+        return {
+            "doc_id": doc_id,
+            "source_path": str(source.relative_to(paths.PROJECT_ROOT)),
+            "source_format": "markdown",
+            "title": title,
+            "sections": [{"section_id": "full", "heading": title, "content": text}],
+        }, text
+    raise ValueError(f"现有解析器不支持后缀: {suffix}")
 
 
 def _project_path(value):
@@ -69,7 +101,8 @@ def main(argv=None):
     run_root = args.run_root or _project_path(config["paths"]["runs"])
     runtime = _runtime_identity(config, args.runtime_identity)
     handlers = build_stage_handlers(
-        config=config, runtime_identity=runtime, allow_fallback=args.allow_fallback
+        config=config, runtime_identity=runtime, fallback_parser=legacy_fallback,
+        allow_fallback=args.allow_fallback
     )
     result = BatchRunner(
         output_root=output_root,
