@@ -132,7 +132,18 @@ def test_production_image_is_offline_non_root_and_has_no_download_entrypoint():
     assert "TRANSFORMERS_OFFLINE=1" in dockerfile
     assert "DOCLING_ARTIFACTS_PATH=/opt/docling/models" in dockerfile
     assert "DOCLING_DEVICE=cuda" in dockerfile
+    assert "useradd --system --create-home --gid docling --home /home/docling docling" in dockerfile
     assert "USER docling" in dockerfile
     runtime_tail = dockerfile.split("FROM ")[-1]
     assert "models download" not in runtime_tail
     assert "--network=none" in dockerfile
+
+
+def test_image_build_consumes_prefetched_verified_model_context():
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    operations = OPERATIONS_DOC.read_text(encoding="utf-8")
+
+    assert "COPY --from=model_assets / /opt/docling/models" in dockerfile
+    assert "docling-tools models download" not in dockerfile
+    assert "--build-context model_assets=" in operations
+    assert "verify_offline_runtime.py" in operations

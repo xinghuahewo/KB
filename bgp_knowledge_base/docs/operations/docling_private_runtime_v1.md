@@ -30,20 +30,29 @@
 
 ## 构建与供应链证据
 
-联网构建阶段执行以下动作：
+构建准备与镜像构建阶段执行以下动作：
 
 1. 使用 `requirements.lock` 和 `--require-hashes` 安装全部 Python 依赖。
-2. 使用锁定 Docling 下载默认模型，并按 `model_manifest.json` 复核目录级 SHA-256。
-3. 生成 CycloneDX SBOM 与 Python 许可证清单。
-4. 构建结束后记录镜像 digest；模型文件不进入 Git。
+2. 在可联网的受控准备机使用锁定 Docling 预取默认模型，并按 `model_manifest.json` 复核目录级 SHA-256。
+3. 把已验证的只读模型目录作为 Docker 命名构建上下文 `model_assets` 注入镜像；镜像构建本身不访问 Hugging Face。
+4. 生成 CycloneDX SBOM 与 Python 许可证清单。
+5. 构建结束后记录镜像 digest；模型文件不进入 Git。
 
 模型目录摘要使用 `sha256-tree-v1`：忽略下载器 `.cache`，按相对路径排序，把相对路径、文件大小和文件 SHA-256 顺序写入总 SHA-256。上游模型内容漂移会直接使镜像构建失败。
 
 ## 构建命令
 
 ```bash
+python bgp_knowledge_base/deploy/docling/verify_offline_runtime.py \
+  --manifest bgp_knowledge_base/deploy/docling/model_manifest.json \
+  --model-root /srv/bgpkb/docling-models \
+  --skip-gpu \
+  --skip-offline
+
 docker build \
   --pull \
+  --network host \
+  --build-context model_assets=/srv/bgpkb/docling-models \
   --tag bgpkb-docling-v2:2.107.0-cu128 \
   --file bgp_knowledge_base/deploy/docling/Dockerfile \
   bgp_knowledge_base
@@ -69,3 +78,15 @@ docker run --rm \
 - `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1` 和 `DOCLING_ARTIFACTS_PATH` 由镜像固定。
 - 模型升级必须更新版本、实际 hash、许可证清单和镜像 digest，并重新执行断网 fixture 验收。
 - 当前不启用 VLM、图片语义解释、远程 OCR、Docling Serve 或任何 HTTP API。
+
+## 2026-07-01 实机验收证据
+
+- 镜像 ID：`sha256:4b33c39c5766c3a24496f3b8f4e559dd53f80b82755dc24ab253c9ec00682a16`。
+- 镜像运行用户：`docling`；镜像大小：11,262,041,042 字节。
+- 断网参数：`--network none`；GPU 参数：`--gpus all`。
+- GPU 证据：NVIDIA TITAN RTX，CUDA 12.8，PyTorch 2.10.0+cu128，总显存 25,189,023,744 字节。
+- 模型证据：`model_manifest.json` 登记的 5 个模型目录实际摘要全部与期望摘要一致。
+- 输入 fixture：`data/sources/raw/cases/cert_eu_china_telecom_route_leak_2019.pdf`，SHA-256 为 `8a01ee709853c923ce3fb84f4c6f3fb8c3f2ede858803f3e4baff56cfe145b08`。
+- 输出 fixture：Docling JSON 共 23 个文本 Block、20,467 字节，SHA-256 为 `aa96eb79141ff797516acfcf391c924ae1f200f7d46e73ac958aa879c41d8f18`。
+
+RapidOCR 必须显式配置 `backend="torch"`。实机日志确认检测、方向分类和识别模型均使用 GPU 0；不得使用 CLI 的默认 ONNX backend，因为本锁定环境有意不引入第二套 `onnxruntime` 推理运行时。

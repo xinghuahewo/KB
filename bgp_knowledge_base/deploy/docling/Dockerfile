@@ -14,7 +14,7 @@ RUN python -m venv /opt/venv
 COPY deploy/docling/requirements.lock /tmp/requirements.lock
 RUN pip install --require-hashes -r /tmp/requirements.lock
 
-RUN docling-tools models download --output-dir /opt/docling/models
+COPY --from=model_assets / /opt/docling/models
 COPY deploy/docling/model_manifest.json /opt/docling/model_manifest.json
 COPY deploy/docling/verify_offline_runtime.py /opt/docling/verify_offline_runtime.py
 RUN python /opt/docling/verify_offline_runtime.py \
@@ -38,7 +38,7 @@ ENV HF_HUB_OFFLINE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
-RUN groupadd --system docling && useradd --system --gid docling --home /home/docling docling
+RUN groupadd --system docling && useradd --system --create-home --gid docling --home /home/docling docling
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /opt/docling /opt/docling
 RUN chown -R docling:docling /opt/docling /home/docling
