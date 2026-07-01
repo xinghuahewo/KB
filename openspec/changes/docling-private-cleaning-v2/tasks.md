@@ -21,11 +21,11 @@
 
 ## 4. 清洗规则与转换治理
 
-- [ ] 4.1 新增清洗规则、transformation、人工决策和 Block 审核状态 Schema
-- [ ] 4.2 先以失败测试定义无损规范化、结构校正和语义性修改的权限边界
-- [ ] 4.3 实现 Unicode、换行、空白、页眉页脚、标题、跨页段落和跨页表格规则
-- [ ] 4.4 实现逐次 transformation 审计和原始 Block 永久保留
-- [ ] 4.5 实现 pending、fallback、低置信 OCR 与冲突 Block 的复核队列和下游隔离
+- [x] 4.1 新增清洗规则、transformation、人工决策和 Block 审核状态 Schema
+- [x] 4.2 先以失败测试定义无损规范化、结构校正和语义性修改的权限边界
+- [x] 4.3 实现 Unicode、换行、空白、页眉页脚、标题、跨页段落和跨页表格规则
+- [x] 4.4 实现逐次 transformation 审计和原始 Block 永久保留
+- [x] 4.5 实现 pending、fallback、低置信 OCR 与冲突 Block 的复核队列和下游隔离
 
 ## 5. 可恢复批处理
 
