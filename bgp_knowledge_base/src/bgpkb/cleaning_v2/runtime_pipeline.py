@@ -105,9 +105,22 @@ def materialize_picture_assets(payload, assets_dir, doc_id):
         }
 
 
-def _lossless_rules(config):
-    configured = config.get("rules", {}).get("lossless", ["unicode_whitespace"])
-    return [CleaningRule(str(rule_id), "1", "lossless") for rule_id in configured]
+def _cleaning_rules(config, source_format):
+    rule_config = config.get("rules", {})
+    rules = [
+        CleaningRule(str(rule_id), "1", "lossless")
+        for rule_id in rule_config.get("lossless", ["unicode_whitespace"])
+    ]
+    rules.extend(
+        CleaningRule(
+            str(rule_id),
+            "1",
+            "structural",
+            options={"source_format": source_format},
+        )
+        for rule_id in rule_config.get("structural", [])
+    )
+    return rules
 
 
 def build_stage_handlers(
@@ -160,7 +173,11 @@ def build_stage_handlers(
 
     def normalized(context):
         parsed_document = _load_json(context.temporary_dir / "parsed_document.json")
-        governed = apply_rules(parsed_document["blocks"], _lossless_rules(config), config)
+        governed = apply_rules(
+            parsed_document["blocks"],
+            _cleaning_rules(config, context.source_path.suffix.lower().lstrip(".")),
+            config,
+        )
         cleaned_document = dict(parsed_document)
         cleaned_document["blocks"] = governed["cleaned_blocks"]
         cleaned_document["transformations"] = governed["transformations"]

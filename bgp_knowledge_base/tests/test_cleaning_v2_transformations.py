@@ -111,3 +111,45 @@ def test_review_queue_and_publishable_filter_isolate_governance_risks():
 
     assert {item["block_id"] for item in queue} == {"pending", "fallback", "ocr", "conflict"}
     assert [item["block_id"] for item in module.publishable_blocks(blocks)] == ["approved"]
+
+
+def test_heading_inference_is_audited_as_structural_change_without_mutating_raw():
+    module = load_module()
+    raw = [
+        block("title", "Paper title", block_type="heading", heading_level=1),
+        block("section", "1 Method", block_type="heading", heading_level=1),
+        block("sub", "1.1 Input", block_type="heading", heading_level=1),
+    ]
+    snapshot = copy.deepcopy(raw)
+    rule = module.CleaningRule(
+        "infer_heading_hierarchy", "1", "structural", options={"source_format": "pdf"}
+    )
+
+    result = module.apply_rules(raw, [rule], {})
+    by_id = {row["block_id"]: row for row in result["cleaned_blocks"]}
+
+    assert raw == snapshot
+    assert [by_id[name]["heading_level"] for name in ["title", "section", "sub"]] == [1, 2, 3]
+    assert by_id["sub"]["parent_block_id"] == "section"
+    assert by_id["section"]["review_status"] == "pending_review"
+    assert result["transformations"][0]["evidence"]["candidates"]
+    assert result["review_items"][0]["reason"] == "structural_change_requires_review"
+
+
+def test_heading_inference_promotes_deterministic_fallback_paragraph():
+    module = load_module()
+    raw = [
+        block("meta", "Network Working Group"),
+        block("title", "A Border Gateway Protocol 4 (BGP-4)"),
+        block("section", "1. Introduction"),
+    ]
+    rule = module.CleaningRule(
+        "infer_heading_hierarchy", "1", "structural", options={"source_format": "txt"}
+    )
+
+    result = module.apply_rules(raw, [rule], {})
+    by_id = {row["block_id"]: row for row in result["cleaned_blocks"]}
+
+    assert by_id["title"]["block_type"] == "heading"
+    assert by_id["section"]["block_type"] == "heading"
+    assert by_id["section"]["heading_level"] == 2

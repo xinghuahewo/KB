@@ -42,6 +42,8 @@ retry:
 rules:
   automatic_levels: [lossless]
   review_required_levels: [structural, semantic]
+  lossless: [unicode_whitespace]
+  structural: [infer_heading_hierarchy]
   preserve_raw_blocks: true
   audit_every_change: true
 quality_gates:

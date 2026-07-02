@@ -266,6 +266,43 @@ def test_document_can_be_approved_with_risky_picture_block_isolated(tmp_path):
     assert len(validation["review_queue"]) == 1
 
 
+def test_runtime_applies_configured_heading_hierarchy_rule(tmp_path):
+    source = _write_source(tmp_path / "input", body=b"%PDF-1.7\n")
+    fixture = {
+        "body": {"children": [{"$ref": "#/texts/0"}, {"$ref": "#/texts/1"}]},
+        "texts": [
+            {"self_ref": "#/texts/0", "label": "section_header", "text": "Paper", "level": 1, "prov": []},
+            {"self_ref": "#/texts/1", "label": "section_header", "text": "1 Method", "level": 1, "prov": []},
+        ],
+    }
+    runtime = {"parser": "docling", "docling_version": "2.107.0"}
+    config = {
+        "ocr": {},
+        "rules": {
+            "lossless": ["unicode_whitespace"],
+            "structural": ["infer_heading_hierarchy"],
+        },
+    }
+
+    result = batch.BatchRunner(
+        output_root=tmp_path / "output",
+        run_root=tmp_path / "runs",
+        config=config,
+        runtime_identity=runtime,
+        handlers=build_stage_handlers(
+            config=config, runtime_identity=runtime, docling_parser=lambda _: fixture
+        ),
+    ).run([source], run_id="heading-rule")
+    cleaned = json.loads(
+        (tmp_path / "output" / "doc" / "cleaned_document.json").read_text(encoding="utf-8")
+    )
+
+    assert result["documents"][0]["state"] == "approved"
+    assert cleaned["blocks"][1]["heading_level"] == 2
+    assert cleaned["blocks"][1]["review_status"] == "pending_review"
+    assert cleaned["transformations"][-1]["rule_id"] == "infer_heading_hierarchy"
+
+
 def test_runtime_materializes_embedded_picture_assets_with_stable_hash(tmp_path):
     payload = {
         "pictures": [

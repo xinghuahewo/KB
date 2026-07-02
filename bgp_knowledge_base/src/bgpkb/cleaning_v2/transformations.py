@@ -7,6 +7,8 @@ import json
 import re
 import unicodedata
 
+from bgpkb.cleaning_v2.heading_hierarchy import infer_heading_hierarchy
+
 
 GENERATED_BY = "src/bgpkb/cleaning_v2/transformations.py"
 
@@ -23,13 +25,14 @@ def _snapshot(blocks):
     return [{"block_id": row.get("block_id"), "cleaned_text": row.get("cleaned_text", ""), "heading_level": row.get("heading_level"), "table": row.get("table")} for row in blocks]
 
 
-def _record(rule, before, after, block_ids, operation, confidence=1.0):
+def _record(rule, before, after, block_ids, operation, confidence=1.0, evidence=None):
     payload = json.dumps([rule.rule_id, rule.version, block_ids, before, after], ensure_ascii=False, sort_keys=True, default=str)
     return {
         "transformation_id": "transformation_v2_" + hashlib.sha256(payload.encode()).hexdigest(),
         "rule_id": rule.rule_id, "rule_version": rule.version, "rule_level": rule.level,
         "operation": operation, "input_block_ids": block_ids, "output_block_ids": block_ids,
-        "before": before, "after": after, "evidence": {"rule_options": rule.options},
+        "before": before, "after": after,
+        "evidence": evidence or {"rule_options": rule.options},
         "confidence": confidence, "generated_by": GENERATED_BY,
     }
 
@@ -96,13 +99,63 @@ def apply_rules(raw_blocks, rules, config):
                 if normalized != row.get("cleaned_text", ""):
                     row["cleaned_text"] = normalized
                     changed.append(row)
+        elif rule.level == "structural" and rule.rule_id == "infer_heading_hierarchy":
+            candidates = infer_heading_hierarchy(
+                cleaned, source_format=str(rule.options.get("source_format", ""))
+            )
+            by_id = {row.get("block_id"): row for row in cleaned}
+            changed = []
+            applied_candidates = []
+            applied_source_ids = set()
+            for candidate in candidates:
+                source_block_id = candidate["source_block_id"]
+                if source_block_id in applied_source_ids or source_block_id not in by_id:
+                    continue
+                row = by_id[source_block_id]
+                desired_type = "heading" if candidate["promoted"] else row.get("block_type")
+                desired = (
+                    desired_type,
+                    candidate["level"],
+                    candidate["parent_block_id"],
+                    candidate["text"],
+                )
+                current = (
+                    row.get("block_type"),
+                    row.get("heading_level"),
+                    row.get("parent_block_id"),
+                    row.get("cleaned_text"),
+                )
+                if desired != current:
+                    row["block_type"] = desired_type
+                    row["heading_level"] = candidate["level"]
+                    row["parent_block_id"] = candidate["parent_block_id"]
+                    row["cleaned_text"] = candidate["text"]
+                    changed.append(row)
+                    applied_candidates.append(candidate)
+                applied_source_ids.add(source_block_id)
+            structural_evidence = {
+                "rule_options": rule.options,
+                "candidates": applied_candidates,
+            }
         else:
             changed = _apply_structural(cleaned, rule)
         if not changed:
             continue
         after = _snapshot(cleaned)
         ids = [row["block_id"] for row in changed]
-        transformations.append(_record(rule, before, after, ids, rule.rule_id, 1.0 if rule.level == "lossless" else 0.9))
+        transformations.append(
+            _record(
+                rule,
+                before,
+                after,
+                ids,
+                rule.rule_id,
+                1.0 if rule.level == "lossless" else 0.9,
+                evidence=structural_evidence
+                if rule.level == "structural" and rule.rule_id == "infer_heading_hierarchy"
+                else None,
+            )
+        )
         if rule.level == "structural":
             for row in changed:
                 row["review_status"] = "pending_review"
