@@ -77,7 +77,7 @@ def sort_blocks(blocks):
     )
 
 
-def atomic_write_json(path, payload):
+def atomic_write_json(path, payload, *, indent=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
@@ -91,7 +91,10 @@ def atomic_write_json(path, payload):
             delete=False,
         ) as handle:
             temporary = Path(handle.name)
-            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            options = {"ensure_ascii": False, "sort_keys": True, "indent": indent}
+            if indent is None:
+                options["separators"] = (",", ":")
+            json.dump(payload, handle, **options)
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())

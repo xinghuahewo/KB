@@ -10,7 +10,9 @@
 2. `reading_order` 使用稳定的原文区域标识，按人类自然阅读顺序排列；多栏页面必须先完成同栏内容，再进入下一栏。
 3. `table_cells` 记录单元格的行、列、行跨度、列跨度和可见文本；跨页表格按同一逻辑表处理。
 4. `ocr_gold_text` 只抄录需要 OCR 的选定页面或区域，保留大小写、数字和标点，不做语义改写。
-5. 完成后填写 `annotator`，把 `annotation_status` 改为 `completed`，并在 `notes` 记录无法判定或版面异常。
+5. 标注文件使用缩进 JSON 数组格式，路径为 `data/review_inputs/cleaning_v2_gold_annotations.json`，每篇文档是数组中的一个对象。
+6. Codex 辅助生成的记录使用 `annotation_method=codex_assisted`、`verification_status=pending`；人工核验后再改为 `verification_status=human_verified`。
+7. 完成后填写 `annotator`，把 `annotation_status` 改为 `completed`，并在 `notes` 记录无法判定或版面异常。
 
 ## 复核与门槛
 

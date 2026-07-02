@@ -185,3 +185,14 @@ def test_atomic_json_write_preserves_previous_authority_on_failure(tmp_path):
     contracts.atomic_write_json(target, {"doc_id": "doc-1", "blocks": []})
     assert json.loads(target.read_text(encoding="utf-8"))["doc_id"] == "doc-1"
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_atomic_json_write_supports_human_readable_indentation(tmp_path):
+    contracts = load_contracts()
+    target = tmp_path / "annotations.json"
+
+    contracts.atomic_write_json(target, [{"doc_id": "a", "headings": []}], indent=2)
+
+    content = target.read_text(encoding="utf-8")
+    assert content.startswith("[\n  {")
+    assert content.endswith("\n")

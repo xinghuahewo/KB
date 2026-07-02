@@ -381,7 +381,7 @@ git commit -m "feat: 生成清洗 v2 派生产物与差异评测"
 ### Task 8: 全量迁移与人工高风险验收
 
 **Files:**
-- Create: `bgp_knowledge_base/data/review_inputs/cleaning_v2_gold_annotations.jsonl`
+- Create: `bgp_knowledge_base/data/review_inputs/cleaning_v2_gold_annotations.json`（缩进 JSON 数组，便于人工审阅）
 - Create: `bgp_knowledge_base/data/derived/datasets/cleaning_v2_gold_eval_results.jsonl`
 - Create: `bgp_knowledge_base/docs/review/cleaning_v2_gold_annotation_guide.md`
 - Create: `bgp_knowledge_base/tests/test_cleaning_v2_gold_eval.py`
