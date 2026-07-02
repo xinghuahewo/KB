@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.cleaning_v2.release import resolve_release
 
 
 ROOT = paths.PROJECT_ROOT
@@ -14,7 +15,6 @@ PUBLISHED_DIR = paths.PUBLISHED_DIR
 REPORT = paths.report_path("published_knowledge_base_report")
 
 ENTITY_DIR = paths.ENTITIES_DIR
-CHUNK_DIR = paths.CHUNKS_DIR
 DATASET_DIR = paths.DATASETS_DIR
 RELATIONSHIP_FILE = paths.RELATIONSHIPS_DIR / "relationships.jsonl"
 SOURCE_INVENTORY = paths.INVENTORY_DIR / "sources.csv"
@@ -130,22 +130,43 @@ def build_source_catalog():
     return records
 
 
-def build_chunk_catalog():
+def resolve_active_release(pointer_path=None, *, project_root=ROOT):
+    pointer_path = Path(pointer_path or (paths.CONFIG_DIR / "corpus_release_pointer.json"))
+    manifest = resolve_release(pointer_path)
+    project_root = Path(project_root).resolve()
+    chunks_path = Path(manifest["chunks"])
+    if not chunks_path.is_absolute():
+        chunks_path = project_root / chunks_path
+    chunks_path = chunks_path.resolve()
+    if not chunks_path.is_relative_to(project_root):
+        raise ValueError("发布语料 chunks 路径必须位于项目目录内")
+    if not chunks_path.is_dir():
+        raise FileNotFoundError(f"发布语料 chunks 目录不存在: {chunks_path}")
+    return {"manifest": manifest, "chunks_path": chunks_path}
+
+
+def build_chunk_catalog(chunk_dir, *, project_root=ROOT, sources_by_doc=None):
     records = []
-    for path in sorted(CHUNK_DIR.glob("*.jsonl")):
-        chunk_file = path.relative_to(ROOT).as_posix()
+    sources_by_doc = sources_by_doc or {}
+    project_root = Path(project_root).resolve()
+    for path in sorted(Path(chunk_dir).glob("*.jsonl")):
+        chunk_file = path.resolve().relative_to(project_root).as_posix()
         for chunk in load_jsonl(path):
             content = chunk.get("content", "")
+            source = sources_by_doc.get(chunk.get("doc_id", ""), {})
+            source_type = chunk.get("source_type", "")
+            if source_type in {"", "document"}:
+                source_type = source.get("source_type", source_type)
             records.append({
                 "chunk_id": chunk.get("chunk_id", ""),
                 "doc_id": chunk.get("doc_id", ""),
-                "title": chunk.get("title", ""),
-                "source_type": chunk.get("source_type", ""),
+                "title": chunk.get("title", "") or source.get("title", ""),
+                "source_type": source_type,
                 "chunk_type": chunk.get("chunk_type", ""),
                 "topics": chunk.get("topics", []),
                 "section_path": chunk.get("section_path", []),
                 "source_ref": chunk.get("source_ref", ""),
-                "language": chunk.get("language", ""),
+                "language": chunk.get("language", "") or source.get("language", ""),
                 "review_status": chunk.get("review_status", ""),
                 "content_chars": len(content),
                 "content_preview": " ".join(content.split())[:240],
@@ -261,7 +282,7 @@ def write_readme(manifest):
     lines = [
         "# Published BGP Knowledge Base",
         "",
-        "本目录是从 `data/sources/raw/`、`data/corpus/parsed/`、`data/corpus/cleaned/`、`data/corpus/chunks/`、`data/knowledge/entities/`、`data/knowledge/relationships/` 和 `data/derived/datasets/` 机械汇总出的发布入口。",
+        f"本目录当前使用 `{manifest['corpus_version']}` 语料，从 `{manifest['corpus_authority']}` 和版本化 chunk 目录机械派生；实体、关系与治理数据仍来自既有确定性数据集。",
         "",
         "生成过程不联网、不下载、不调用 LLM、不做语义审批，也不会把 `pending` 实体升级为 `approved`。",
         "",
@@ -278,6 +299,8 @@ def write_readme(manifest):
         "",
         "## Snapshot",
         "",
+        f"- 语料版本：{manifest['corpus_version']}",
+        f"- 输入快照：{manifest['corpus_input_snapshot']}",
         f"- 来源：{manifest['counts']['sources']}",
         f"- 实体：{manifest['counts']['entities']}",
         f"- Chunks：{manifest['counts']['chunks']}",
@@ -324,6 +347,8 @@ def write_report(manifest):
         "",
         "## 计数",
         "",
+        f"- 语料版本：{manifest['corpus_version']}",
+        f"- 输入快照：{manifest['corpus_input_snapshot']}",
     ])
     for key, value in manifest["counts"].items():
         lines.append(f"- {key}：{value}")
@@ -342,9 +367,14 @@ def write_report(manifest):
 def main():
     PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
 
+    active_release = resolve_active_release()
     entity_catalog = build_entity_catalog()
     source_catalog = build_source_catalog()
-    chunk_catalog = build_chunk_catalog()
+    sources_by_doc = {row["source_id"]: row for row in source_catalog}
+    chunk_catalog = build_chunk_catalog(
+        active_release["chunks_path"],
+        sources_by_doc=sources_by_doc,
+    )
     relationship_adjacency = build_relationship_adjacency(entity_catalog)
     lexical_index = build_lexical_index(entity_catalog, source_catalog, chunk_catalog)
     next_actions = load_jsonl(DATASET_DIR / "next_action_queue.jsonl")
@@ -358,9 +388,13 @@ def main():
     manifest = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "generated_by": "src/bgpkb/pipeline/build_published_knowledge_base.py",
+        "corpus_version": active_release["manifest"]["version"],
+        "corpus_input_snapshot": active_release["manifest"]["input_snapshot"],
+        "corpus_authority": active_release["manifest"]["authority"],
+        "historical_review_evidence_corpus_version": "v1",
         "inputs": [
             "data/sources/inventory/sources.csv",
-            "data/corpus/chunks/*.jsonl",
+            f"{active_release['manifest']['chunks']}/*.jsonl",
             "data/knowledge/entities/*.jsonl",
             "data/knowledge/relationships/relationships.jsonl",
             "data/derived/datasets/entity_source_evidence.jsonl",

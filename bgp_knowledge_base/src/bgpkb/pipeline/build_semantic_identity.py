@@ -155,6 +155,39 @@ def build_id_map(config):
             source_ref=chunk.get("source_ref", ""),
         ))
 
+    active_chunk_ids = {
+        record["local_id"]
+        for record in records
+        if record["resource_type"] == "chunk"
+    }
+    for evidence in load_jsonl(DATASET_DIR / "human_review_evidence_extracts.jsonl"):
+        local_id = evidence.get("chunk_id", "")
+        if not local_id or local_id in active_chunk_ids:
+            continue
+        records.append(base_record(
+            config,
+            "chunk",
+            local_id,
+            label=local_id,
+            source_path=evidence.get("chunk_file", ""),
+            source_ref=evidence.get("source_ref", ""),
+        ))
+        active_chunk_ids.add(local_id)
+
+    for evidence in load_jsonl(DATASET_DIR / "entity_source_evidence.jsonl"):
+        for local_id in evidence.get("chunk_sample_ids", []):
+            if not local_id or local_id in active_chunk_ids:
+                continue
+            records.append(base_record(
+                config,
+                "chunk",
+                local_id,
+                label=local_id,
+                source_path=evidence.get("cleaned_path", ""),
+                source_ref=evidence.get("source_id", ""),
+            ))
+            active_chunk_ids.add(local_id)
+
     for rel in load_jsonl(RELATIONSHIP_FILE):
         local_id = relationship_local_id(rel)
         label = f"{rel.get('src_id', '')} {rel.get('relation', '')} {rel.get('dst_id', '')}".strip()
