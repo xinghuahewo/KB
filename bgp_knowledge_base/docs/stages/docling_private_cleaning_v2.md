@@ -29,3 +29,11 @@ python3 -m bgpkb.pipeline.build_cleaning_v2_release_gate
 ```
 
 发布切换必须在 `cleaning_v2_release_gate.json` 通过后显式执行，禁止静默切换。
+
+## 切换前验收证据
+
+- 本地全量回归：244 项通过，1 项上游 Starlette 弃用警告，无失败。
+- 离线 GPU 容器：在 `NVIDIA TITAN RTX 24 GB`、驱动 `570.133.07` 上以 `--network none` 运行；Docling 健康预检通过，5 个锁定模型哈希全部匹配。
+- 全量迁移：54/54 文档通过，隔离数为 0，发布门禁阻断项为 0。
+- 数据质量：Schema 错误、制品清单大小不一致和 SHA-256 不一致均为 0。
+- 敏感信息检查：对 v2 Block、Markdown、chunk、迁移差异和人工决策扫描本机绝对路径、私钥头、AWS/OpenAI/GitHub 密钥模式，命中数为 0。

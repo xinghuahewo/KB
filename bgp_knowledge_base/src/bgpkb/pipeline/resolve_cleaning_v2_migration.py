@@ -106,9 +106,13 @@ def resolve_migration(
             source_sha = hashlib.sha256(raw_path.read_bytes()).hexdigest()
             source_meta = {
                 "doc_id": doc_id,
-                "source_path": str(raw_path),
+                "source_path": str(
+                    Path("data/sources/raw") / raw_path.relative_to(Path(raw_root))
+                ),
                 "source_sha256": source_sha,
-                "legacy_cleaned_path": str(v1_path),
+                "legacy_cleaned_path": str(
+                    Path("data/corpus/cleaned") / v1_path.relative_to(Path(v1_markdown_root))
+                ),
             }
             runtime = existing.get("runtime", {"pipeline_revision": "legacy-preservation-v2"})
             document, review_decisions = build_legacy_preservation_document(

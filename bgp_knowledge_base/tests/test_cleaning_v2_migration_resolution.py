@@ -122,6 +122,11 @@ def test_resolver_imports_low_coverage_html_and_writes_resolved_run(tmp_path):
     ]
     assert result["fallback_document_count"] == 1
     assert resolved["fallback_review_status"] == "approved"
+    assert resolved["source"]["source_path"] == "data/sources/raw/doc-a.html"
+    assert all(
+        block["provenance"]["source_path"] == "data/sources/raw/doc-a.html"
+        for block in resolved["blocks"]
+    )
     assert "Body" in [block["cleaned_text"] for block in resolved["blocks"]]
     assert statuses[0]["state"] == "approved"
     assert statuses[0]["output_summary"]["fallback_used"] is True
