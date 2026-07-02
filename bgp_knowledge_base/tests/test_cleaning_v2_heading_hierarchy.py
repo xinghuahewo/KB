@@ -113,3 +113,33 @@ def test_promotes_explicit_action_subheadings_inside_structured_document():
         ("discussion", 4),
     ]
     assert candidates[-1]["parent_block_id"] == "action"
+
+
+def test_single_letter_subsection_is_not_misread_as_roman_when_caption_is_mixed_case():
+    blocks = [
+        block("title", "Paper", order=0),
+        block("section", "II. RELATED WORK", order=1),
+        block("sub", "C. LLM in BGP", order=2),
+    ]
+
+    candidates = heading_hierarchy.infer_heading_hierarchy(blocks, source_format="pdf")
+
+    assert [row["level"] for row in candidates] == [1, 2, 3]
+
+
+def test_rfc_fallback_requires_section_punctuation_and_preserves_deep_level():
+    blocks = [
+        block("meta", "Network Working Group", block_type="paragraph", order=0),
+        block("title", "A Border Gateway Protocol 4 (BGP-4)", block_type="paragraph", order=1),
+        block("deep", "8.2.1.4. FSM Event Numbers", block_type="paragraph", order=2),
+        block("body", "15 seconds.", block_type="paragraph", order=3),
+        block("appendix", "Appendix F.1. Multiple Networks", block_type="paragraph", order=4),
+    ]
+
+    candidates = heading_hierarchy.infer_heading_hierarchy(blocks, source_format="txt")
+
+    assert [(row["text"], row["level"]) for row in candidates] == [
+        ("A Border Gateway Protocol 4 (BGP-4)", 1),
+        ("8.2.1.4. FSM Event Numbers", 5),
+        ("Appendix F.1. Multiple Networks", 3),
+    ]

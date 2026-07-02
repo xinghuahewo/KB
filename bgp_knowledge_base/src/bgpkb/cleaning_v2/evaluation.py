@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 import re
 
+from bgpkb.cleaning_v2.contracts import atomic_write_json
+from bgpkb.cleaning_v2.heading_hierarchy import infer_heading_hierarchy
+
 
 def load_annotations(path):
     rows = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -192,6 +195,53 @@ def ocr_character_error_rate(gold_text, predicted_text):
     return _levenshtein(gold_text, predicted_text) / len(gold_text)
 
 
+def evaluate_gold_document(annotation, document):
+    """将单篇人工金标与 Canonical Block v2 的真实输出进行比较。"""
+    blocks = document.get("blocks", [])
+    headings = [
+        {"text": candidate["text"], "level": candidate["level"]}
+        for candidate in infer_heading_hierarchy(
+            blocks, source_format=str(annotation.get("source_format", ""))
+        )
+    ]
+    gold_order = annotation.get("reading_order", [])
+    selected_ids = set(gold_order)
+    predicted_order = [block["block_id"] for block in blocks if block.get("block_id") in selected_ids]
+    table_cells = []
+    for block in blocks:
+        if block.get("block_type") != "table":
+            continue
+        for cell in block.get("table", {}).get("cells", []):
+            table_cells.append(
+                {
+                    "row": cell.get("row", 0),
+                    "column": cell.get("column", 0),
+                    "row_span": cell.get("row_span", 1),
+                    "column_span": cell.get("column_span", 1),
+                    "text": cell.get("text", ""),
+                }
+            )
+    ocr_text = "\n".join(
+        str(block.get("provenance", {}).get("ocr_text") or block.get("cleaned_text", ""))
+        for block in blocks
+        if block.get("quality", {}).get("ocr_used")
+        and (block.get("provenance", {}).get("ocr_text") or block.get("cleaned_text"))
+    )
+    return {
+        "doc_id": annotation["doc_id"],
+        "annotation_status": annotation.get("annotation_status"),
+        "verification_status": annotation.get("verification_status"),
+        "heading_hierarchy_f1": heading_hierarchy_f1(annotation.get("headings", []), headings),
+        "reading_order_accuracy": reading_order_accuracy(gold_order, predicted_order),
+        "table_structure_accuracy": table_structure_accuracy(
+            annotation.get("table_cells", []), table_cells
+        ),
+        "ocr_character_error_rate": ocr_character_error_rate(
+            annotation.get("ocr_gold_text", ""), ocr_text
+        ),
+    }
+
+
 def evaluate_acceptance(rows, *, expected_document_count=12):
     if len(rows) != expected_document_count or any(row.get("annotation_status") != "completed" for row in rows):
         return {"passed": False, "blocking_issues": ["gold_annotations_incomplete"], "metrics": {}}
@@ -213,3 +263,37 @@ def evaluate_acceptance(rows, *, expected_document_count=12):
     if metrics["ocr_character_error_rate"] > 0.02:
         issues.append("ocr_character_error_rate_above_threshold")
     return {"passed": not issues, "blocking_issues": issues, "metrics": metrics}
+
+
+def write_acceptance_outputs(result, *, dataset_path, report_path):
+    """原子写入机器可读结果与中文验收报告。"""
+    atomic_write_json(dataset_path, result, indent=2)
+    metrics = result.get("metrics", {})
+    status = "通过" if result.get("passed") else "未通过"
+    lines = [
+        "# 清洗 v2 高风险人工验收报告",
+        "",
+        f"- 验收结论：{status}",
+        f"- 标题层级 F1：{metrics.get('heading_hierarchy_f1', 0):.2%}（门槛 ≥ 95%）",
+        f"- 阅读顺序准确率：{metrics.get('reading_order_accuracy', 0):.2%}（门槛 ≥ 98%）",
+        f"- 表格结构准确率：{metrics.get('table_structure_accuracy', 0):.2%}（门槛 ≥ 95%）",
+        f"- OCR 字符错误率：{metrics.get('ocr_character_error_rate', 0):.2%}（门槛 ≤ 2%）",
+        "",
+        "## 阻断项",
+        "",
+    ]
+    issues = result.get("blocking_issues", [])
+    lines.extend([f"- `{issue}`" for issue in issues] or ["- 无"])
+    lines.extend(["", "## 逐文档指标", "", "| 文档 | 标题层级 F1 | 阅读顺序 | 表格结构 | OCR CER |", "|---|---:|---:|---:|---:|"])
+    for row in result.get("documents", []):
+        lines.append(
+            f"| {row['doc_id']} | {row.get('heading_hierarchy_f1', 0):.2%} | "
+            f"{row.get('reading_order_accuracy', 0):.2%} | "
+            f"{row.get('table_structure_accuracy', 0):.2%} | "
+            f"{row.get('ocr_character_error_rate', 0):.2%} |"
+        )
+    report_path = Path(report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = report_path.with_suffix(report_path.suffix + ".tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary.replace(report_path)

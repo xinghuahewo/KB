@@ -1,8 +1,12 @@
 import json
+import importlib
 
 import pytest
+import yaml
 
+from bgpkb import paths
 from bgpkb.cleaning_v2 import evaluation
+from bgpkb.pipeline import build_cleaning_v2_acceptance_report
 
 
 def test_load_annotations_reads_pretty_json_array_and_rejects_duplicate_ids(tmp_path):
@@ -127,3 +131,172 @@ def test_evaluation_thresholds_fail_closed_for_pending_or_low_metrics():
     result = evaluation.evaluate_acceptance(rows, expected_document_count=12)
     assert result["passed"] is False
     assert result["blocking_issues"] == ["heading_hierarchy_f1_below_threshold"]
+
+
+def test_evaluate_gold_document_compares_annotations_with_canonical_blocks():
+    annotation = {
+        "doc_id": "paper",
+        "annotation_status": "completed",
+        "verification_status": "human_verified",
+        "headings": [{"text": "Paper", "level": 1}, {"text": "Method", "level": 2}],
+        "reading_order": ["title", "section", "table"],
+        "table_cells": [
+            {
+                "table_block_id": "table",
+                "row": 0,
+                "column": 0,
+                "row_span": 1,
+                "column_span": 1,
+                "text": "Metric",
+            }
+        ],
+        "ocr_gold_text": "route",
+    }
+    document = {
+        "blocks": [
+            {
+                "block_id": "title",
+                "block_type": "title",
+                "cleaned_text": "Paper",
+                "heading_level": 1,
+                "quality": {"ocr_used": False},
+            },
+            {
+                "block_id": "section",
+                "block_type": "heading",
+                "cleaned_text": "Method",
+                "heading_level": 2,
+                "quality": {"ocr_used": False},
+            },
+            {
+                "block_id": "table",
+                "block_type": "table",
+                "cleaned_text": "",
+                "table": {"cells": annotation["table_cells"]},
+                "quality": {"ocr_used": False},
+            },
+            {
+                "block_id": "ocr",
+                "block_type": "paragraph",
+                "cleaned_text": "route",
+                "quality": {"ocr_used": True},
+                "provenance": {"ocr_text": "route"},
+            },
+        ]
+    }
+
+    row = evaluation.evaluate_gold_document(annotation, document)
+
+    assert row["heading_hierarchy_f1"] == 1.0
+    assert row["reading_order_accuracy"] == 1.0
+    assert row["table_structure_accuracy"] == 1.0
+    assert row["ocr_character_error_rate"] == 0.0
+
+
+def test_evaluate_gold_document_reuses_production_hierarchy_inference():
+    annotation = {
+        "doc_id": "arbitrary-document-id",
+        "source_format": "pdf",
+        "annotation_status": "completed",
+        "verification_status": "human_verified",
+        "headings": [
+            {"text": "Paper", "level": 1},
+            {"text": "1 Method", "level": 2},
+            {"text": "1.1 Input", "level": 3},
+        ],
+        "reading_order": [],
+        "table_cells": [],
+        "ocr_gold_text": "",
+    }
+    document = {
+        "blocks": [
+            {
+                "block_id": name,
+                "block_type": "heading",
+                "cleaned_text": text,
+                "heading_level": 1,
+                "reading_order": index,
+                "quality": {"ocr_used": False},
+            }
+            for index, (name, text) in enumerate(
+                [("title", "Paper"), ("section", "1 Method"), ("sub", "1.1 Input")]
+            )
+        ]
+    }
+
+    row = evaluation.evaluate_gold_document(annotation, document)
+
+    assert row["heading_hierarchy_f1"] == 1.0
+
+
+def test_write_acceptance_outputs_machine_dataset_and_chinese_report(tmp_path):
+    result = {
+        "passed": True,
+        "blocking_issues": [],
+        "metrics": {
+            "heading_hierarchy_f1": 0.96,
+            "reading_order_accuracy": 0.99,
+            "table_structure_accuracy": 0.97,
+            "ocr_character_error_rate": 0.01,
+        },
+        "documents": [{"doc_id": "paper", "heading_hierarchy_f1": 0.96}],
+    }
+    dataset = tmp_path / "acceptance.json"
+    report = tmp_path / "acceptance.md"
+
+    evaluation.write_acceptance_outputs(result, dataset_path=dataset, report_path=report)
+
+    assert json.loads(dataset.read_text(encoding="utf-8"))["passed"] is True
+    rendered = report.read_text(encoding="utf-8")
+    assert "# 清洗 v2 高风险人工验收报告" in rendered
+    assert "标题层级 F1" in rendered
+    assert "通过" in rendered
+
+
+def test_build_acceptance_report_loads_all_gold_documents(tmp_path):
+    annotations = tmp_path / "annotations.json"
+    parsed = tmp_path / "parsed"
+    parsed.mkdir()
+    annotations.write_text(
+        json.dumps(
+            [
+                {
+                    "doc_id": "paper",
+                    "annotation_status": "completed",
+                    "verification_status": "human_verified",
+                    "headings": [],
+                    "reading_order": [],
+                    "table_cells": [],
+                    "ocr_gold_text": "",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (parsed / "paper.json").write_text(json.dumps({"blocks": []}), encoding="utf-8")
+
+    result = build_cleaning_v2_acceptance_report.build_report(
+        annotation_path=annotations,
+        parsed_root=parsed,
+        dataset_path=tmp_path / "result.json",
+        report_path=tmp_path / "result.md",
+        expected_document_count=1,
+    )
+
+    assert result["passed"] is True
+    assert result["documents"][0]["doc_id"] == "paper"
+
+
+def test_acceptance_artifacts_are_registered_for_quality_audit():
+    policy = yaml.safe_load(paths.REPORT_POLICY_PATH.read_text(encoding="utf-8"))["reports"]
+    manifest = importlib.import_module("bgpkb.pipeline.build_artifact_manifest")
+
+    assert policy["cleaning_v2_human_acceptance_report"]["path"] == (
+        "data/generated/reports/corpus/cleaning_v2_human_acceptance_report.md"
+    )
+    assert manifest.producer_for("data/derived/datasets/cleaning_v2_human_acceptance.json") == (
+        "src/bgpkb/pipeline/build_cleaning_v2_acceptance_report.py"
+    )
+    assert manifest.producer_for(
+        "data/generated/reports/corpus/cleaning_v2_human_acceptance_report.md"
+    ) == "src/bgpkb/pipeline/build_cleaning_v2_acceptance_report.py"

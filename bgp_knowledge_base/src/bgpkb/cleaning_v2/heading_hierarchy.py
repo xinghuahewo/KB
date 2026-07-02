@@ -46,10 +46,16 @@ def _docling_levels_are_reliable(blocks):
 
 
 def _numbered_level(text):
-    if re.match(r"^APPENDIX(?:\s+[A-Z0-9]+)?(?:\s|$)", text, flags=re.IGNORECASE):
-        return 2, "appendix"
-    match = re.match(r"^([IVXLCDM]+)[.)]\s+", text, flags=re.IGNORECASE)
-    if match:
+    appendix = re.match(
+        r"^APPENDIX\s+[A-Z0-9]+(?:\.(\d+(?:\.\d+)*))?\.?(?:\s|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if appendix:
+        suffix = appendix.group(1)
+        return 2 + (len(suffix.split(".")) if suffix else 0), "appendix"
+    match = re.match(r"^([IVXLCDM]+)[.)]\s+", text)
+    if match and (len(match.group(1)) > 1 or text[match.end():].isupper()):
         return 2, "roman_section"
     match = re.match(r"^(\d+(?:\.\d+)*)(?:[.)])?\s+", text)
     if match:
@@ -80,11 +86,22 @@ def _fallback_candidates(blocks, source_format):
                 candidates.append((block, text, 1, "rfc_title"))
                 title_found = True
                 continue
-            level, source = _numbered_level(text)
-            if level is not None and len(text) <= 160 and "..." not in text:
-                candidates.append((block, text, level, source))
-            elif text in _RFC_UNNUMBERED:
-                candidates.append((block, text, 2, "rfc_unnumbered"))
+            numbered = re.match(r"^(\d+(?:\.\d+)*)\.\s+", text)
+            if numbered and len(text) <= 160 and "..." not in text:
+                candidates.append(
+                    (
+                        block,
+                        text,
+                        min(6, 1 + len(numbered.group(1).split("."))),
+                        "arabic_section",
+                    )
+                )
+            else:
+                appendix_level, appendix_source = _numbered_level(text)
+                if appendix_source == "appendix":
+                    candidates.append((block, text, appendix_level, appendix_source))
+                elif text in _RFC_UNNUMBERED:
+                    candidates.append((block, text, 2, "rfc_unnumbered"))
         return candidates
     if source_format in {"yaml", "yml"}:
         candidates = []
@@ -143,9 +160,15 @@ def infer_heading_hierarchy(blocks, *, source_format):
         level = max(1, min(6, int(level)))
         while stack and stack[-1][0] >= level:
             stack.pop()
-        if level > 1 and not stack:
+        strong_numbering = source in {
+            "arabic_section",
+            "roman_section",
+            "letter_section",
+            "appendix",
+        }
+        if level > 1 and not stack and not strong_numbering:
             level = 1
-        elif stack and level > stack[-1][0] + 1:
+        elif stack and level > stack[-1][0] + 1 and not strong_numbering:
             level = stack[-1][0] + 1
         base_id = str(block.get("block_id", ""))
         block_id = base_id
