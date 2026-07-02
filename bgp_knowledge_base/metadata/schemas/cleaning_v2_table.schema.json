@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/cleaning-v2-table.json",
+  "title": "CleaningV2Table",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["table_id", "rows", "columns", "cells", "source_pages"],
+  "properties": {
+    "table_id": {"type": "string", "minLength": 1},
+    "rows": {"type": "integer", "minimum": 0},
+    "columns": {"type": "integer", "minimum": 0},
+    "cells": {"type": "array", "items": {"type": "object"}},
+    "source_pages": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "caption": {"type": ["string", "null"]}
+  }
+}

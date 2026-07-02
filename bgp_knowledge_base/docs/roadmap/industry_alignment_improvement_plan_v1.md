@@ -3,14 +3,14 @@ title: "BGP 知识库工业界对齐改进方案 v1"
 document_type: "规划与治理文档"
 purpose: "基于当前知识清洗、拆分、分类、结构化、追溯和更新能力，给出贴近工业界成熟知识工程实践的本地改进路线。"
 scope: "BGP 知识库数据准备、治理、RAG 就绪和发布维护链路"
-status: "现行参考；阶段 A 已交付，Docling 私有清洗 v2 已在实现分支完成验收"
+status: "现行参考；阶段 A 和 Docling 私有清洗 v2 已交付"
 last_reviewed: "2026-07-02"
 ---
 # BGP 知识库工业界对齐改进方案 v1
 
 ## 1. 结论
 
-当前项目已经具备确定性流水线、质量检查、人工复核、发布包和追溯索引，适合作为 BGP 知识库数据底座。阶段 A 已建立语料质量画像；Docling 私有清洗 v2 已在 `codex/docling-private-cleaning-v2` 分支完成 36/36 任务和发布回滚验收，但尚未合并到主分支。
+当前项目已经具备确定性流水线、质量检查、人工复核、发布包和追溯索引，适合作为 BGP 知识库数据底座。阶段 A 已建立语料质量画像；Docling 私有清洗 v2 已进入主分支，完成 36/36 任务和发布回滚验收。
 
 与工业界成熟知识工程相比，下一步差距主要在以下五点：
 
@@ -27,7 +27,7 @@ last_reviewed: "2026-07-02"
 | 阶段 | 目标 | 本地新增或修改 | 验收方式 |
 | --- | --- | --- | --- |
 | 阶段 A：语料质量画像 | 已交付：让清洗质量可量化 | 已新增语料 profiling、独立 OCR 评估、报告和指标数据集 | 已能看到长度分布、异常文档、表格/替换字符/OCR 风险 |
-| 阶段 A2：Docling 私有清洗 v2 | 实现分支已交付：建立结构保真、可审核、可回滚的清洗权威层 | Canonical Block v2、离线 GPU Docling、自适应 OCR、transformation 审计、全量迁移和版本指针 | 54/54 通过；标题 F1 98.65%；阅读顺序/表格 100%；OCR CER 0%；v2→v1→v2 回滚演练通过 |
+| 阶段 A2：Docling 私有清洗 v2 | 已交付：建立结构保真、可审核、可回滚的清洗权威层 | Canonical Block v2、离线 GPU Docling、自适应 OCR、transformation 审计、全量迁移和版本指针 | 54/54 通过；标题 F1 98.65%；阅读顺序/表格 100%；OCR CER 0%；v2→v1→v2 回滚演练通过 |
 | 阶段 B：层级 chunk | 让检索可在段落和章节之间回扩 | 扩展 chunk schema，新增父子 chunk 或 section catalog | 查询命中子 chunk 时可定位父 section |
 | 阶段 C：分类增强 | 让主题标签有置信度和人工闭环 | 新增同义词配置、分类候选数据集和低置信复核队列 | chunk topic 覆盖率、置信度分布和复核队列可报告 |
 | 阶段 D：结构化候选层 | 从人工实体种子升级为“自动候选 + 人工批准” | 新增实体候选、关系候选、字段候选抽取脚本 | 候选不会直接写入主实体，必须经审计和人工复核 |
@@ -41,7 +41,7 @@ last_reviewed: "2026-07-02"
 交付状态：
 
 - 阶段 A 已于 2026-06-30 完成并进入主分支。
-- Docling 私有清洗 v2 已于 2026-07-02 在 `codex/docling-private-cleaning-v2` 分支完成，OpenSpec 36/36 任务完成，246 项回归测试通过，等待合并到主分支。
+- Docling 私有清洗 v2 已于 2026-07-02 完成并进入主分支，OpenSpec 36/36 任务完成，246 项回归测试通过。
 
 当前基线：
 
@@ -49,7 +49,7 @@ last_reviewed: "2026-07-02"
 - `data/corpus/cleaned/` 已有 Markdown 语料。
 - `quality_check.py` 已检查 parsed、cleaned、chunk、实体和引用一致性。
 
-实现分支已完成的 v2 基线：
+已完成的 v2 基线：
 
 - 私有 GPU 容器锁定 Docling、CUDA、Python 依赖和 5 个模型哈希，并已在 `--network none` 下通过 TITAN RTX 离线预检。
 - Canonical Block v2 保留标题层级、阅读顺序、页码、bbox、表格、代码、公式、图片引用、OCR 证据和逐次 transformation。
@@ -72,7 +72,7 @@ last_reviewed: "2026-07-02"
 
 下一步改进：
 
-- 先将实现分支合并到主分支，保留 v1 manifest、数据和回滚入口。
+- 进入 v2 稳定观察期，继续保留 v1 manifest、数据和回滚入口。
 - 为 31 篇 fallback 文档按格式统计根因；优先改善 HTML 正文抽取和 YAML/Markdown 结构映射，每次只在差异门禁通过后减少 fallback。
 - 扩展高风险黄金集，覆盖更多扫描 PDF、跨页表格、双栏论文、中英混排和异常编码。
 - 建立周期性 drift 报告，持续观测 Docling/模型/配置升级对 Block、标题、表格、OCR 和 chunk 数量的影响。
@@ -229,7 +229,7 @@ last_reviewed: "2026-07-02"
 ### 第一批：低风险治理增强
 
 1. 语料 profiling（已完成）。
-2. Docling 私有清洗 v2（实现分支已完成，待合并主分支）。
+2. Docling 私有清洗 v2（已完成并进入主分支）。
 3. topic synonym 配置。
 4. section catalog。
 5. pipeline dependency 配置。
@@ -287,7 +287,7 @@ last_reviewed: "2026-07-02"
 
 清洗 v2 的当前最小闭环不是继续扩大功能，而是完成主分支交付和运营化：
 
-1. 将 `codex/docling-private-cleaning-v2` 合并到主分支，重跑 246 项回归测试、OpenSpec 严格校验和阶段验收。
+1. 以已合并的 v2 产物为主分支基线，后续变更继续执行 OpenSpec 严格校验、阶段验收和针对性回归。
 2. 保留 v1 回滚路径，为 v2 设置明确观察期，持续记录迁移门禁、fallback 数量和下游检索指标。
 3. 对 31 篇 fallback 文档生成按格式和原因聚合的治理队列，优先解决 HTML 低正文覆盖和 YAML/Markdown 映射问题。
 4. 为 v2 chunk 新增粒度与特殊块评测，将页眉页脚、表格、标题和正文分开评估，避免仅以 chunk 总数判断质量。

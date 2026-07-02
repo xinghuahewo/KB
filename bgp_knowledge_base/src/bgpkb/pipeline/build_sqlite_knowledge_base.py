@@ -319,6 +319,15 @@ CREATE TABLE human_review_progress (
   payload_json TEXT NOT NULL
 );
 
+CREATE TABLE historical_evidence_chunks (
+  chunk_id TEXT PRIMARY KEY,
+  chunk_file TEXT NOT NULL,
+  doc_id TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  chunk_type TEXT NOT NULL,
+  corpus_version TEXT NOT NULL
+);
+
 CREATE TABLE human_review_evidence_extracts (
   extract_id TEXT PRIMARY KEY,
   entity_id TEXT NOT NULL,
@@ -342,7 +351,7 @@ CREATE TABLE human_review_evidence_extracts (
   llm_skip_reason TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   FOREIGN KEY (entity_id) REFERENCES entities(entity_id),
-  FOREIGN KEY (chunk_id) REFERENCES chunks(chunk_id)
+  FOREIGN KEY (chunk_id) REFERENCES historical_evidence_chunks(chunk_id)
 );
 
 CREATE TABLE human_review_session_queue (
@@ -1035,6 +1044,35 @@ def insert_human_review_progress(conn, records):
     )
 
 
+def build_historical_evidence_chunks(records, *, corpus_version):
+    chunks = {}
+    for record in records:
+        chunk_id = record.get("chunk_id")
+        if not chunk_id:
+            continue
+        chunks[chunk_id] = {
+            "chunk_id": chunk_id,
+            "chunk_file": record.get("chunk_file", ""),
+            "doc_id": record.get("doc_id", ""),
+            "source_ref": record.get("source_ref", ""),
+            "chunk_type": record.get("chunk_type", ""),
+            "corpus_version": corpus_version,
+        }
+    return [chunks[chunk_id] for chunk_id in sorted(chunks)]
+
+
+def insert_historical_evidence_chunks(conn, records):
+    conn.executemany(
+        """
+        INSERT INTO historical_evidence_chunks VALUES (
+          :chunk_id, :chunk_file, :doc_id, :source_ref, :chunk_type,
+          :corpus_version
+        )
+        """,
+        records,
+    )
+
+
 def insert_human_review_evidence_extracts(conn, records):
     rows = []
     for record in records:
@@ -1338,6 +1376,10 @@ def build_database():
     human_review_input_validation = load_jsonl(paths.DATASETS_DIR / "human_review_input_validation.jsonl")
     human_review_progress = load_jsonl(paths.DATASETS_DIR / "human_review_progress.jsonl")
     human_review_evidence_extracts = load_jsonl(paths.DATASETS_DIR / "human_review_evidence_extracts.jsonl")
+    historical_evidence_chunks = build_historical_evidence_chunks(
+        human_review_evidence_extracts,
+        corpus_version=manifest.get("historical_review_evidence_corpus_version", "v1"),
+    )
     human_review_session_queue = load_jsonl(paths.DATASETS_DIR / "human_review_session_queue.jsonl")
     human_review_session_status = load_jsonl(paths.DATASETS_DIR / "human_review_session_status.jsonl")
     human_review_field_checklist = load_jsonl(paths.DATASETS_DIR / "human_review_field_checklist.jsonl")
@@ -1372,6 +1414,7 @@ def build_database():
         insert_human_review_decision_apply_preview(conn, human_review_decision_apply_preview)
         insert_human_review_input_validation(conn, human_review_input_validation)
         insert_human_review_progress(conn, human_review_progress)
+        insert_historical_evidence_chunks(conn, historical_evidence_chunks)
         insert_human_review_evidence_extracts(conn, human_review_evidence_extracts)
         insert_human_review_session_queue(conn, human_review_session_queue)
         insert_human_review_session_status(conn, human_review_session_status)
@@ -1415,6 +1458,7 @@ def build_database():
             "human_review_input_validation": table_count(conn, "human_review_input_validation"),
             "human_review_progress": table_count(conn, "human_review_progress"),
             "human_review_evidence_extracts": table_count(conn, "human_review_evidence_extracts"),
+            "historical_evidence_chunks": table_count(conn, "historical_evidence_chunks"),
             "human_review_session_queue": table_count(conn, "human_review_session_queue"),
             "human_review_session_status": table_count(conn, "human_review_session_status"),
             "human_review_field_checklist": table_count(conn, "human_review_field_checklist"),

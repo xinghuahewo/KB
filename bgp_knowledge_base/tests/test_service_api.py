@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 from bgpkb import paths
 import sys
@@ -33,7 +34,8 @@ def test_stats_returns_core_counts_and_review_statuses():
     payload = response.json()
     assert payload["sources"] == 54
     assert payload["entities"] == 112
-    assert payload["chunks"] == 2037
+    manifest = json.loads((paths.PUBLISHED_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert payload["chunks"] == manifest["counts"]["chunks"]
     assert payload["relationships"] == 106
     assert payload["review_statuses"]["approved"] == 107
     assert payload["review_statuses"]["pending"] == 5

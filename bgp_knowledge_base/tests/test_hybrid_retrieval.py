@@ -132,8 +132,11 @@ def test_processed_source_is_retrieval_eligible_without_changing_review_status()
     assert routeviews["trust_basis"] in {
         "approved_entity_evidence",
         "processed_source_with_traceability",
+        "approved_record",
     }
-    assert routeviews["review_status"] == "pending"
+    manifest = json.loads((ROOT / "data/published/manifest.json").read_text(encoding="utf-8"))
+    expected_status = "approved" if manifest["corpus_version"] == "v2" else "pending"
+    assert routeviews["review_status"] == expected_status
 
 
 def test_named_tool_query_surfaces_matching_documentation():

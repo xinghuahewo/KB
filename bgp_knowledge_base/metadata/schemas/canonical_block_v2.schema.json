@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/canonical-block-v2.json",
+  "title": "CanonicalBlockV2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["block_id", "doc_id", "page_id", "parent_block_id", "block_type", "heading_level", "reading_order", "bbox", "raw_text", "cleaned_text", "language", "quality", "provenance", "review_status", "generated_by"],
+  "properties": {
+    "block_id": {"type": "string", "pattern": "^block_v2_[0-9a-f]{64}$"},
+    "doc_id": {"type": "string", "minLength": 1},
+    "page_id": {"type": ["string", "null"]},
+    "page_number": {"type": ["integer", "null"], "minimum": 1},
+    "parent_block_id": {"type": ["string", "null"]},
+    "block_type": {"enum": ["title", "heading", "paragraph", "list_item", "table", "code", "formula", "picture", "caption", "footnote", "page_header", "page_footer", "unsupported"]},
+    "heading_level": {"type": ["integer", "null"], "minimum": 1, "maximum": 6},
+    "reading_order": {"type": "integer", "minimum": 0},
+    "bbox": {"type": ["object", "null"]},
+    "raw_text": {"type": "string"},
+    "cleaned_text": {"type": "string"},
+    "language": {"type": ["string", "null"]},
+    "quality": {"type": "object"},
+    "provenance": {"type": "object"},
+    "review_status": {"enum": ["auto_approved", "approved", "pending_review", "conflict", "quarantined"]},
+    "table": {"type": ["object", "null"]},
+    "asset_refs": {"type": "array", "items": {"type": "string"}},
+    "generated_by": {"type": "string", "minLength": 1}
+  }
+}

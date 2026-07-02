@@ -10,7 +10,7 @@ last_reviewed: "2026-07-02"
 
 `docs/` 只保留仍对运行、验收、治理或后续建设有用的文档。已完成的临时实施计划、被正式规范覆盖的调研草稿和过期路线图不在这里长期保存，历史内容由 Git 记录。
 
-当前交付状态：阶段 A 语料质量画像已进入主分支；Docling 私有清洗 v2 已在 `codex/docling-private-cleaning-v2` 分支完成 36/36 任务、246 项回归测试和 v2→v1→v2 回滚演练，尚待合并到主分支。
+当前交付状态：阶段 A 语料质量画像和 Docling 私有清洗 v2 均已进入主分支。清洗 v2 已完成 36/36 任务、246 项回归测试和 v2→v1→v2 回滚演练。
 
 ## 推荐阅读顺序
 
@@ -35,7 +35,7 @@ last_reviewed: "2026-07-02"
 | 文档 | 状态与用途 |
 | --- | --- |
 | [语料质量画像](stages/phase_a_corpus_profiling_v1.md) | 已交付；记录三层语料画像、确定性门禁和可选 OCR Provider 边界。 |
-| [Docling 私有清洗 v2 路线与验收](roadmap/industry_alignment_improvement_plan_v1.md#31-知识清洗) | 实现分支已交付、主分支待合并；记录 Canonical Block v2、离线 Docling、迁移门禁、fallback 治理和回滚证据。 |
+| [Docling 私有清洗 v2](stages/docling_private_cleaning_v2.md) | 已交付；记录私有 Docling、Canonical Block、迁移验收、fallback 与回滚边界。 |
 | [语义标识前置](stages/phase_3_5_semantic_identity_v1.md) | 已交付；记录语义标识层的交付物和验收边界。 |
 | [RAG 就绪框架](stages/phase_4_rag_framework_v1.md) | 已交付；记录检索框架、Provider 边界和离线验收。 |
 | [RAG 答案质量评测](stages/phase_4_3_rag_answer_eval_v1.md) | 现行；记录固定评测集和质量门槛。 |
@@ -47,7 +47,7 @@ last_reviewed: "2026-07-02"
 
 | 文档 | 用途 |
 | --- | --- |
-| [工业界对齐改进方案](roadmap/industry_alignment_improvement_plan_v1.md) | 当前唯一的长期改进路线，已同步 Docling 清洗 v2 验收结果、主分支合并状态、fallback 收敛、v2 chunk 治理、层级 chunk、分类、候选层、追溯和增量更新。 |
+| [工业界对齐改进方案](roadmap/industry_alignment_improvement_plan_v1.md) | 当前唯一的长期改进路线，已同步 Docling 清洗 v2 验收结果、fallback 收敛、v2 chunk 治理、层级 chunk、分类、候选层、追溯和增量更新。 |
 
 ## 独立项目
 
