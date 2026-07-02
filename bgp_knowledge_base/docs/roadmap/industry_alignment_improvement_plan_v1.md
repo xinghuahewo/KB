@@ -3,17 +3,19 @@ title: "BGP 知识库工业界对齐改进方案 v1"
 document_type: "规划与治理文档"
 purpose: "基于当前知识清洗、拆分、分类、结构化、追溯和更新能力，给出贴近工业界成熟知识工程实践的本地改进路线。"
 scope: "BGP 知识库数据准备、治理、RAG 就绪和发布维护链路"
-status: "现行参考；阶段 A 已交付"
-last_reviewed: "2026-06-30"
+status: "现行参考；阶段 A 已交付，Docling 私有清洗 v2 已在实现分支完成验收"
+last_reviewed: "2026-07-02"
 ---
 # BGP 知识库工业界对齐改进方案 v1
 
 ## 1. 结论
 
-当前项目已经具备确定性流水线、质量检查、人工复核、发布包和追溯索引，适合作为 BGP 知识库数据底座。与工业界成熟知识工程相比，差距不在“有没有数据链路”，而在以下五点：
+当前项目已经具备确定性流水线、质量检查、人工复核、发布包和追溯索引，适合作为 BGP 知识库数据底座。阶段 A 已建立语料质量画像；Docling 私有清洗 v2 已在 `codex/docling-private-cleaning-v2` 分支完成 36/36 任务和发布回滚验收，但尚未合并到主分支。
 
-1. 清洗仍以文本规范化为主，缺少版面、表格、OCR 质量和语料 profiling。
-2. chunk 已有段落/句子级切分，但缺少父子层级、语义边界和检索效果驱动调参。
+与工业界成熟知识工程相比，下一步差距主要在以下五点：
+
+1. 清洗 v2 已具备版面、标题、表格、阅读顺序、OCR 证据和可追溯 Block，但 31/54 文档仍使用已审核 legacy-preservation fallback，需逐步提高原生结构解析覆盖率。
+2. v2 chunk 已从 approved Block 派生，但需继续做多粒度层级、特殊块检索策略和检索效果驱动调参。
 3. 分类体系已经存在，但自动分类主要靠少量关键词规则，缺少同义词、置信度和人工校正闭环。
 4. 实体和关系结构化结果较完整，但自动候选抽取仍是占位能力，主要依赖人工 JSONL 种子。
 5. 追溯和更新机制稳健，但还没有形成标准化 lineage 事件、增量构建、CI 调度和过期知识监控。
@@ -25,6 +27,7 @@ last_reviewed: "2026-06-30"
 | 阶段 | 目标 | 本地新增或修改 | 验收方式 |
 | --- | --- | --- | --- |
 | 阶段 A：语料质量画像 | 已交付：让清洗质量可量化 | 已新增语料 profiling、独立 OCR 评估、报告和指标数据集 | 已能看到长度分布、异常文档、表格/替换字符/OCR 风险 |
+| 阶段 A2：Docling 私有清洗 v2 | 实现分支已交付：建立结构保真、可审核、可回滚的清洗权威层 | Canonical Block v2、离线 GPU Docling、自适应 OCR、transformation 审计、全量迁移和版本指针 | 54/54 通过；标题 F1 98.65%；阅读顺序/表格 100%；OCR CER 0%；v2→v1→v2 回滚演练通过 |
 | 阶段 B：层级 chunk | 让检索可在段落和章节之间回扩 | 扩展 chunk schema，新增父子 chunk 或 section catalog | 查询命中子 chunk 时可定位父 section |
 | 阶段 C：分类增强 | 让主题标签有置信度和人工闭环 | 新增同义词配置、分类候选数据集和低置信复核队列 | chunk topic 覆盖率、置信度分布和复核队列可报告 |
 | 阶段 D：结构化候选层 | 从人工实体种子升级为“自动候选 + 人工批准” | 新增实体候选、关系候选、字段候选抽取脚本 | 候选不会直接写入主实体，必须经审计和人工复核 |
@@ -35,7 +38,10 @@ last_reviewed: "2026-06-30"
 
 ### 3.1 知识清洗
 
-交付状态：阶段 A 已于 2026-06-30 完成。确定性画像、四类硬门禁、可选 OCR Provider、派生数据集和中文报告均已进入主流水线与阶段验收。
+交付状态：
+
+- 阶段 A 已于 2026-06-30 完成并进入主分支。
+- Docling 私有清洗 v2 已于 2026-07-02 在 `codex/docling-private-cleaning-v2` 分支完成，OpenSpec 36/36 任务完成，246 项回归测试通过，等待合并到主分支。
 
 当前基线：
 
@@ -43,23 +49,41 @@ last_reviewed: "2026-06-30"
 - `data/corpus/cleaned/` 已有 Markdown 语料。
 - `quality_check.py` 已检查 parsed、cleaned、chunk、实体和引用一致性。
 
+实现分支已完成的 v2 基线：
+
+- 私有 GPU 容器锁定 Docling、CUDA、Python 依赖和 5 个模型哈希，并已在 `--network none` 下通过 TITAN RTX 离线预检。
+- Canonical Block v2 保留标题层级、阅读顺序、页码、bbox、表格、代码、公式、图片引用、OCR 证据和逐次 transformation。
+- 54/54 文档完成迁移：23 篇使用 Docling 主结果，31 篇使用已人工确认的 legacy-preservation fallback，未审核 fallback 发布数为 0。
+- 发布指针支持 v1/v2 原子切换；主发布、RAG、SQLite 和标准化出口已通过 v2→v1→v2 回滚演练。
+- 既有 v1 人工复核证据以历史证据表隔离保留，不混入 v2 活动检索 chunk。
+
 工业界成熟做法：
 
 - 文档解析不仅提取文本，还识别表格、标题层级、页眉页脚、阅读顺序和 OCR 风险。
 - 清洗前后有 profiling，能持续观察长度分布、空文档、替换字符、乱码、异常章节和重复内容。
-- 复杂 PDF 采用版面感知解析工具；在本项目中可先用轻量 profiling 做门禁，不急于替换解析器。
+- 复杂 PDF 采用版面感知解析工具，并用黄金标注集持续回归标题、阅读顺序、表格和 OCR 质量。
 
-本地改进：
+已完成：
 
 - 新增 `src/bgpkb/pipeline/profile_cleaned_corpus.py`，读取 `data/corpus/parsed/`、`data/corpus/cleaned/`、`data/corpus/chunks/`，输出 `data/derived/datasets/corpus_profile.jsonl` 和 `data/generated/reports/corpus/corpus_profile_report.md`。
 - 指标至少包含：字符数、section 数、chunk 数、平均段落长度、超短/超长文档、替换字符数量、疑似表格行数、疑似 OCR 噪声、空标题、重复标题。
-- 将 profiling 摘要接入 `src/bgpkb/pipeline/build_coverage_report.py` 或新增独立报告入口，不先阻断流水线。
-- 当 profiling 连续稳定后，再把关键指标接入 `quality_check.py`，例如“替换字符数必须为 0”“cleaned 正文不能为空”“疑似空 PDF 必须进入缺口队列”。
+- profiling 摘要、关键硬门禁和阶段验收已接入主流水线。
+- v2 已实现默认 Docling 路由、明确 fallback、未审核隔离、可恢复批处理、结构化派生和发布门禁。
+
+下一步改进：
+
+- 先将实现分支合并到主分支，保留 v1 manifest、数据和回滚入口。
+- 为 31 篇 fallback 文档按格式统计根因；优先改善 HTML 正文抽取和 YAML/Markdown 结构映射，每次只在差异门禁通过后减少 fallback。
+- 扩展高风险黄金集，覆盖更多扫描 PDF、跨页表格、双栏论文、中英混排和异常编码。
+- 建立周期性 drift 报告，持续观测 Docling/模型/配置升级对 Block、标题、表格、OCR 和 chunk 数量的影响。
+- 为 v2 特殊 Block 建立检索策略，避免页眉页脚、碎片标签和过细 chunk 稀释召回质量。
+- 逐步把历史 v1 人工证据重建到 v2 chunk ID，在完成前继续保持隔离和版本标记。
 
 暂不做：
 
-- 暂不直接引入完整 OCR 或商业解析服务。
-- 暂不把 `parse_documents.py` 全量替换为 Docling/Unstructured，先保留确定性解析器。
+- 暂不引入商业解析服务或常驻 API。
+- 暂不删除 v1 语料、manifest 和历史证据，直到 v2 经过稳定观察期。
+- 暂不生成图片或图表的模型语义解释；只保留资产、坐标和邻接标题。
 
 ### 3.2 知识拆分
 
@@ -205,9 +229,10 @@ last_reviewed: "2026-06-30"
 ### 第一批：低风险治理增强
 
 1. 语料 profiling（已完成）。
-2. topic synonym 配置。
-3. section catalog。
-4. pipeline dependency 配置。
+2. Docling 私有清洗 v2（实现分支已完成，待合并主分支）。
+3. topic synonym 配置。
+4. section catalog。
+5. pipeline dependency 配置。
 
 原因：这些改动主要新增派生数据和报告，不改变主实体、主关系和发布语义，风险低。
 
@@ -243,7 +268,7 @@ last_reviewed: "2026-06-30"
 
 | 能力 | 验收指标 |
 | --- | --- |
-| 清洗 | `corpus_profile_report.md` 能列出异常语料；质量报告能检查关键清洗问题。 |
+| 清洗 | 54/54 文档达到 approved/quarantined 终态；Schema、空正文、替换字符、重复 ID、未审核 fallback 均为 0；标题 F1≥95%，阅读顺序≥98%，表格≥95%，OCR CER≤2%。 |
 | 拆分 | 每个 chunk 可追到父 section；context pack 可配置回扩策略。 |
 | 分类 | topic 候选有置信度；未知 topic 和低置信 topic 有复核队列。 |
 | 结构化 | 自动脚本只生成候选；主实体和主关系只能由人工审计后显式合并。 |
@@ -260,13 +285,13 @@ last_reviewed: "2026-06-30"
 
 ## 7. 下一步最小落地包
 
-以下最小闭环中的语料画像部分已于 2026-06-30 完成；下一项转向 topic 分类增强：
+清洗 v2 的当前最小闭环不是继续扩大功能，而是完成主分支交付和运营化：
 
-1. 新增 `src/bgpkb/pipeline/profile_cleaned_corpus.py`。
-2. 新增 `data/generated/reports/corpus/corpus_profile_report.md` 和 `data/derived/datasets/corpus_profile.jsonl`。
-3. 新增 `metadata/config/topic_synonyms.yaml`。
-4. 新增 `src/bgpkb/pipeline/build_topic_classification_candidates.py`。
-5. 新增 `data/derived/datasets/topic_classification_candidates.jsonl` 和 `data/generated/reports/knowledge/topic_classification_report.md`。
-6. 更新 `quality_check.py`，只检查新增数据集的结构和 topic 是否在 taxonomy 中。
+1. 将 `codex/docling-private-cleaning-v2` 合并到主分支，重跑 246 项回归测试、OpenSpec 严格校验和阶段验收。
+2. 保留 v1 回滚路径，为 v2 设置明确观察期，持续记录迁移门禁、fallback 数量和下游检索指标。
+3. 对 31 篇 fallback 文档生成按格式和原因聚合的治理队列，优先解决 HTML 低正文覆盖和 YAML/Markdown 映射问题。
+4. 为 v2 chunk 新增粒度与特殊块评测，将页眉页脚、表格、标题和正文分开评估，避免仅以 chunk 总数判断质量。
+5. 将历史 v1 人工证据逐步重建到 v2 chunk ID，完成前保留隔离表和版本标记。
+6. 完成上述稳定化后，再进入 topic 分类增强和层级 chunk 阶段。
 
-这个包不会改变主知识库事实，但会让“清洗质量”和“分类质量”先变成可度量、可复核、可持续改进的本地能力。
+这个包的目标是把“功能已完成”提升为“主分支可稳定运行、可持续观测、可快速回滚”。
