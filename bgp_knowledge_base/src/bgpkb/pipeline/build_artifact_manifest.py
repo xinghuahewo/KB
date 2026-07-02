@@ -95,6 +95,14 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/assess_corpus_ocr_quality.py"
     if rel == "data/derived/datasets/cleaning_v2_human_acceptance.json":
         return "src/bgpkb/pipeline/build_cleaning_v2_acceptance_report.py"
+    if rel == "data/derived/datasets/cleaning_v2_migration_diff.jsonl":
+        return "src/bgpkb/pipeline/build_cleaning_v2_migration.py"
+    if rel == "data/derived/datasets/cleaning_v2_release_gate.json":
+        return "src/bgpkb/pipeline/build_cleaning_v2_release_gate.py"
+    if rel == "data/review_inputs/cleaning_v2_migration_decisions.jsonl":
+        return "src/bgpkb/pipeline/resolve_cleaning_v2_migration.py"
+    if rel.startswith("data/derived/datasets/cleaning_runs_v2/full-54-v2-resolved/"):
+        return "src/bgpkb/pipeline/resolve_cleaning_v2_migration.py"
     if rel.startswith("data/derived/datasets/case_observations."):
         return "src/bgpkb/pipeline/extract_case_observations.py"
     if rel.startswith("data/derived/datasets/source_processing_status."):
@@ -216,6 +224,8 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/profile_cleaned_corpus.py"
     if rel == "data/generated/reports/corpus/cleaning_v2_human_acceptance_report.md":
         return "src/bgpkb/pipeline/build_cleaning_v2_acceptance_report.py"
+    if rel == "data/generated/reports/corpus/cleaning_v2_migration_report.md":
+        return "src/bgpkb/pipeline/build_cleaning_v2_migration.py"
     if rel.startswith("data/generated/reports/knowledge/case_observation_report.md"):
         return "src/bgpkb/pipeline/extract_case_observations.py"
     if rel.startswith("data/generated/reports/review/case_observation_guides/"):

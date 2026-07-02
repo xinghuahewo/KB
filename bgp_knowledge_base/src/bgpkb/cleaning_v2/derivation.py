@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shutil
 import tempfile
+import unicodedata
 
 from .transformations import publishable_blocks
 
@@ -267,7 +268,13 @@ def _plain_markdown(markdown):
 
 
 def _tokens(text):
-    return re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
+    return re.findall(r"\w+", text, flags=re.UNICODE)
+
+
+def _comparison_text(markdown):
+    text = unicodedata.normalize("NFKC", markdown)
+    text = re.sub(r"(?<=\w)-\s*\n\s*(?=\w)", "", text)
+    return _plain_markdown(text).casefold()
 
 
 def _transformation_deletions(transformations):
@@ -277,13 +284,24 @@ def _transformation_deletions(transformations):
         after = row.get("after")
         if isinstance(before, str) and isinstance(after, str) and before != after:
             deleted.append(before.replace(after, "", 1) if after and after in before else before)
+        elif isinstance(before, list) and isinstance(after, list):
+            after_by_id = {row.get("block_id"): str(row.get("cleaned_text", "")) for row in after}
+            for snapshot in before:
+                before_text = str(snapshot.get("cleaned_text", ""))
+                after_text = after_by_id.get(snapshot.get("block_id"), "")
+                if before_text != after_text:
+                    deleted.append(
+                        before_text.replace(after_text, "", 1)
+                        if after_text and after_text in before_text
+                        else before_text
+                    )
     return [item for item in deleted if item]
 
 
 def compare_v1_v2(v1_markdown, v2_document, v1_chunks, v2_chunks, transformations):
-    v1_plain = _plain_markdown(v1_markdown)
+    v1_plain = _comparison_text(v1_markdown)
     v2_derivative = build_derivatives(v2_document)
-    v2_plain = _plain_markdown(v2_derivative["markdown"])
+    v2_plain = _comparison_text(v2_derivative["markdown"])
     v1_counts = Counter(_tokens(v1_plain))
     v2_counts = Counter(_tokens(v2_plain))
     removed_counts = v1_counts - v2_counts
@@ -292,7 +310,7 @@ def compare_v1_v2(v1_markdown, v2_document, v1_chunks, v2_chunks, transformation
     matching = 1.0 - removed_nonspace / v1_weight if v1_weight else 1.0
     attributable_counts = Counter()
     for item in _transformation_deletions(transformations):
-        attributable_counts.update(_tokens(item))
+        attributable_counts.update(_tokens(_comparison_text(item)))
     attributed = sum(
         len(token) * min(count, attributable_counts[token])
         for token, count in removed_counts.items()
@@ -315,14 +333,29 @@ def compare_v1_v2(v1_markdown, v2_document, v1_chunks, v2_chunks, transformation
     }
 
 
-def evaluate_migration_gates(document, diff, *, current_digest, repeated_digest=None, minimum_coverage=0.995):
+def evaluate_migration_gates(
+    document,
+    diff,
+    *,
+    current_digest,
+    repeated_digest=None,
+    minimum_coverage=0.995,
+    migration_decision=None,
+):
     issues = []
     unattributed = int(diff.get("removed_content", {}).get("unattributed_char_count", 0))
-    if diff.get("body", {}).get("coverage_ratio", 0) < minimum_coverage and unattributed:
+    approved_difference = bool(
+        migration_decision
+        and migration_decision.get("decision") == "approved"
+        and migration_decision.get("reason_code")
+        and migration_decision.get("evidence", {}).get("v1_digest")
+        and migration_decision.get("evidence", {}).get("v2_digest")
+    )
+    if diff.get("body", {}).get("coverage_ratio", 0) < minimum_coverage and unattributed and not approved_difference:
         issues.append("body_coverage_below_threshold")
-    if unattributed:
+    if unattributed and not approved_difference:
         issues.append("unattributed_content_removal")
-    if document.get("parser_mode") == "fallback":
+    if document.get("parser_mode") == "fallback" and document.get("fallback_review_status") != "approved":
         issues.append("fallback_document")
     if repeated_digest is not None and current_digest != repeated_digest:
         issues.append("unstable_repeated_derivation")

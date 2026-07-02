@@ -168,7 +168,16 @@ def _risk_reasons(block):
     if block.get("review_status") not in {"approved", "auto_approved"}:
         reasons.append(block.get("review_status", "pending_review"))
     issues = block.get("quality", {}).get("issues", [])
-    reasons.extend(issue for issue in issues if issue in {"fallback_parser", "low_confidence_ocr"})
+    reasons.extend(
+        issue
+        for issue in issues
+        if issue in {"fallback_parser", "low_confidence_ocr"}
+        and not (
+            issue == "fallback_parser"
+            and block.get("review_status") == "approved"
+            and block.get("quality", {}).get("fallback_reviewed") is True
+        )
+    )
     return list(dict.fromkeys(reasons))
 
 

@@ -142,6 +142,39 @@ def test_body_coverage_measures_retained_v1_content_without_penalizing_v2_additi
     assert diff["body"]["coverage_ratio"] == 1.0
 
 
+def test_body_coverage_normalizes_unicode_case_punctuation_and_line_hyphenation():
+    document = _document()
+    document["blocks"] = [_block("body", "paragraph", "BGP routing protects prefixes")]
+
+    diff = derivation.compare_v1_v2("ＢＧＰ ROUTING protects pre-\nfixes.", document, [], [], [])
+
+    assert diff["body"]["coverage_ratio"] == 1.0
+    assert diff["removed_content"]["unattributed_char_count"] == 0
+
+
+def test_snapshot_transformation_attributes_removed_block_text():
+    document = _document()
+    document["blocks"] = [_block("body", "paragraph", "Body")]
+    transformations = [
+        {
+            "rule_id": "remove_repeated_header_footer",
+            "rule_level": "structural",
+            "before": [
+                {"block_id": "body", "cleaned_text": "Body"},
+                {"block_id": "header", "cleaned_text": "RFC Header"},
+            ],
+            "after": [
+                {"block_id": "body", "cleaned_text": "Body"},
+                {"block_id": "header", "cleaned_text": ""},
+            ],
+        }
+    ]
+
+    diff = derivation.compare_v1_v2("Body RFC Header", document, [], [], transformations)
+
+    assert diff["removed_content"]["unattributed_char_count"] == 0
+
+
 def test_migration_gates_block_coverage_unattributed_removal_fallback_and_instability():
     document = _document()
     document["parser_mode"] = "fallback"
@@ -159,3 +192,28 @@ def test_migration_gates_block_coverage_unattributed_removal_fallback_and_instab
         "body_coverage_below_threshold", "unattributed_content_removal",
         "fallback_document", "unstable_repeated_derivation",
     }
+
+
+def test_migration_gate_accepts_reviewed_fallback_and_evidenced_difference_decision():
+    document = _document()
+    document["parser_mode"] = "fallback"
+    document["fallback_review_status"] = "approved"
+    diff = {
+        "body": {"coverage_ratio": 0.98, "v2_character_count": 100},
+        "removed_content": {"unattributed_char_count": 5},
+    }
+    decision = {
+        "decision": "approved",
+        "reason_code": "reviewed_layout_difference",
+        "evidence": {"v1_digest": "sha256:a", "v2_digest": "sha256:b"},
+    }
+
+    result = derivation.evaluate_migration_gates(
+        document,
+        diff,
+        current_digest="sha256:a",
+        repeated_digest="sha256:a",
+        migration_decision=decision,
+    )
+
+    assert result == {"passed": True, "blocking_issues": []}

@@ -112,6 +112,19 @@ def test_review_queue_and_publishable_filter_isolate_governance_risks():
     assert {item["block_id"] for item in queue} == {"pending", "fallback", "ocr", "conflict"}
     assert [item["block_id"] for item in module.publishable_blocks(blocks)] == ["approved"]
 
+    reviewed_fallback = block(
+        "reviewed-fallback",
+        "legacy",
+        review_status="approved",
+        quality={
+            "confidence": 1.0,
+            "ocr_used": False,
+            "issues": ["fallback_parser"],
+            "fallback_reviewed": True,
+        },
+    )
+    assert module.publishable_blocks([reviewed_fallback]) == [reviewed_fallback]
+
 
 def test_heading_inference_is_audited_as_structural_change_without_mutating_raw():
     module = load_module()

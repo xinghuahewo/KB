@@ -18,13 +18,14 @@ from bgpkb.cleaning_v2.derivation import (
 
 
 DEFAULT_AUTHORITY = paths.CORPUS_DIR / "cleaned_blocks_v2"
-DEFAULT_RUN = paths.DATASETS_DIR / "cleaning_runs_v2" / "full-54-v2-final"
+DEFAULT_RUN = paths.DATASETS_DIR / "cleaning_runs_v2" / "full-54-v2-resolved"
 DEFAULT_PARSED = paths.CORPUS_DIR / "parsed_v2"
 DEFAULT_MARKDOWN = paths.CORPUS_DIR / "markdown_v2"
 DEFAULT_ASSETS = paths.CORPUS_DIR / "assets_v2"
 DEFAULT_CHUNKS = paths.CORPUS_DIR / "chunks_v2"
 DEFAULT_DATASET = paths.DATASETS_DIR / "cleaning_v2_migration_diff.jsonl"
 DEFAULT_REPORT = paths.GENERATED_REPORTS_DIR / "corpus" / "cleaning_v2_migration_report.md"
+DEFAULT_DECISIONS = paths.REVIEW_INPUTS_DIR / "cleaning_v2_migration_decisions.jsonl"
 
 
 def _atomic_text(path, content):
@@ -85,12 +86,15 @@ def _write_jsonl(path, rows):
 def build_migration(
     *, authority_root, run_dir, v1_markdown_root, v1_chunks_root,
     parsed_root, markdown_root, assets_root, chunks_root, dataset_path,
-    report_path, expected_document_count=54,
+    report_path, expected_document_count=54, decisions_path=None,
 ):
     authority_root = Path(authority_root)
     run_dir = Path(run_dir)
     statuses = _load_jsonl(run_dir / "document_status.jsonl")
     v1_chunks = _chunks_by_doc(v1_chunks_root)
+    decisions = {
+        row["doc_id"]: row for row in _load_jsonl(decisions_path)
+    } if decisions_path else {}
     records = []
 
     for status in sorted(statuses, key=lambda row: row["doc_id"]):
@@ -127,6 +131,7 @@ def build_migration(
         gate = evaluate_migration_gates(
             document, diff, current_digest=first["content_digest"],
             repeated_digest=repeated["content_digest"], minimum_coverage=0.995,
+            migration_decision=decisions.get(doc_id),
         )
         records.append(
             {
@@ -137,6 +142,7 @@ def build_migration(
                 "diff": diff, "gate_passed": gate["passed"],
                 "blocking_issues": gate["blocking_issues"],
                 "review_item_count": len(document.get("review_items", [])) + len(json.loads((authority_dir / "review_queue.json").read_text(encoding="utf-8"))) if (authority_dir / "review_queue.json").is_file() else 0,
+                "migration_decision_id": decisions.get(doc_id, {}).get("decision_id"),
             }
         )
 
@@ -188,6 +194,7 @@ def main(argv=None):
     parser.add_argument("--chunks-root", type=Path, default=DEFAULT_CHUNKS)
     parser.add_argument("--dataset-path", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--report-path", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--decisions-path", type=Path, default=DEFAULT_DECISIONS)
     parser.add_argument("--expected-document-count", type=int, default=54)
     args = parser.parse_args(argv)
     result = build_migration(**vars(args))

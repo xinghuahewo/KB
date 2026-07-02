@@ -579,6 +579,7 @@ def load_schemas():
         "source_gap_queue": load_schema("source_gap_queue.schema.json"),
         "corpus_profile": load_schema("corpus_profile.schema.json"),
         "corpus_ocr_assessment": load_schema("corpus_ocr_assessment.schema.json"),
+        "cleaning_v2_release_gate": load_schema("cleaning_v2_release_gate.schema.json"),
     }
     for entity_type, filename in SCHEMA_BY_ENTITY_TYPE.items():
         schemas[entity_type] = load_schema(filename)
@@ -590,6 +591,15 @@ def corpus_profile_blocking_issues(records):
         f"{record.get('doc_id', '<missing doc_id>')} -> {issue}"
         for record in records
         for issue in record.get("blocking_issues", [])
+    )
+
+
+def validate_cleaning_v2_release_gate(record, schema):
+    return validate_schema(
+        record,
+        schema,
+        "cleaning_v2_release_gate",
+        allow_empty_required=True,
     )
 
 
@@ -932,6 +942,10 @@ def main():
         DATASET_DIR / "corpus_ocr_assessments.jsonl"
     )
     errors.extend(corpus_ocr_errors)
+    cleaning_v2_release_gate, cleaning_v2_release_gate_errors = load_json_file(
+        DATASET_DIR / "cleaning_v2_release_gate.json"
+    )
+    errors.extend(cleaning_v2_release_gate_errors)
 
     parsed_documents = []
     parsed_document_counts_by_subdir = Counter()
@@ -1001,6 +1015,15 @@ def main():
             allow_empty_required=True,
         ))
     corpus_profile_blockers = corpus_profile_blocking_issues(corpus_profiles)
+    cleaning_v2_release_gate_blockers = []
+    if cleaning_v2_release_gate is not None:
+        schema_errors.extend(validate_cleaning_v2_release_gate(
+            cleaning_v2_release_gate, schemas["cleaning_v2_release_gate"]
+        ))
+        if not cleaning_v2_release_gate.get("passed"):
+            cleaning_v2_release_gate_blockers = list(
+                cleaning_v2_release_gate.get("blocking_issues", [])
+            )
     parsed_document_missing_fields = []
     parsed_document_duplicate_doc_ids = []
     parsed_document_unknown_doc_ids = []
@@ -2684,6 +2707,7 @@ def main():
         f"- 语料画像记录数：{len(corpus_profiles)}",
         f"- OCR 质量评估记录数：{len(corpus_ocr_assessments)}",
         f"- 语料画像阻断问题数：{len(corpus_profile_blockers)}",
+        f"- 清洗 v2 发布门禁阻断问题数：{len(cleaning_v2_release_gate_blockers)}",
         f"- 报告策略登记数：{len(report_policy_status['registered_paths'])}",
         f"- 关系记录数：{len(relationships)}",
         f"- JSON 错误数：{len(errors)}",
@@ -2938,6 +2962,7 @@ def main():
         ("JSON 错误", errors),
         ("Schema 错误", schema_errors),
         ("语料画像阻断问题", corpus_profile_blockers),
+        ("清洗 v2 发布门禁阻断问题", cleaning_v2_release_gate_blockers),
         ("重复 source_id", duplicate_source_ids),
         ("重复实体 ID", duplicate_ids),
         ("重复 chunk ID", duplicate_chunk_ids),

@@ -57,3 +57,50 @@ def test_migration_builds_derivatives_diffs_terminal_records_and_chinese_report(
     assert {row["doc_id"] for row in records} == {"doc-a", "doc-b"}
     assert next(row for row in records if row["doc_id"] == "doc-b")["blocking_issues"] == ["quarantined_document"]
     assert "# Docling 清洗 v2 全量迁移报告" in (tmp_path / "report.md").read_text(encoding="utf-8")
+
+
+def test_migration_applies_evidenced_approved_difference_decision(tmp_path):
+    authority = tmp_path / "authority" / "doc-a"
+    authority.mkdir(parents=True)
+    document = _document()
+    (authority / "cleaned_document.json").write_text(json.dumps(document), encoding="utf-8")
+    (authority / "parsed_document.json").write_text(json.dumps(document), encoding="utf-8")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "document_status.jsonl").write_text(
+        json.dumps({"doc_id": "doc-a", "state": "approved", "output_summary": {}}) + "\n",
+        encoding="utf-8",
+    )
+    v1 = tmp_path / "v1"
+    v1.mkdir()
+    (v1 / "doc-a.md").write_text("Stable body removed legacy text\n", encoding="utf-8")
+    decisions = tmp_path / "decisions.jsonl"
+    decisions.write_text(
+        json.dumps(
+            {
+                "doc_id": "doc-a",
+                "decision": "approved",
+                "reason_code": "reviewed_layout_difference",
+                "evidence": {"v1_digest": "sha256:a", "v2_digest": "sha256:b"},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = migration.build_migration(
+        authority_root=tmp_path / "authority",
+        run_dir=run_dir,
+        v1_markdown_root=v1,
+        v1_chunks_root=tmp_path / "empty-chunks",
+        parsed_root=tmp_path / "parsed_v2",
+        markdown_root=tmp_path / "markdown_v2",
+        assets_root=tmp_path / "assets_v2",
+        chunks_root=tmp_path / "chunks_v2",
+        dataset_path=tmp_path / "diffs.jsonl",
+        report_path=tmp_path / "report.md",
+        decisions_path=decisions,
+        expected_document_count=1,
+    )
+
+    assert result["gate_pass_count"] == 1
