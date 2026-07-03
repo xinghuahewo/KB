@@ -1,4 +1,4 @@
-version: rag_retrieval_v1
+version: rag_retrieval_v2
 default_mode: offline_framework
 trusted_collection:
   lifecycle_status:
@@ -11,6 +11,7 @@ embedding:
   default_provider: siliconflow_bge_m3
   offline_fallback_provider: deterministic_mock
   local_model_enabled: false
+  local_endpoint: http://10.109.242.145:8011/v1/embeddings
   providers:
     deterministic_mock:
       enabled: true
@@ -96,6 +97,18 @@ hybrid_retrieval:
   fused_top_k: 20
   context_top_k: 8
   min_vector_similarity: 0.5
+reranker:
+  default_provider: local_bge_reranker_v2_m3
+  fallback_provider: api_fallback
+  model: BAAI/bge-reranker-v2-m3
+  top_n_default: 5
+  top_n_min: 5
+  top_n_max: 8
+  local_endpoint: http://10.109.242.145:8012/v1/rerank
+  api_fallback:
+    endpoint_env: RERANK_API_ENDPOINT
+    api_key_env: RERANK_API_KEY
+    model_env: RERANK_API_MODEL
 lexical_fallback:
   provider: sqlite_fts5
   enabled: true
@@ -127,10 +140,48 @@ query_expansions:
   劫持:
     - hijack
     - BGP hijack
+query_type:
+  allowed_values: [fact, procedure, policy, global, auto]
+  resolved_values: [fact, procedure, policy, global]
+  default: auto
+  resolution:
+    explicit_value_precedence: true
+    primary: deepseek
+    fallback: rule_based
+    final_fallback: fact
+    audit_enabled: true
+  deepseek:
+    classification_prompt_version: query_type_classification_v1
+    summary_prompt_version: global_section_summary_v1
 context_pack:
   max_results: 8
   max_chars: 6000
   generates_final_answer: false
+  default_tokens: 6000
+  hard_max_tokens: 8000
+  sibling_windows:
+    fact: 1
+    procedure: 2
+    policy: 2
+    global: 1
+  full_section_eligible_query_types: [policy, global]
+  parent_budget:
+    normal_span:
+      max_tokens: 1200
+      budget_fraction: 0.30
+    policy_full_section:
+      max_tokens: 3000
+      budget_fraction: 0.50
+      max_full_parent_sections: 1
+    global_full_section:
+      max_tokens: 2000
+      budget_fraction: 0.35
+      max_full_parent_sections: 2
+      max_total_budget_fraction: 0.60
+  global_summary:
+    max_tokens: 400
+degradation_metadata:
+  required_fields: [provider, model, degraded_reason]
 generated_policy:
   embedding_manifest_path: data/published/embedding_manifest.json
   vector_index_path: data/published/rag_mock_vector_index.jsonl

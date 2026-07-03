@@ -17,7 +17,7 @@ def test_rag_and_llm_configs_lock_offline_defaults_and_real_provider_boundaries(
     rag = yaml.safe_load(RAG_CONFIG.read_text(encoding="utf-8"))
     llm = yaml.safe_load(LLM_CONFIG.read_text(encoding="utf-8"))
 
-    assert rag["version"] == "rag_retrieval_v1"
+    assert rag["version"] == "rag_retrieval_v2"
     assert rag["default_mode"] == "offline_framework"
     assert rag["trusted_collection"]["lifecycle_status"] == ["approved"]
     assert rag["trusted_collection"]["exclude_lifecycle_status"] == ["deprecated", "archived"]

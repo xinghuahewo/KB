@@ -4,6 +4,7 @@
   "type": "object",
   "required": ["chunk_id", "doc_id", "source_type", "chunk_type", "topics", "content", "source_ref", "review_status"],
   "properties": {
+    "schema_version": {"enum": ["chunk_v1", "chunk_v2_hierarchical"]},
     "chunk_id": {"type": "string"},
     "doc_id": {"type": "string"},
     "source_type": {"type": "string"},
@@ -15,7 +16,47 @@
     "entities": {"type": "array", "items": {"type": "string"}},
     "source_ref": {"type": "string"},
     "language": {"type": "string"},
-    "review_status": {"enum": ["pending", "approved", "rejected"]}
-  }
+    "review_status": {"enum": ["pending", "approved", "rejected"]},
+    "parent_section_id": {"type": ["string", "null"], "minLength": 1},
+    "chunk_order": {"type": "integer", "minimum": 0},
+    "previous_chunk_id": {"type": ["string", "null"], "minLength": 1},
+    "next_chunk_id": {"type": ["string", "null"], "minLength": 1},
+    "hierarchy_status": {"enum": ["resolved", "unresolved"]},
+    "source_block_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["schema_version"],
+        "properties": {"schema_version": {"const": "chunk_v2_hierarchical"}}
+      },
+      "then": {
+        "required": [
+          "parent_section_id",
+          "chunk_order",
+          "previous_chunk_id",
+          "next_chunk_id",
+          "hierarchy_status",
+          "source_block_ids"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": ["hierarchy_status"],
+              "properties": {"hierarchy_status": {"const": "resolved"}}
+            },
+            "then": {
+              "properties": {
+                "parent_section_id": {"type": "string", "minLength": 1}
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
 }
-
