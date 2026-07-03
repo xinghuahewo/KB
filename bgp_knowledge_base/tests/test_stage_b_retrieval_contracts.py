@@ -3,12 +3,14 @@ import json
 import pytest
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
+from referencing import Registry, Resource
 
 from bgpkb import paths
 
 
 CONFIG_PATH = paths.CONFIG_DIR / "rag_retrieval.yaml"
 SCHEMA_DIR = paths.SCHEMAS_DIR
+SCHEMA_BASE_URI = f"{SCHEMA_DIR.as_uri()}/"
 
 
 def load_schema(name: str) -> dict:
@@ -193,10 +195,25 @@ def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
         incomplete.pop("source_block_ids")
         schema.validate(incomplete)
 
+    v2_fields = {
+        "parent_section_id": "section-1",
+        "chunk_order": 0,
+        "previous_chunk_id": None,
+        "next_chunk_id": None,
+        "hierarchy_status": "resolved",
+        "source_block_ids": ["block-1"],
+    }
+    for field, value in v2_fields.items():
+        with pytest.raises(ValidationError):
+            schema.validate(legacy_chunk | {field: value})
+        with pytest.raises(ValidationError):
+            schema.validate(legacy_chunk | {"schema_version": "chunk_v1", field: value})
+
 
 def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_required_sets():
     retrieval = load_schema("retrieval_result.schema.json")
     context_pack = load_schema("context_pack.schema.json")
+    context_unit_schema = load_schema("context_unit.schema.json")
 
     assert {"@id", "chunk_id", "source_ref", "review_status", "retrieval_method", "score"} <= set(
         retrieval["required"]
@@ -247,8 +264,8 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
     v2_result_fields = {
         "lexical_score": 0.2,
         "lexical_rank": 1,
-        "vector_score": 0.3,
-        "vector_rank": 1,
+        "vector_score": None,
+        "vector_rank": None,
         "fusion_score": 0.1,
         "fusion_rank": 1,
         "rerank_score": None,
@@ -262,9 +279,42 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "degraded": True,
         "degraded_reason": "reranker_unavailable",
     }
-    retrieval_validator.validate(
-        legacy_result | {"schema_version": "retrieval_result_v2"} | v2_result_fields
+    v2_result = (
+        legacy_result
+        | {"schema_version": "retrieval_result_v2", "doc_id": "doc-1"}
+        | v2_result_fields
     )
+    retrieval_validator.validate(v2_result)
+
+    v2_required_fields = {
+        "doc_id",
+        "lexical_score",
+        "lexical_rank",
+        "vector_score",
+        "vector_rank",
+        "fusion_score",
+        "fusion_rank",
+        "rerank_score",
+        "rerank_rank",
+        "match_channels",
+        "section_path",
+        "parent_section_id",
+        "parent_section_heading",
+        "provider",
+        "model",
+        "degraded",
+    }
+    for field in v2_required_fields:
+        incomplete = dict(v2_result)
+        incomplete.pop(field)
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(incomplete)
+
+    for field in ("doc_id", "parent_section_id", "parent_section_heading"):
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(v2_result | {field: ""})
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(v2_result | {"match_channels": []})
 
     with pytest.raises(ValidationError):
         retrieval_validator.validate(legacy_result | {"schema_version": "retrieval_result_v2"})
@@ -278,19 +328,9 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
             )
 
     with pytest.raises(ValidationError):
-        retrieval_validator.validate(
-            legacy_result
-            | {"schema_version": "retrieval_result_v2"}
-            | v2_result_fields
-            | {"fusion_rank": 0}
-        )
+        retrieval_validator.validate(v2_result | {"fusion_rank": 0})
     with pytest.raises(ValidationError):
-        retrieval_validator.validate(
-            legacy_result
-            | {"schema_version": "retrieval_result_v2"}
-            | v2_result_fields
-            | {"degraded_reason": ""}
-        )
+        retrieval_validator.validate(v2_result | {"degraded_reason": ""})
 
     legacy_pack = {
         "query": "BGP",
@@ -298,22 +338,65 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "citations": [],
         "excluded_by_policy": [],
     }
-    context_validator = Draft202012Validator(context_pack)
+    registry = Registry().with_resources(
+        [
+            (
+                f"{SCHEMA_BASE_URI}retrieval_result.schema.json",
+                Resource.from_contents(retrieval),
+            ),
+            (
+                f"{SCHEMA_BASE_URI}context_unit.schema.json",
+                Resource.from_contents(context_unit_schema),
+            ),
+        ]
+    )
+    context_pack = context_pack | {"$id": f"{SCHEMA_BASE_URI}context_pack.schema.json"}
+    context_validator = Draft202012Validator(context_pack, registry=registry)
     context_validator.validate(legacy_pack)
     context_validator.validate(legacy_pack | {"schema_version": "context_pack_v1"})
+
+    context_unit = {
+        "schema_version": "context_unit_v1",
+        "context_id": "context-1",
+        "mode": "parent_span",
+        "doc_id": "doc-1",
+        "section_path": ["引言"],
+        "parent_section_id": "section-1",
+        "parent_section_heading": "引言",
+        "included_chunk_ids": ["chunk-1"],
+        "included_block_ids": ["block-1"],
+        "content": "上下文",
+        "estimated_tokens": 10,
+        "actual_tokens": None,
+        "max_rerank_score": None,
+        "trim_events": [],
+        "citations": [{"chunk_id": "chunk-1", "source_ref": "rfc/1"}],
+    }
 
     v2_pack_fields = {
         "requested_query_type": "auto",
         "resolved_query_type": "fact",
         "token_budget": 6000,
-        "context_units": [],
+        "context_units": [context_unit],
         "provider": "private_bge_m3_service",
         "model": "BAAI/bge-m3",
         "degraded": True,
         "degraded_reason": "query_type_classifier_unavailable",
         "trim_events": [],
     }
-    context_validator.validate(legacy_pack | {"schema_version": "context_pack_v2"} | v2_pack_fields)
+    v2_pack = (
+        legacy_pack
+        | {"schema_version": "context_pack_v2", "results": [v2_result]}
+        | v2_pack_fields
+    )
+    context_validator.validate(v2_pack)
+
+    with pytest.raises(ValidationError):
+        context_validator.validate(v2_pack | {"results": [v2_result | {"fusion_rank": 0}]})
+    with pytest.raises(ValidationError):
+        context_validator.validate(
+            v2_pack | {"context_units": [context_unit | {"citations": []}]}
+        )
 
     with pytest.raises(ValidationError):
         context_validator.validate(legacy_pack | {"schema_version": "context_pack_v2"})

@@ -63,6 +63,7 @@ dev = [
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "pytest" },
+    { name = "referencing" },
 ]
 
 [package.metadata]
@@ -78,6 +79,7 @@ dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "pytest", specifier = ">=9.1.1" },
+    { name = "referencing", specifier = ">=0.37.0" },
 ]
 
 [[package]]

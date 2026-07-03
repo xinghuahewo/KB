@@ -28,6 +28,22 @@
       "uniqueItems": true
     }
   },
+  "$defs": {
+    "requires_hierarchical_v2": {
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {"const": "chunk_v2_hierarchical"}
+      }
+    }
+  },
+  "dependentSchemas": {
+    "parent_section_id": {"$ref": "#/$defs/requires_hierarchical_v2"},
+    "chunk_order": {"$ref": "#/$defs/requires_hierarchical_v2"},
+    "previous_chunk_id": {"$ref": "#/$defs/requires_hierarchical_v2"},
+    "next_chunk_id": {"$ref": "#/$defs/requires_hierarchical_v2"},
+    "hierarchy_status": {"$ref": "#/$defs/requires_hierarchical_v2"},
+    "source_block_ids": {"$ref": "#/$defs/requires_hierarchical_v2"}
+  },
   "allOf": [
     {
       "if": {

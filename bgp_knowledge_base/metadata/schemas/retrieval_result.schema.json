@@ -34,6 +34,7 @@
     "rerank_rank": {"type": ["integer", "null"], "minimum": 1},
     "match_channels": {
       "type": "array",
+      "minItems": 1,
       "items": {"enum": ["lexical", "vector"]},
       "uniqueItems": true
     },
@@ -79,6 +80,11 @@
       },
       "then": {
         "required": [
+          "doc_id",
+          "lexical_score",
+          "lexical_rank",
+          "vector_score",
+          "vector_rank",
           "fusion_score",
           "fusion_rank",
           "rerank_score",
@@ -86,10 +92,16 @@
           "match_channels",
           "section_path",
           "parent_section_id",
+          "parent_section_heading",
           "provider",
           "model",
           "degraded"
-        ]
+        ],
+        "properties": {
+          "doc_id": {"type": "string", "minLength": 1},
+          "parent_section_id": {"type": "string", "minLength": 1},
+          "parent_section_heading": {"type": "string", "minLength": 1}
+        }
       }
     },
     {
