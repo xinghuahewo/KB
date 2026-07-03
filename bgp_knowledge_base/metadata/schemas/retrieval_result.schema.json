@@ -45,7 +45,53 @@
     "degraded": {"type": "boolean"},
     "degraded_reason": {"type": ["string", "null"]}
   },
+  "$defs": {
+    "requires_v2": {
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {"const": "retrieval_result_v2"}
+      }
+    }
+  },
+  "dependentSchemas": {
+    "lexical_score": {"$ref": "#/$defs/requires_v2"},
+    "lexical_rank": {"$ref": "#/$defs/requires_v2"},
+    "vector_score": {"$ref": "#/$defs/requires_v2"},
+    "vector_rank": {"$ref": "#/$defs/requires_v2"},
+    "fusion_score": {"$ref": "#/$defs/requires_v2"},
+    "fusion_rank": {"$ref": "#/$defs/requires_v2"},
+    "rerank_score": {"$ref": "#/$defs/requires_v2"},
+    "rerank_rank": {"$ref": "#/$defs/requires_v2"},
+    "match_channels": {"$ref": "#/$defs/requires_v2"},
+    "section_path": {"$ref": "#/$defs/requires_v2"},
+    "parent_section_id": {"$ref": "#/$defs/requires_v2"},
+    "parent_section_heading": {"$ref": "#/$defs/requires_v2"},
+    "provider": {"$ref": "#/$defs/requires_v2"},
+    "model": {"$ref": "#/$defs/requires_v2"},
+    "degraded": {"$ref": "#/$defs/requires_v2"},
+    "degraded_reason": {"$ref": "#/$defs/requires_v2"}
+  },
   "allOf": [
+    {
+      "if": {
+        "required": ["schema_version"],
+        "properties": {"schema_version": {"const": "retrieval_result_v2"}}
+      },
+      "then": {
+        "required": [
+          "fusion_score",
+          "fusion_rank",
+          "rerank_score",
+          "rerank_rank",
+          "match_channels",
+          "section_path",
+          "parent_section_id",
+          "provider",
+          "model",
+          "degraded"
+        ]
+      }
+    },
     {
       "if": {
         "required": ["degraded"],

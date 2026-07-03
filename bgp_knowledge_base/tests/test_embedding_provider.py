@@ -11,18 +11,19 @@ if str(ROOT) not in sys.path:
 from bgpkb.service import embedding_provider  # noqa: E402
 
 
-def test_default_embedding_provider_is_remote_and_never_runs_local_model(monkeypatch):
-    monkeypatch.delenv("SILICONFLOW_API_KEY", raising=False)
+def test_default_embedding_provider_is_private_service_and_never_runs_local_model():
     settings = embedding_provider.load_settings()
 
-    assert settings["default_provider"] == "siliconflow_bge_m3"
+    assert settings["default_provider"] == "private_bge_m3_service"
     assert settings["offline_fallback_provider"] == "deterministic_mock"
     assert settings["local_model_enabled"] is False
+    assert settings["active_provider"]["endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
     assert settings["active_provider"]["downloads_model"] is False
     assert settings["active_provider"]["requires_network"] is True
     assert settings["active_provider"]["runs_on_current_device"] is False
-    assert settings["active_provider_status"]["available"] is False
-    assert settings["active_provider_status"]["missing_environment"] == ["SILICONFLOW_API_KEY"]
+    assert settings["active_provider_status"]["available"] is True
+    assert settings["active_provider_status"]["credential_source"] == "none"
+    assert settings["active_provider_status"]["missing_environment"] == []
 
 
 def test_qwen_embedding_provider_is_reserved_but_disabled():

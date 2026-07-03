@@ -8,11 +8,25 @@ trusted_collection:
     - archived
   exclude_semantic_blocker: true
 embedding:
-  default_provider: siliconflow_bge_m3
+  default_provider: private_bge_m3_service
+  provider_chain:
+    - private_bge_m3_service
+    - siliconflow_bge_m3
+    - aliyun_eas_bge_m3
   offline_fallback_provider: deterministic_mock
   local_model_enabled: false
   local_endpoint: http://10.109.242.145:8011/v1/embeddings
   providers:
+    private_bge_m3_service:
+      enabled: true
+      model: BAAI/bge-m3
+      endpoint: http://10.109.242.145:8011/v1/embeddings
+      timeout_seconds: 30
+      batch_size: 32
+      payload_style: openai_compatible
+      downloads_model: false
+      requires_network: true
+      runs_on_current_device: false
     deterministic_mock:
       enabled: true
       dimensions: 32

@@ -39,6 +39,19 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
     }
     assert cfg["embedding"]["local_endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
     assert {"siliconflow_bge_m3", "aliyun_eas_bge_m3"} <= set(cfg["embedding"]["providers"])
+    assert cfg["embedding"]["default_provider"] == "private_bge_m3_service"
+    assert cfg["embedding"]["provider_chain"] == [
+        "private_bge_m3_service",
+        "siliconflow_bge_m3",
+        "aliyun_eas_bge_m3",
+    ]
+    private_embedding = cfg["embedding"]["providers"]["private_bge_m3_service"]
+    assert private_embedding["endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
+    assert private_embedding["model"] == "BAAI/bge-m3"
+    assert private_embedding["requires_network"] is True
+    assert private_embedding["runs_on_current_device"] is False
+    assert cfg["embedding"]["offline_fallback_provider"] == "deterministic_mock"
+    assert "deterministic_mock" not in cfg["embedding"]["provider_chain"]
 
     query_type = cfg["query_type"]
     assert query_type["allowed_values"] == ["fact", "procedure", "policy", "global", "auto"]
@@ -140,7 +153,11 @@ def test_section_catalog_and_context_unit_accept_minimum_records():
         "trim_events": [],
         "citations": [{"chunk_id": "chunk-1", "source_ref": "docs/doc-1.md#intro"}],
     }
-    Draft202012Validator(load_schema("context_unit.schema.json")).validate(context_unit)
+    context_validator = Draft202012Validator(load_schema("context_unit.schema.json"))
+    context_validator.validate(context_unit)
+    context_validator.validate(context_unit | {"max_rerank_score": None})
+    with pytest.raises(ValidationError):
+        context_validator.validate(context_unit | {"citations": []})
 
 
 def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
@@ -223,17 +240,88 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "retrieval_method": "hybrid",
         "score": 0.8,
     }
-    Draft202012Validator(retrieval).validate(legacy_result)
+    retrieval_validator = Draft202012Validator(retrieval)
+    retrieval_validator.validate(legacy_result)
+    retrieval_validator.validate(legacy_result | {"schema_version": "retrieval_result_v1"})
 
-    degraded = legacy_result | {
-        "degraded": True,
+    v2_result_fields = {
+        "lexical_score": 0.2,
+        "lexical_rank": 1,
+        "vector_score": 0.3,
+        "vector_rank": 1,
+        "fusion_score": 0.1,
+        "fusion_rank": 1,
+        "rerank_score": None,
+        "rerank_rank": None,
+        "match_channels": ["lexical"],
+        "section_path": ["引言"],
+        "parent_section_id": "section-1",
+        "parent_section_heading": "引言",
         "provider": "rrf",
         "model": "none",
+        "degraded": True,
         "degraded_reason": "reranker_unavailable",
     }
-    Draft202012Validator(retrieval).validate(degraded)
-    Draft202012Validator(retrieval).validate(degraded | {"fusion_rank": 1})
+    retrieval_validator.validate(
+        legacy_result | {"schema_version": "retrieval_result_v2"} | v2_result_fields
+    )
+
     with pytest.raises(ValidationError):
-        Draft202012Validator(retrieval).validate(degraded | {"fusion_rank": 0})
+        retrieval_validator.validate(legacy_result | {"schema_version": "retrieval_result_v2"})
+    for field, value in v2_result_fields.items():
+        isolation_value = False if field == "degraded" else value
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(legacy_result | {field: isolation_value})
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(
+                legacy_result | {"schema_version": "retrieval_result_v1", field: isolation_value}
+            )
+
     with pytest.raises(ValidationError):
-        Draft202012Validator(retrieval).validate(degraded | {"degraded_reason": ""})
+        retrieval_validator.validate(
+            legacy_result
+            | {"schema_version": "retrieval_result_v2"}
+            | v2_result_fields
+            | {"fusion_rank": 0}
+        )
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(
+            legacy_result
+            | {"schema_version": "retrieval_result_v2"}
+            | v2_result_fields
+            | {"degraded_reason": ""}
+        )
+
+    legacy_pack = {
+        "query": "BGP",
+        "results": [],
+        "citations": [],
+        "excluded_by_policy": [],
+    }
+    context_validator = Draft202012Validator(context_pack)
+    context_validator.validate(legacy_pack)
+    context_validator.validate(legacy_pack | {"schema_version": "context_pack_v1"})
+
+    v2_pack_fields = {
+        "requested_query_type": "auto",
+        "resolved_query_type": "fact",
+        "token_budget": 6000,
+        "context_units": [],
+        "provider": "private_bge_m3_service",
+        "model": "BAAI/bge-m3",
+        "degraded": True,
+        "degraded_reason": "query_type_classifier_unavailable",
+        "trim_events": [],
+    }
+    context_validator.validate(legacy_pack | {"schema_version": "context_pack_v2"} | v2_pack_fields)
+
+    with pytest.raises(ValidationError):
+        context_validator.validate(legacy_pack | {"schema_version": "context_pack_v2"})
+    for field, value in v2_pack_fields.items():
+        isolation_value = False if field == "degraded" else value
+        with pytest.raises(ValidationError):
+            context_validator.validate(legacy_pack | {field: isolation_value})
+        with pytest.raises(ValidationError):
+            context_validator.validate(
+                legacy_pack | {"schema_version": "context_pack_v1", field: isolation_value}
+            )
