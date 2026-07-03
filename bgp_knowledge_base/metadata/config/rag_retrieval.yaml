@@ -167,13 +167,17 @@ context_pack:
   full_section_eligible_query_types: [policy, global]
   parent_budget:
     normal_span:
+      formula: min(1200, context_pack_budget * 0.30)
       max_tokens: 1200
       budget_fraction: 0.30
     policy_full_section:
+      formula: min(3000, context_pack_budget * 0.50)
       max_tokens: 3000
       budget_fraction: 0.50
       max_full_parent_sections: 1
     global_full_section:
+      per_parent_formula: min(2000, context_pack_budget * 0.35)
+      total_formula: context_pack_budget * 0.60
       max_tokens: 2000
       budget_fraction: 0.35
       max_full_parent_sections: 2

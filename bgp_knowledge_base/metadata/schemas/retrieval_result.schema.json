@@ -29,6 +29,7 @@
     "vector_score": {"type": ["number", "null"]},
     "vector_rank": {"type": ["integer", "null"], "minimum": 1},
     "fusion_score": {"type": ["number", "null"]},
+    "fusion_rank": {"type": "integer", "minimum": 1},
     "rerank_score": {"type": ["number", "null"]},
     "rerank_rank": {"type": ["integer", "null"], "minimum": 1},
     "match_channels": {

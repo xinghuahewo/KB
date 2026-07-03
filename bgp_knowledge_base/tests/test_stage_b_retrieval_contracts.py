@@ -61,13 +61,20 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
     assert context["full_section_eligible_query_types"] == ["policy", "global"]
     assert context["global_summary"]["max_tokens"] == 400
     assert context["parent_budget"] == {
-        "normal_span": {"max_tokens": 1200, "budget_fraction": 0.30},
+        "normal_span": {
+            "formula": "min(1200, context_pack_budget * 0.30)",
+            "max_tokens": 1200,
+            "budget_fraction": 0.30,
+        },
         "policy_full_section": {
+            "formula": "min(3000, context_pack_budget * 0.50)",
             "max_tokens": 3000,
             "budget_fraction": 0.50,
             "max_full_parent_sections": 1,
         },
         "global_full_section": {
+            "per_parent_formula": "min(2000, context_pack_budget * 0.35)",
+            "total_formula": "context_pack_budget * 0.60",
             "max_tokens": 2000,
             "budget_fraction": 0.35,
             "max_full_parent_sections": 2,
@@ -183,6 +190,7 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "vector_score",
         "vector_rank",
         "fusion_score",
+        "fusion_rank",
         "rerank_score",
         "rerank_rank",
         "match_channels",
@@ -193,6 +201,7 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "degraded",
         "degraded_reason",
     } <= set(retrieval["properties"])
+    assert retrieval["properties"]["fusion_rank"] == {"type": "integer", "minimum": 1}
     assert {"query", "results", "citations", "excluded_by_policy"} <= set(context_pack["required"])
     assert {
         "requested_query_type",
@@ -223,5 +232,8 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         "degraded_reason": "reranker_unavailable",
     }
     Draft202012Validator(retrieval).validate(degraded)
+    Draft202012Validator(retrieval).validate(degraded | {"fusion_rank": 1})
+    with pytest.raises(ValidationError):
+        Draft202012Validator(retrieval).validate(degraded | {"fusion_rank": 0})
     with pytest.raises(ValidationError):
         Draft202012Validator(retrieval).validate(degraded | {"degraded_reason": ""})
