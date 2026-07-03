@@ -94,12 +94,76 @@ def test_derivation_is_stable_and_does_not_mutate_authoritative_document(tmp_pat
             "assets": first["assets"],
             "sections": first["sections"],
             "chunks": first["chunks"],
+            "retrieval_excluded_blocks": first["retrieval_excluded_blocks"],
         },
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
     assert first["content_digest"] == "sha256:" + hashlib.sha256(digest_payload).hexdigest()
+
+
+def test_retrieval_exclusion_audit_is_stable_digested_and_persisted(tmp_path):
+    document = _document()
+    document["blocks"] = [
+        _block("picture", "picture", "", asset_refs=[]),
+        _block("caption", "caption", "图注"),
+        _block("header", "page_header", "页眉"),
+        _block("unknown", "mystery", "未知类型"),
+        _block("empty-code", "code", ""),
+    ]
+
+    first = derivation.build_derivatives(document)
+    second = derivation.build_derivatives(document)
+
+    assert first["excluded_block_count"] == 0
+    assert first["retrieval_excluded_blocks"] == second["retrieval_excluded_blocks"]
+    assert first["content_digest"] == second["content_digest"]
+    assert [(row["block_id"], row["reason"]) for row in first["retrieval_excluded_blocks"]] == [
+        ("picture", "asset_reference_only"),
+        ("caption", "non_retrievable_block_type"),
+        ("header", "non_retrievable_block_type"),
+        ("unknown", "unknown_block_type"),
+        ("empty-code", "empty_content"),
+    ]
+    audit_payload = json.dumps(
+        {
+            "markdown": first["markdown"],
+            "assets": first["assets"],
+            "sections": first["sections"],
+            "chunks": first["chunks"],
+            "retrieval_excluded_blocks": first["retrieval_excluded_blocks"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert first["content_digest"] == "sha256:" + hashlib.sha256(audit_payload).hexdigest()
+    payload_without_audit = json.dumps(
+        {
+            "markdown": first["markdown"],
+            "assets": first["assets"],
+            "sections": first["sections"],
+            "chunks": first["chunks"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert first["content_digest"] != "sha256:" + hashlib.sha256(payload_without_audit).hexdigest()
+
+    derived = derivation.derive_document(document, tmp_path / "derived")
+    manifest = json.loads(
+        (tmp_path / "derived" / "doc-1" / "derivation_manifest.json").read_text(encoding="utf-8")
+    )
+    published = derivation.publish_derivatives(
+        document,
+        markdown_root=tmp_path / "markdown",
+        assets_root=tmp_path / "assets",
+        chunks_root=tmp_path / "chunks",
+    )
+    assert manifest["retrieval_excluded_blocks"] == first["retrieval_excluded_blocks"]
+    assert derived["retrieval_excluded_blocks"] == published["retrieval_excluded_blocks"]
 
 
 def test_derivation_preserves_existing_chunk_id_algorithm_for_retrievable_blocks():

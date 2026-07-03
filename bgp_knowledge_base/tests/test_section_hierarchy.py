@@ -163,6 +163,64 @@ def test_headings_are_structure_and_paragraphs_and_lists_split_into_chunks():
     assert result.sections[1]["estimated_tokens"] == 15
 
 
+def test_all_chunks_use_first_formal_title_even_when_it_follows_root_content_and_heading():
+    from bgpkb.cleaning_v2.section_hierarchy import build_hierarchy
+
+    result = build_hierarchy(
+        _document(
+            [
+                _block("preface", "paragraph", "前置正文", order=0),
+                _block("heading", "heading", "临时章节", level=1, order=1),
+                _block("formal-title", "title", "正式标题", level=1, order=2),
+                _block("body", "paragraph", "后置正文", order=3),
+                _block("other-title", "title", "第二个标题", level=1, order=4),
+                _block("tail", "paragraph", "尾部正文", order=5),
+            ]
+        )
+    )
+
+    assert [chunk["content"] for chunk in result.chunks] == ["前置正文", "后置正文", "尾部正文"]
+    assert {chunk["title"] for chunk in result.chunks} == {"正式标题"}
+
+
+def test_document_title_falls_back_to_source_title_then_heading_then_doc_id():
+    from bgpkb.cleaning_v2.section_hierarchy import build_hierarchy
+
+    source_title_document = _document([_block("body", "paragraph", "正文")])
+    source_title_document["source"]["title"] = "来源标题"
+    heading_document = _document(
+        [
+            _block("heading", "heading", "首个章节", level=2, order=0),
+            _block("body", "paragraph", "正文", order=1),
+        ]
+    )
+    doc_id_document = _document([_block("body", "paragraph", "正文")])
+
+    assert {chunk["title"] for chunk in build_hierarchy(source_title_document).chunks} == {"来源标题"}
+    assert {chunk["title"] for chunk in build_hierarchy(heading_document).chunks} == {"首个章节"}
+    assert {chunk["title"] for chunk in build_hierarchy(doc_id_document).chunks} == {"doc-1"}
+
+
+def test_section_and_chunk_source_refs_fall_back_to_document_path_without_orphan_anchors():
+    from bgpkb.cleaning_v2.section_hierarchy import build_hierarchy
+
+    heading = _block("heading", "heading", "章节", level=1, order=0)
+    heading["provenance"] = {}
+    anchored_body = _block("anchored", "paragraph", "有锚点正文", order=1)
+    anchored_body["provenance"] = {"source_anchor": "/blocks/anchored"}
+    plain_body = _block("plain", "paragraph", "无来源正文", order=2)
+    plain_body["provenance"] = {}
+
+    result = build_hierarchy(_document([heading, anchored_body, plain_body]))
+
+    assert result.sections[1]["source_ref"] == "data/sources/raw/doc.pdf"
+    assert [chunk["source_ref"] for chunk in result.chunks] == [
+        "data/sources/raw/doc.pdf#/blocks/anchored",
+        "data/sources/raw/doc.pdf",
+    ]
+    assert all(chunk["source_ref"] and not chunk["source_ref"].startswith("#") for chunk in result.chunks)
+
+
 def test_code_formula_and_table_are_never_split_even_over_limit():
     from bgpkb.cleaning_v2.section_hierarchy import build_hierarchy
 

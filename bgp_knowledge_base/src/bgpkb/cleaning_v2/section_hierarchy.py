@@ -82,16 +82,18 @@ def build_content_hash(blocks: list[dict]) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-def _source_ref(block: dict) -> str:
+def build_source_ref(block: dict, fallback_source_path: str = "") -> str:
+    """组合块来源；块未声明路径时使用文档来源路径。"""
     provenance = block.get("provenance", {})
-    path = str(provenance.get("source_path", ""))
+    path = str(provenance.get("source_path") or fallback_source_path)
     anchor = str(provenance.get("source_anchor", ""))
     if not anchor:
         return path
     return path + (anchor if anchor.startswith("#") else "#" + anchor)
 
 
-def _table_markdown(table: dict) -> str:
+def render_table_markdown(table: dict) -> str:
+    """将 Canonical table 确定性渲染为 Markdown。"""
     rows = int(table.get("rows", 0))
     columns = int(table.get("columns", 0))
     if rows <= 0 or columns <= 0:
@@ -133,12 +135,25 @@ def _chunk_id(doc_id: str, block_id: str, part_index: int, content: str) -> str:
 def _chunk_contents(block: dict, maximum_chunk_chars: int) -> list[str]:
     block_type = block.get("block_type")
     if block_type == "table":
-        content = _table_markdown(block.get("table") or {})
+        content = render_table_markdown(block.get("table") or {})
     else:
         content = str(block.get("cleaned_text", "")).strip()
     if block_type in SPLITTABLE_BLOCK_TYPES:
         return _split_text(content, maximum_chunk_chars)
     return [content] if content else []
+
+
+def _document_title(document: dict, approved_blocks: list[dict]) -> str:
+    for block in approved_blocks:
+        if block.get("block_type") == "title" and _normalized_text(block.get("cleaned_text", "")):
+            return _normalized_text(block["cleaned_text"])
+    source_title = _normalized_text(document.get("source", {}).get("title", ""))
+    if source_title:
+        return source_title
+    for block in approved_blocks:
+        if block.get("block_type") == "heading" and _normalized_text(block.get("cleaned_text", "")):
+            return _normalized_text(block["cleaned_text"])
+    return str(document["doc_id"])
 
 
 def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> HierarchyResult:
@@ -182,7 +197,7 @@ def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> Hierarch
     path_occurrences: Counter[tuple[str, ...]] = Counter()
     chunks = []
     excluded_blocks = []
-    document_title = ""
+    document_title = _document_title(document, approved)
     source_type = str(document.get("source", {}).get("source_type", "document"))
 
     for block in approved:
@@ -209,7 +224,7 @@ def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> Hierarch
                 "child_section_ids": [],
                 "previous_section_id": None,
                 "next_section_id": None,
-                "source_ref": _source_ref(block) or source_path,
+                "source_ref": build_source_ref(block, source_path),
                 "child_chunk_ids": [],
                 "block_ids": [],
                 "content_chars": 0,
@@ -220,8 +235,6 @@ def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> Hierarch
             direct_blocks[section_id] = []
             direct_chunks[section_id] = []
             heading_stack.append((level, current_section))
-            if not document_title:
-                document_title = heading
         current_section["block_ids"].append(block["block_id"])
         direct_blocks[current_section["section_id"]].append(block)
 
@@ -243,7 +256,7 @@ def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> Hierarch
                     "chunk_type": f"canonical_{block_type}",
                     "topics": list(block.get("topics", [])),
                     "content": content,
-                    "source_ref": _source_ref(block),
+                    "source_ref": build_source_ref(block, source_path),
                     "source_block_ids": [block["block_id"]],
                     "language": block.get("language") or "und",
                     "review_status": "approved",
@@ -279,7 +292,7 @@ def build_hierarchy(document: dict, maximum_chunk_chars: int = 1200) -> Hierarch
         section["content_chars"] = sum(len(chunk["content"]) for chunk in section_chunks)
         section["estimated_tokens"] = (section["content_chars"] + 1) // 2
         if not section["source_ref"] and direct_blocks[section["section_id"]]:
-            section["source_ref"] = _source_ref(direct_blocks[section["section_id"]][0])
+            section["source_ref"] = build_source_ref(direct_blocks[section["section_id"]][0], source_path)
         if not section["source_ref"]:
             raise ValueError("section source_ref 不能为空")
 

@@ -13,33 +13,8 @@ import shutil
 import tempfile
 import unicodedata
 
-from .section_hierarchy import build_hierarchy
+from .section_hierarchy import build_hierarchy, render_table_markdown
 from .transformations import publishable_blocks
-
-
-def _table_markdown(table):
-    rows = int(table.get("rows", 0))
-    columns = int(table.get("columns", 0))
-    if rows <= 0 or columns <= 0:
-        return ""
-    grid = [["" for _ in range(columns)] for _ in range(rows)]
-    for cell in table.get("cells", []):
-        row = int(cell.get("row", 0))
-        column = int(cell.get("column", 0))
-        if 0 <= row < rows and 0 <= column < columns:
-            grid[row][column] = str(cell.get("text", "")).replace("|", "\\|").replace("\n", " ")
-    lines = ["| " + " | ".join(row) + " |" for row in grid]
-    lines.insert(1, "| " + " | ".join("---" for _ in range(columns)) + " |")
-    return "\n".join(lines)
-
-
-def _source_ref(block):
-    provenance = block.get("provenance", {})
-    path = provenance.get("source_path", "")
-    anchor = provenance.get("source_anchor", "")
-    if not anchor:
-        return path
-    return path + (anchor if anchor.startswith("#") else "#" + anchor)
 
 
 def _render_block(block, assets_by_id):
@@ -57,7 +32,7 @@ def _render_block(block, assets_by_id):
     if block_type == "formula":
         return f"$$\n{text}\n$$", text
     if block_type == "table":
-        table_text = _table_markdown(block.get("table", {}))
+        table_text = render_table_markdown(block.get("table", {}))
         return table_text, table_text
     if block_type == "picture":
         asset = next((assets_by_id.get(item) for item in block.get("asset_refs", []) if assets_by_id.get(item)), None)
@@ -87,7 +62,13 @@ def build_derivatives(document, *, maximum_chunk_chars=1200):
             markdown_parts.append(rendered)
     markdown = "\n\n".join(part for part in markdown_parts if part).rstrip() + "\n"
     digest_payload = json.dumps(
-        {"markdown": markdown, "assets": assets, "sections": hierarchy.sections, "chunks": hierarchy.chunks},
+        {
+            "markdown": markdown,
+            "assets": assets,
+            "sections": hierarchy.sections,
+            "chunks": hierarchy.chunks,
+            "retrieval_excluded_blocks": hierarchy.excluded_blocks,
+        },
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return {
@@ -96,6 +77,7 @@ def build_derivatives(document, *, maximum_chunk_chars=1200):
         "assets": assets,
         "sections": hierarchy.sections,
         "chunks": hierarchy.chunks,
+        "retrieval_excluded_blocks": hierarchy.excluded_blocks,
         "approved_block_count": len(approved),
         "excluded_block_count": len(document.get("blocks", [])) - len(approved_ids),
         "content_digest": "sha256:" + hashlib.sha256(digest_payload).hexdigest(),
