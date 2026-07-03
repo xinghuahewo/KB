@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 
 from bgpkb.cleaning_v2 import derivation
@@ -61,14 +62,16 @@ def test_derivation_excludes_unapproved_blocks_and_preserves_source_refs_and_ass
     assets = json.loads((tmp_path / "doc-1" / "assets.json").read_text(encoding="utf-8"))
 
     assert "unreviewed" not in markdown and "legacy" not in markdown
+    assert "# BGP Security" in markdown
     assert "| State | Count |" in markdown
     assert "![Workflow](assets/figure.png)" in markdown
     assert {row["source_ref"] for row in chunks} == {
-        "data/sources/raw/doc.pdf#/texts/title",
         "data/sources/raw/doc.pdf#/texts/body",
         "data/sources/raw/doc.pdf#/texts/table",
-        "data/sources/raw/doc.pdf#/texts/picture",
     }
+    assert all(row["schema_version"] == "chunk_v2_hierarchical" for row in chunks)
+    assert all(row["parent_section_id"] == result["sections"][1]["section_id"] for row in chunks)
+    assert result["sections"][1]["child_chunk_ids"] == [row["chunk_id"] for row in chunks]
     assert [row["asset_id"] for row in assets] == ["asset-1"]
     assert result["excluded_block_count"] == 2
 
@@ -82,8 +85,35 @@ def test_derivation_is_stable_and_does_not_mutate_authoritative_document(tmp_pat
 
     assert document == snapshot
     assert first["content_digest"] == second["content_digest"]
+    assert first["sections"] == second["sections"]
     assert first["chunks"] == second["chunks"]
     assert all(row["chunk_id"].startswith("chunk_v2_") for row in first["chunks"])
+    digest_payload = json.dumps(
+        {
+            "markdown": first["markdown"],
+            "assets": first["assets"],
+            "sections": first["sections"],
+            "chunks": first["chunks"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    assert first["content_digest"] == "sha256:" + hashlib.sha256(digest_payload).hexdigest()
+
+
+def test_derivation_preserves_existing_chunk_id_algorithm_for_retrievable_blocks():
+    document = _document()
+    document["blocks"] = [_block("body", "paragraph", "abcdefghij")]
+
+    result = derivation.build_derivatives(document, maximum_chunk_chars=5)
+
+    expected = [
+        "chunk_v2_" + hashlib.sha256(f"doc-1|body|{index}|{content}".encode("utf-8")).hexdigest()
+        for index, content in enumerate(["abcde", "fghij"], start=1)
+    ]
+    assert [row["chunk_id"] for row in result["chunks"]] == expected
+    assert result["sections"][0]["child_chunk_ids"] == expected
 
 
 def test_empty_textual_blocks_do_not_emit_markdown_markers_or_trailing_spaces():
