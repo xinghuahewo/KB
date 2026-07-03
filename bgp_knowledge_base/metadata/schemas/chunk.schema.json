@@ -41,8 +41,7 @@
     "chunk_order": {"$ref": "#/$defs/requires_hierarchical_v2"},
     "previous_chunk_id": {"$ref": "#/$defs/requires_hierarchical_v2"},
     "next_chunk_id": {"$ref": "#/$defs/requires_hierarchical_v2"},
-    "hierarchy_status": {"$ref": "#/$defs/requires_hierarchical_v2"},
-    "source_block_ids": {"$ref": "#/$defs/requires_hierarchical_v2"}
+    "hierarchy_status": {"$ref": "#/$defs/requires_hierarchical_v2"}
   },
   "allOf": [
     {

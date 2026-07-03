@@ -175,6 +175,13 @@ def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
         "review_status": "approved",
     }
     schema.validate(legacy_chunk)
+    current_chunks_v2_path = paths.PROJECT_ROOT / "data/corpus/chunks_v2/rfc4271.jsonl"
+    current_chunks_v2_record = json.loads(
+        current_chunks_v2_path.read_text(encoding="utf-8").splitlines()[0]
+    )
+    assert "schema_version" not in current_chunks_v2_record
+    assert current_chunks_v2_record["source_block_ids"]
+    schema.validate(current_chunks_v2_record)
 
     v2_chunk = legacy_chunk | {
         "schema_version": "chunk_v2_hierarchical",
@@ -201,7 +208,6 @@ def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
         "previous_chunk_id": None,
         "next_chunk_id": None,
         "hierarchy_status": "resolved",
-        "source_block_ids": ["block-1"],
     }
     for field, value in v2_fields.items():
         with pytest.raises(ValidationError):
@@ -285,6 +291,14 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
         | v2_result_fields
     )
     retrieval_validator.validate(v2_result)
+    vector_only_result = v2_result | {
+        "lexical_score": None,
+        "lexical_rank": None,
+        "vector_score": 0.3,
+        "vector_rank": 1,
+        "match_channels": ["vector"],
+    }
+    retrieval_validator.validate(vector_only_result)
 
     v2_required_fields = {
         "doc_id",
@@ -315,6 +329,27 @@ def test_retrieval_and_context_pack_schemas_add_v2_fields_without_breaking_v1_re
             retrieval_validator.validate(v2_result | {field: ""})
     with pytest.raises(ValidationError):
         retrieval_validator.validate(v2_result | {"match_channels": []})
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(v2_result | {"fusion_score": None})
+
+    for field in ("lexical_score", "lexical_rank"):
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(v2_result | {field: None})
+    for field in ("vector_score", "vector_rank"):
+        with pytest.raises(ValidationError):
+            retrieval_validator.validate(vector_only_result | {field: None})
+
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(v2_result | {"vector_score": 0.3, "vector_rank": 1})
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(
+            vector_only_result | {"lexical_score": 0.2, "lexical_rank": 1}
+        )
+
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(v2_result | {"rerank_score": 0.8, "rerank_rank": None})
+    with pytest.raises(ValidationError):
+        retrieval_validator.validate(v2_result | {"rerank_score": None, "rerank_rank": 1})
 
     with pytest.raises(ValidationError):
         retrieval_validator.validate(legacy_result | {"schema_version": "retrieval_result_v2"})
