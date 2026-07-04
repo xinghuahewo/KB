@@ -45,6 +45,8 @@
 - `tests/test_retrieval_model_service.py`：GPU 服务 HTTP 契约测试，使用 fake model。
 - `tests/test_gpu_device_selector.py`：GPU 排序、角色阈值、不同设备、精确 `.env` 与失败原子性测试。
 - `tests/test_retrieval_model_deploy_release.py`：release symlink 切换、切换前失败和 Compose 回滚测试。
+- `tests/test_release_manifest.py`：app/model/image 任一变化都会改变 release ID 的确定性测试。
+- `tests/test_cleanup_release.py`：release ID、路径边界和 live link 拒删测试。
 - `tests/test_stage_b_retrieval_integration.py`：完整 fake-provider 检索链路集成测试。
 - `deploy/retrieval-models/Dockerfile`：CUDA/FlagEmbedding/FastAPI 镜像。
 - `deploy/retrieval-models/Dockerfile.prepare`：在可联网环境下载并封存模型的小型准备镜像。
@@ -57,7 +59,9 @@
 - `deploy/retrieval-models/verify_runtime.py`：启动前 GPU、模型哈希与接口预检。
 - `deploy/retrieval-models/gpu_policy.json`：声明 `allowed_indices=[2,3]` 及 Embedding/Reranker 各自的最低空闲显存 8192 MiB。
 - `deploy/retrieval-models/select_gpu_devices.py`：按策略查询和选择两张不同 GPU，原子生成不入库的 `.env`；失败时保留旧文件且不得自动使用 GPU 0 或 GPU 1。
-- `deploy/retrieval-models/deploy_release.py`：验证 release 后以临时 symlink 和 `os.replace` 切换两个 live link；Compose 失败时恢复旧 link 并非零退出。
+- `deploy/retrieval-models/build_release_manifest.py`：规范化哈希 app 部署树、模型 lock 与本地镜像 digest，生成 canonical `release_manifest.json` 和 64 位 release ID。
+- `deploy/retrieval-models/deploy_release.py`：验证 release 后切换 live link，启动并健康检查新服务；失败时重新应用并验证旧 release，区分部署失败与回滚失败退出码。
+- `deploy/retrieval-models/cleanup_release.py`：只按严格 64 位 release ID 删除非 live 的直接子目录。
 - `docs/stages/stage_b_hierarchical_retrieval_v1.md`：中文交付与运维说明。
 
 ### 修改文件
@@ -323,13 +327,17 @@ git commit -m "feat: 发布 section catalog 并隔离断链 chunk"
 - 新建：`deploy/retrieval-models/verify_runtime.py`
 - 新建：`deploy/retrieval-models/select_gpu_devices.py`
 - 新建：`deploy/retrieval-models/gpu_policy.json`
+- 新建：`deploy/retrieval-models/build_release_manifest.py`
 - 新建：`deploy/retrieval-models/deploy_release.py`
+- 新建：`deploy/retrieval-models/cleanup_release.py`
 - 新建：`src/bgpkb/service/retrieval_model_client.py`
 - 修改：`src/bgpkb/service/bge_m3_remote_client.py`
 - 新建：`tests/test_retrieval_model_service.py`
 - 新建：`tests/test_retrieval_model_client.py`
 - 新建：`tests/test_gpu_device_selector.py`
+- 新建：`tests/test_release_manifest.py`
 - 新建：`tests/test_retrieval_model_deploy_release.py`
+- 新建：`tests/test_cleanup_release.py`
 
 - [ ] **步骤 1：写 HTTP 契约失败测试**
 
@@ -410,7 +418,7 @@ API reranker 通过 `RERANK_API_ENDPOINT/API_KEY/MODEL` 环境变量配置，不
 nvidia-smi --query-gpu=index,memory.total,memory.used --format=csv,noheader,nounits
 ```
 
-选择器按 `free = total - used` 计算空闲显存，只考虑 `allowed_indices`。候选卡必须分别满足角色阈值，先按 free 降序、index 升序做确定性排序；Embedding 先取第一张满足其阈值的卡，Reranker 再取第二张满足其阈值且与 Embedding 不同的卡。不得回退到 GPU 0 或 GPU 1。
+选择器按 `free = total - used` 计算空闲显存，只考虑 `allowed_indices`，并枚举全部有序且不同的 GPU 配对 `(embedding, reranker)`。每个角色必须分别满足自己的阈值；对合格配对依次按最大化最小角色 headroom、最大化总 headroom、embedding index 升序、reranker index 升序确定唯一选择。不得回退到 GPU 0 或 GPU 1。
 
 成功时返回 `exit 0`，在目标文件同目录写临时文件并原子替换 `.env`，内容必须是精确四行且以换行结尾：
 
@@ -423,26 +431,32 @@ RERANKER_GPU_INDEX=<i>
 
 任何查询、解析、阈值或选择失败均返回 `exit 2`，向 stderr 输出中文或 JSON 诊断，至少包含各候选卡的 total、used、free、角色阈值和失败原因。失败路径删除选择器自身创建的临时文件，但旧 `.env` 字节不变。
 
-Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `restart: unless-stopped`、只映射内网、只读挂载 `/srv/bgpkb/retrieval-models-models`。Compose 使用预构建镜像和 `pull_policy: never`，不要求服务器联网构建。Compose 使用 `EMBEDDING_GPU_CDI` 与 `RERANKER_GPU_CDI` 两个 CDI 设备变量，并在启动前验证两者不同；`.env` 必须加入 `.gitignore`，不得入库。
+`build_release_manifest.py` 对 app 部署文件逐文件记录规范化 relative path 与 SHA-256，再计算 `app_tree_sha256`；生成树哈希时排除输出文件、`.env` 和单独计入的 model lock，避免自引用。同时记录 `model_manifest.lock.json` 的 `model_lock_sha256` 和本地构建镜像的不可变 `image_digest`。脚本按稳定键序、UTF-8、无多余空白生成 canonical release_manifest.json；文件只包含可哈希事实，不写入自引用的 release ID。定义 `RELEASE_ID = sha256(canonical manifest)`，结果必须是 64 位小写十六进制。RELEASE_ID 必须覆盖 app 内容、model lock 和 image digest；app 内容、model lock 或 image digest 任一变化 ID 都必须变化。测试使用固定目录和 digest 验证确定性、逐项变化和路径排序。
 
-`deploy_release.py` 接收待发布 release 目录、两个 live link 与 Compose 启动命令。manifest/hash/GPU prestart 验证失败前不得触碰 live link；验证通过后先在同目录创建临时 symlink，再以 `os.replace` 原子更新 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models`。任一 link 切换失败必须恢复旧 link；Compose 失败也必须恢复旧 link 并非零退出，不得留下半切换状态。
+检索镜像不得复用固定 `stage-b-v1` tag。构建临时镜像并取得不可变 image ID/digest 后生成 release manifest，再打不可变 tag `bgpkb-retrieval-models:<RELEASE_ID>`；旧 tag 必须保留用于回滚。Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `restart: unless-stopped`、只映射内网、只读挂载 `/srv/bgpkb/retrieval-models-models`，并使用 `pull_policy: never`。Compose 使用 `EMBEDDING_GPU_CDI` 与 `RERANKER_GPU_CDI` 两个 CDI 设备变量并验证两者不同；`deploy_release.py` 从每个 release 自己的 `.env` 与 manifest 导出 `RETRIEVAL_IMAGE=bgpkb-retrieval-models:<RELEASE_ID>`，禁止覆盖不可变 tag。GPU `.env` 必须加入 `.gitignore`，不得入库。
+
+`deploy_release.py` 使用可注入的 command runner 与 health checker。切换前记录旧 app/model link 目标、旧 release manifest 和旧 image；manifest/hash/GPU prestart 失败前不得触碰 live link。验证通过后先在同目录创建临时 symlink，再以 `os.replace` 更新 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models`，然后在固定的 `COMPOSE_PROJECT_NAME=bgpkb-retrieval-models` project 中运行新 release 的 `docker compose up -d --pull never`，并检查 8011、8012 health。
+
+若新 release 的 Compose up 或任一 health 失败，脚本必须停止或替换同一 project 的部分新容器，恢复两个旧 link，执行旧 release Compose 的 `docker compose up -d --pull never --force-recreate`，并再次验证两个旧 health。新 release 失败且旧 release 恢复健康时返回 `exit 3`；旧 link、旧 release Compose 或旧 health 任一恢复失败时返回更严重的 `exit 4` 并输出诊断。首次部署没有旧 release 时，新启动失败必须停止部分容器、移除本次 live link、返回非零，不能留下容器或 link。
+
+`cleanup_release.py` 只接受 `--release-id`，且必须匹配 `^[0-9a-f]{64}$`。目标 resolve 后必须恰好是 `/srv/bgpkb/retrieval-releases/<id>` 的直接子目录；空值、短 ID、路径逃逸均非零退出。脚本解析两个 live symlink；若 app link 目标等于候选的 `app` 子目录、model link 目标等于候选的 `models` 子目录，或候选是任一 live 目标的父目录，必须拒绝删除。只有显式命令才允许删除，所有验证都必须在删除前完成。
 
 `verify_runtime.py` 只使用 Python 标准库与 `nvidia-smi`，必须在启动前逐文件校验 lock manifest、GPU 选择和模型目录，启动后再校验健康端点。
 
 - [ ] **步骤 9：写 GPU 选择与 release 部署失败测试**
 
-`tests/test_gpu_device_selector.py` 使用固定 `nvidia-smi` 文本覆盖排序、阈值、不同 GPU、失败不覆盖旧 `.env`、成功精确四行输出，并断言 GPU 0/1 即使空闲也不会入选。`tests/test_retrieval_model_deploy_release.py` 覆盖 prestart 失败前不修改 live link、两个 symlink 成功切换，以及 Compose 失败恢复旧 link 并返回非零。
+`tests/test_gpu_device_selector.py` 使用固定 `nvidia-smi` 文本覆盖配对排序、阈值、不同 GPU、失败不覆盖旧 `.env`、成功精确四行输出，并包含“不同阈值下贪心会失败但交换角色可成功”的样例：GPU 2 free=9000、GPU 3 free=7000、Embedding 阈值=6000、Reranker 阈值=8000 时必须选择 `(embedding=3, reranker=2)`；同时断言 GPU 0/1 即使空闲也不会入选。`tests/test_release_manifest.py` 覆盖 app、model lock、image digest 任一变化都会改变 ID。`tests/test_retrieval_model_deploy_release.py` 用注入的 command runner 和 health checker 覆盖切换前失败、新服务成功、运行态失败后确实重启旧 release Compose 并验证旧 health、回滚失败 `exit 4`、首次部署失败无残留。`tests/test_cleanup_release.py` 覆盖合法非 live release 删除，以及空值、短 ID、路径逃逸、app/model live 目标全部非零且不删除。
 
 - [ ] **步骤 10：运行本地契约测试**
 
 ```bash
-python3 -m pytest tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_bge_m3_remote_client.py tests/test_gpu_device_selector.py tests/test_retrieval_model_deploy_release.py -v
+python3 -m pytest tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_bge_m3_remote_client.py tests/test_gpu_device_selector.py tests/test_release_manifest.py tests/test_retrieval_model_deploy_release.py tests/test_cleanup_release.py -v
 ```
 
 - [ ] **步骤 11：提交**
 
 ```bash
-git add deploy/retrieval-models src/bgpkb/service/retrieval_model_client.py src/bgpkb/service/bge_m3_remote_client.py tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_gpu_device_selector.py tests/test_retrieval_model_deploy_release.py
+git add deploy/retrieval-models src/bgpkb/service/retrieval_model_client.py src/bgpkb/service/bge_m3_remote_client.py tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_gpu_device_selector.py tests/test_release_manifest.py tests/test_retrieval_model_deploy_release.py tests/test_cleanup_release.py
 git commit -m "feat: 增加本地优先检索模型服务"
 ```
 
@@ -811,7 +825,9 @@ python3 -m pytest \
   tests/test_retrieval_model_service.py \
   tests/test_retrieval_model_client.py \
   tests/test_gpu_device_selector.py \
+  tests/test_release_manifest.py \
   tests/test_retrieval_model_deploy_release.py \
+  tests/test_cleanup_release.py \
   tests/test_retrievers.py \
   tests/test_reranking_pipeline.py \
   tests/test_query_type_resolver.py \
@@ -857,13 +873,26 @@ docker run --rm \
     --manifest /app/model_manifest.json \
     --model-root /models \
     --lock-output /app/model_manifest.lock.json
-RELEASE_ID="$(shasum -a 256 deploy/retrieval-models/model_manifest.lock.json | awk '{print $1}')"
+TEMP_IMAGE="bgpkb-retrieval-models:build-$(date +%s)-$$"
+docker buildx build --platform linux/amd64 \
+  -t "$TEMP_IMAGE" \
+  --load -f deploy/retrieval-models/Dockerfile deploy/retrieval-models
+IMAGE_ID="$(docker image inspect --format '{{.Id}}' "$TEMP_IMAGE")"
+RELEASE_METADATA_DIR="$HOME/.cache/bgpkb/release-metadata"
+RELEASE_MANIFEST="$RELEASE_METADATA_DIR/release_manifest.json"
+mkdir -p "$RELEASE_METADATA_DIR"
+python3 deploy/retrieval-models/build_release_manifest.py \
+  --app-root deploy/retrieval-models \
+  --model-lock deploy/retrieval-models/model_manifest.lock.json \
+  --image-digest "$IMAGE_ID" \
+  --output "$RELEASE_MANIFEST"
+RELEASE_ID="$(shasum -a 256 "$RELEASE_MANIFEST" | awk '{print $1}')"
+[[ "$RELEASE_ID" =~ ^[0-9a-f]{64}$ ]]
+RELEASE_IMAGE="bgpkb-retrieval-models:$RELEASE_ID"
+docker tag "$TEMP_IMAGE" "$RELEASE_IMAGE"
 REMOTE_STAGE="/srv/bgpkb/retrieval-releases/.incoming-$RELEASE_ID"
 REMOTE_RELEASE="/srv/bgpkb/retrieval-releases/$RELEASE_ID"
-docker buildx build --platform linux/amd64 \
-  -t bgpkb-retrieval-models:stage-b-v1 \
-  --load -f deploy/retrieval-models/Dockerfile deploy/retrieval-models
-docker save bgpkb-retrieval-models:stage-b-v1 | gzip | \
+docker save "$RELEASE_IMAGE" | gzip | \
   ssh root@10.99.8.28 'gunzip | docker load'
 ssh root@10.99.8.28 "set -euo pipefail; \
   mkdir -p /srv/bgpkb/retrieval-releases; \
@@ -872,6 +901,8 @@ ssh root@10.99.8.28 "set -euo pipefail; \
   mkdir -p '$REMOTE_STAGE/app' '$REMOTE_STAGE/models'"
 rsync -az -e ssh deploy/retrieval-models/ \
   "root@10.99.8.28:$REMOTE_STAGE/app/"
+rsync -az -e ssh "$RELEASE_MANIFEST" \
+  "root@10.99.8.28:$REMOTE_STAGE/app/release_manifest.json"
 rsync -az -e ssh "$MODEL_STAGE_DIR/" \
   "root@10.99.8.28:$REMOTE_STAGE/models/"
 ssh root@10.99.8.28 "set -euo pipefail; \
@@ -885,18 +916,22 @@ ssh root@10.99.8.28 "set -euo pipefail; \
     --app-link /srv/bgpkb/retrieval-models \
     --models-link /srv/bgpkb/retrieval-models-models \
     --prestart-command 'python3 verify_runtime.py --phase prestart --model-root $REMOTE_RELEASE/models' \
-    --compose-command 'docker compose up -d --pull never'"
+    --compose-command 'COMPOSE_PROJECT_NAME=bgpkb-retrieval-models docker compose up -d --pull never' \
+    --rollback-compose-command 'COMPOSE_PROJECT_NAME=bgpkb-retrieval-models docker compose up -d --pull never --force-recreate' \
+    --health-url http://127.0.0.1:8011/health \
+    --health-url http://127.0.0.1:8012/health"
 ```
 
-服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。`RELEASE_ID` 来自 lock 文件 SHA-256；代码和模型先同步到唯一且为空的临时目录，再 rename 为 `/srv/bgpkb/retrieval-releases/$RELEASE_ID/{app,models}`。正式路径 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models` 只作为 live symlink，不直接接收 rsync，也不得回退到 `/tmp`。
+服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。`RELEASE_ID` 是 app tree、model lock 和不可变 image digest 的 canonical manifest SHA-256；命令顺序固定为构建临时镜像、获取 image ID、生成 release manifest/ID、打 release tag、`docker save` 该 tag、同步 release。代码和模型先同步到唯一且为空的临时目录，再 rename 为 `/srv/bgpkb/retrieval-releases/$RELEASE_ID/{app,models}`。正式路径 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models` 只作为 live symlink，不直接接收 rsync，也不得回退到 `/tmp`。
 
-部署命令必须先执行 `nvidia-smi`，再执行精确命令 `select_gpu_devices.py --policy gpu_policy.json --output .env`。`deploy_release.py` 必须在 release 目录内完成 manifest/hash/GPU prestart 验证后才原子切换两个 live symlink，并以 `docker compose up -d --pull never` 启动；任何预检失败不得触碰 live link，Compose 失败必须回滚旧 link。候选池不足两张时停止 Compose 并走 API 降级；不得自动使用 GPU 0 或 GPU 1，也不得硬编码 GPU 2、GPU 3 处于空闲状态。
+部署命令必须先执行 `nvidia-smi`，再执行精确命令 `select_gpu_devices.py --policy gpu_policy.json --output .env`。`deploy_release.py` 从 manifest 校验并导出 `RETRIEVAL_IMAGE=bgpkb-retrieval-models:<RELEASE_ID>`，在 release 目录内完成 manifest/hash/GPU prestart 验证后才切换两个 live symlink，并在固定 Compose project 中以 `docker compose up -d --pull never` 启动和验证两个 health；任何预检失败不得触碰 live link。新运行态失败按任务 4 契约恢复旧 link、重新运行旧 Compose 并验证旧 health。候选池不足两张时停止 Compose 并走 API 降级；不得自动使用 GPU 0 或 GPU 1，也不得硬编码 GPU 2、GPU 3 处于空闲状态。
 
-旧 release 清理不得成为部署路径的一部分，也不得顺带删除任何正式目录。确认某个 release 已不被 live link 引用后，只能在独立维护窗口使用独立显式命令清理，例如：
+旧 release 清理不得成为部署路径的一部分，也不得顺带删除任何正式目录。确认某个 release 已不被 live link 引用后，只能在独立维护窗口调用安全清理器：
 
 ```bash
 OLD_RELEASE_ID="填写已人工确认的旧版本哈希"
-ssh root@10.99.8.28 "rm -rf -- /srv/bgpkb/retrieval-releases/$OLD_RELEASE_ID"
+ssh root@10.99.8.28 \
+  "cd /srv/bgpkb/retrieval-models && python3 cleanup_release.py --release-id '$OLD_RELEASE_ID'"
 ```
 
 - [ ] **步骤 5：验证模型 revision、hash、GPU 与健康端点**
