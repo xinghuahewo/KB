@@ -147,3 +147,15 @@ def test_image_build_consumes_prefetched_verified_model_context():
     assert "docling-tools models download" not in dockerfile
     assert "--build-context model_assets=" in operations
     assert "verify_offline_runtime.py" in operations
+
+
+def test_image_build_supports_an_explicit_debian_mirror_without_changing_default():
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert dockerfile.count("ARG DEBIAN_MIRROR=") == 2
+    assert dockerfile.count('if [ -n "$DEBIAN_MIRROR" ]') == 2
+    assert "deb.debian.org/debian-security" in dockerfile
+    assert "${DEBIAN_MIRROR}/debian-security" in dockerfile
+
+    operations = OPERATIONS_DOC.read_text(encoding="utf-8")
+    assert "--build-arg DEBIAN_MIRROR=" in operations
