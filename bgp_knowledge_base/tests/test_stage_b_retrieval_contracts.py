@@ -33,6 +33,8 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
     assert cfg["reranker"]["top_n_default"] == 5
     assert cfg["reranker"]["top_n_min"] == 5
     assert cfg["reranker"]["top_n_max"] == 8
+    assert cfg["reranker"]["default_provider"] == "local_bge_reranker_v2_m3"
+    assert cfg["reranker"]["fallback_provider"] == "api_fallback"
     assert cfg["reranker"]["local_endpoint"] == "http://10.99.8.28:8012/v1/rerank"
     assert cfg["reranker"]["api_fallback"] == {
         "endpoint_env": "RERANK_API_ENDPOINT",

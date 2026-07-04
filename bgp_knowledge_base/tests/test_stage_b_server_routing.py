@@ -87,17 +87,54 @@ def test_stage_b_plan_requires_selector_generated_distinct_cdi_devices():
         assert expected in plan
 
     task_4 = plan.split("### 任务 4：", 1)[1].split("### 任务 5：", 1)[0]
-    for expected in ("GPU 2", "GPU 3", ".env", "原子", "两张", "不同"):
+    for expected in (
+        "deploy/retrieval-models/gpu_policy.json",
+        '"allowed_indices": [2, 3]',
+        '"embedding_min_free_mib": 8192',
+        '"reranker_min_free_mib": 8192',
+        "nvidia-smi --query-gpu=index,memory.total,memory.used --format=csv,noheader,nounits",
+        "free = total - used",
+        "free 降序、index 升序",
+        "Embedding 先取第一张",
+        "Reranker 再取第二张",
+        "--policy gpu_policy.json --output .env",
+        "exit 0",
+        "exit 2",
+        "旧 `.env` 字节不变",
+        "EMBEDDING_GPU_CDI=nvidia.com/gpu=<i>",
+        "RERANKER_GPU_CDI=nvidia.com/gpu=<i>",
+        "EMBEDDING_GPU_INDEX=<i>",
+        "RERANKER_GPU_INDEX=<i>",
+    ):
+        assert expected in task_4
+    for expected in ("排序", "阈值", "不同 GPU", "失败不覆盖旧 `.env`", "精确四行"):
         assert expected in task_4
     assert "GPU 0" in task_4 and "GPU 1" in task_4
-    assert "不足两张" in task_4 and "API" in task_4
-    assert "两个独立 CDI 设备变量" in task_4
-    assert "EMBEDDING_GPU_DEVICE" in task_4
-    assert "RERANKER_GPU_DEVICE" in task_4
+    assert "候选卡的 total、used、free、角色阈值和失败原因" in task_4
+    assert "Compose 使用 `EMBEDDING_GPU_CDI` 与 `RERANKER_GPU_CDI`" in task_4
+    assert "deploy/retrieval-models/deploy_release.py" in task_4
+    assert "失败前不得触碰 live link" in task_4
+    assert "Compose 失败" in task_4 and "恢复旧 link" in task_4
 
     task_10 = plan.split("### 任务 10：", 1)[1]
-    assert task_10.index("nvidia-smi") < task_10.index("select_gpu_devices.py")
-    assert task_10.index("select_gpu_devices.py") < task_10.index("docker compose up -d --pull never")
-    assert "只从 GPU 2、GPU 3" in task_10
-    assert "不得自动使用 GPU 0 或 GPU 1" in task_10
-    assert "已空闲" not in task_10
+    for expected in (
+        "set -euo pipefail",
+        'RELEASE_ID="$(shasum -a 256 deploy/retrieval-models/model_manifest.lock.json',
+        'REMOTE_STAGE="/srv/bgpkb/retrieval-releases/.incoming-$RELEASE_ID"',
+        'REMOTE_RELEASE="/srv/bgpkb/retrieval-releases/$RELEASE_ID"',
+        "'$REMOTE_STAGE/app' '$REMOTE_STAGE/models'",
+        "'$REMOTE_RELEASE/app'",
+        "$REMOTE_RELEASE/models",
+        "--policy gpu_policy.json --output .env",
+        "deploy_release.py",
+        "docker compose up -d --pull never",
+        "旧 release 清理",
+        "独立显式命令",
+    ):
+        assert expected in task_10
+    deployment_step = task_10.split("**步骤 4：", 1)[1].split("**步骤 5：", 1)[0]
+    assert deployment_step.index("nvidia-smi") < deployment_step.index("select_gpu_devices.py")
+    assert deployment_step.index("select_gpu_devices.py") < deployment_step.index("deploy_release.py")
+    assert "rsync --delete" not in task_10
+    assert "临时目录" in task_10 and "rename" in task_10
+    assert "manifest/hash/GPU prestart" in task_10

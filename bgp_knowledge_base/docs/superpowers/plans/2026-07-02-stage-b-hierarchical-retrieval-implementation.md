@@ -43,17 +43,21 @@
 - `tests/test_context_assembler.py`：所有 query type、提升、去重和裁剪测试。
 - `tests/test_chunking_evaluation.py`：指标口径、基线与硬门禁测试。
 - `tests/test_retrieval_model_service.py`：GPU 服务 HTTP 契约测试，使用 fake model。
+- `tests/test_gpu_device_selector.py`：GPU 排序、角色阈值、不同设备、精确 `.env` 与失败原子性测试。
+- `tests/test_retrieval_model_deploy_release.py`：release symlink 切换、切换前失败和 Compose 回滚测试。
 - `tests/test_stage_b_retrieval_integration.py`：完整 fake-provider 检索链路集成测试。
 - `deploy/retrieval-models/Dockerfile`：CUDA/FlagEmbedding/FastAPI 镜像。
 - `deploy/retrieval-models/Dockerfile.prepare`：在可联网环境下载并封存模型的小型准备镜像。
 - `deploy/retrieval-models/requirements.in` 与 `requirements.lock`：锁定 GPU 服务依赖。
 - `deploy/retrieval-models/service.py`：按角色提供 embeddings 或 rerank 接口。
-- `deploy/retrieval-models/compose.yaml`：两个独立容器、端口、从 `.env` 读取的两个独立 CDI 设备变量、健康检查和持久模型卷。
+- `deploy/retrieval-models/compose.yaml`：两个独立容器、端口、从 `.env` 读取 `EMBEDDING_GPU_CDI` 与 `RERANKER_GPU_CDI`、健康检查和持久模型卷，并拒绝两个变量指向同一 GPU。
 - `deploy/retrieval-models/model_manifest.json`：模型 revision 与 SHA-256 清单。
 - `deploy/retrieval-models/prepare_models.py`：按精确 revision 下载到持久目录并生成逐文件 SHA-256 锁文件。
 - `deploy/retrieval-models/model_manifest.lock.json`：在本机模型准备阶段生成并提交的真实模型文件哈希清单。
 - `deploy/retrieval-models/verify_runtime.py`：启动前 GPU、模型哈希与接口预检。
-- `deploy/retrieval-models/select_gpu_devices.py`：只从 GPU 2、GPU 3 候选池选择两张满足显存要求的不同设备，并原子生成不入库的 `.env`；不足两张时失败并触发 API 降级，不得自动使用 GPU 0 或 GPU 1。
+- `deploy/retrieval-models/gpu_policy.json`：声明 `allowed_indices=[2,3]` 及 Embedding/Reranker 各自的最低空闲显存 8192 MiB。
+- `deploy/retrieval-models/select_gpu_devices.py`：按策略查询和选择两张不同 GPU，原子生成不入库的 `.env`；失败时保留旧文件且不得自动使用 GPU 0 或 GPU 1。
+- `deploy/retrieval-models/deploy_release.py`：验证 release 后以临时 symlink 和 `os.replace` 切换两个 live link；Compose 失败时恢复旧 link 并非零退出。
 - `docs/stages/stage_b_hierarchical_retrieval_v1.md`：中文交付与运维说明。
 
 ### 修改文件
@@ -318,10 +322,14 @@ git commit -m "feat: 发布 section catalog 并隔离断链 chunk"
 - 生成：`deploy/retrieval-models/model_manifest.lock.json`
 - 新建：`deploy/retrieval-models/verify_runtime.py`
 - 新建：`deploy/retrieval-models/select_gpu_devices.py`
+- 新建：`deploy/retrieval-models/gpu_policy.json`
+- 新建：`deploy/retrieval-models/deploy_release.py`
 - 新建：`src/bgpkb/service/retrieval_model_client.py`
 - 修改：`src/bgpkb/service/bge_m3_remote_client.py`
 - 新建：`tests/test_retrieval_model_service.py`
 - 新建：`tests/test_retrieval_model_client.py`
+- 新建：`tests/test_gpu_device_selector.py`
+- 新建：`tests/test_retrieval_model_deploy_release.py`
 
 - [ ] **步骤 1：写 HTTP 契约失败测试**
 
@@ -386,20 +394,55 @@ API reranker 通过 `RERANK_API_ENDPOINT/API_KEY/MODEL` 环境变量配置，不
 
 - [ ] **步骤 8：写 Docker/Compose 与离线预检**
 
-Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `restart: unless-stopped`、只映射内网、只读挂载 `/srv/bgpkb/retrieval-models-models`。Compose 使用预构建镜像和 `pull_policy: never`，不要求服务器联网构建。两个服务分别从不入库 `.env` 读取 `EMBEDDING_GPU_DEVICE` 与 `RERANKER_GPU_DEVICE` 两个独立 CDI 设备变量，值形如 `nvidia.com/gpu=`，并要求绑定不同 GPU。
+`gpu_policy.json` 使用以下锁定策略：
 
-`select_gpu_devices.py` 读取 `nvidia-smi` 的实时显存数据，只从 GPU 2、GPU 3 候选池选择两张满足模型显存要求的不同设备，并原子生成 `.env`；不足两张时必须失败并让调用方使用 API 降级，不得自动使用 GPU 0 或 GPU 1，也不得硬编码候选卡已空闲。`verify_runtime.py` 只使用 Python 标准库与 `nvidia-smi`，必须在启动前逐文件校验 lock manifest、GPU 选择和模型目录，启动后再校验健康端点。
-
-- [ ] **步骤 9：运行本地契约测试**
-
-```bash
-python3 -m pytest tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_bge_m3_remote_client.py -v
+```json
+{
+  "allowed_indices": [2, 3],
+  "embedding_min_free_mib": 8192,
+  "reranker_min_free_mib": 8192
+}
 ```
 
-- [ ] **步骤 10：提交**
+`select_gpu_devices.py --policy gpu_policy.json --output .env` 必须调用并解析：
 
 ```bash
-git add deploy/retrieval-models src/bgpkb/service/retrieval_model_client.py src/bgpkb/service/bge_m3_remote_client.py tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py
+nvidia-smi --query-gpu=index,memory.total,memory.used --format=csv,noheader,nounits
+```
+
+选择器按 `free = total - used` 计算空闲显存，只考虑 `allowed_indices`。候选卡必须分别满足角色阈值，先按 free 降序、index 升序做确定性排序；Embedding 先取第一张满足其阈值的卡，Reranker 再取第二张满足其阈值且与 Embedding 不同的卡。不得回退到 GPU 0 或 GPU 1。
+
+成功时返回 `exit 0`，在目标文件同目录写临时文件并原子替换 `.env`，内容必须是精确四行且以换行结尾：
+
+```dotenv
+EMBEDDING_GPU_CDI=nvidia.com/gpu=<i>
+RERANKER_GPU_CDI=nvidia.com/gpu=<i>
+EMBEDDING_GPU_INDEX=<i>
+RERANKER_GPU_INDEX=<i>
+```
+
+任何查询、解析、阈值或选择失败均返回 `exit 2`，向 stderr 输出中文或 JSON 诊断，至少包含各候选卡的 total、used、free、角色阈值和失败原因。失败路径删除选择器自身创建的临时文件，但旧 `.env` 字节不变。
+
+Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `restart: unless-stopped`、只映射内网、只读挂载 `/srv/bgpkb/retrieval-models-models`。Compose 使用预构建镜像和 `pull_policy: never`，不要求服务器联网构建。Compose 使用 `EMBEDDING_GPU_CDI` 与 `RERANKER_GPU_CDI` 两个 CDI 设备变量，并在启动前验证两者不同；`.env` 必须加入 `.gitignore`，不得入库。
+
+`deploy_release.py` 接收待发布 release 目录、两个 live link 与 Compose 启动命令。manifest/hash/GPU prestart 验证失败前不得触碰 live link；验证通过后先在同目录创建临时 symlink，再以 `os.replace` 原子更新 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models`。任一 link 切换失败必须恢复旧 link；Compose 失败也必须恢复旧 link 并非零退出，不得留下半切换状态。
+
+`verify_runtime.py` 只使用 Python 标准库与 `nvidia-smi`，必须在启动前逐文件校验 lock manifest、GPU 选择和模型目录，启动后再校验健康端点。
+
+- [ ] **步骤 9：写 GPU 选择与 release 部署失败测试**
+
+`tests/test_gpu_device_selector.py` 使用固定 `nvidia-smi` 文本覆盖排序、阈值、不同 GPU、失败不覆盖旧 `.env`、成功精确四行输出，并断言 GPU 0/1 即使空闲也不会入选。`tests/test_retrieval_model_deploy_release.py` 覆盖 prestart 失败前不修改 live link、两个 symlink 成功切换，以及 Compose 失败恢复旧 link 并返回非零。
+
+- [ ] **步骤 10：运行本地契约测试**
+
+```bash
+python3 -m pytest tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_bge_m3_remote_client.py tests/test_gpu_device_selector.py tests/test_retrieval_model_deploy_release.py -v
+```
+
+- [ ] **步骤 11：提交**
+
+```bash
+git add deploy/retrieval-models src/bgpkb/service/retrieval_model_client.py src/bgpkb/service/bge_m3_remote_client.py tests/test_retrieval_model_service.py tests/test_retrieval_model_client.py tests/test_gpu_device_selector.py tests/test_retrieval_model_deploy_release.py
 git commit -m "feat: 增加本地优先检索模型服务"
 ```
 
@@ -767,6 +810,8 @@ python3 -m pytest \
   tests/test_stage_b_hierarchy_gate.py \
   tests/test_retrieval_model_service.py \
   tests/test_retrieval_model_client.py \
+  tests/test_gpu_device_selector.py \
+  tests/test_retrieval_model_deploy_release.py \
   tests/test_retrievers.py \
   tests/test_reranking_pipeline.py \
   tests/test_query_type_resolver.py \
@@ -798,6 +843,8 @@ python3 -m bgpkb.pipeline.build_rag_indexes
 - [ ] **步骤 4：部署两个独立 GPU 容器**
 
 ```bash
+set -euo pipefail
+
 MODEL_STAGE_DIR="$HOME/.cache/bgpkb/model-stage"
 mkdir -p "$MODEL_STAGE_DIR"
 docker build -f deploy/retrieval-models/Dockerfile.prepare \
@@ -810,28 +857,47 @@ docker run --rm \
     --manifest /app/model_manifest.json \
     --model-root /models \
     --lock-output /app/model_manifest.lock.json
+RELEASE_ID="$(shasum -a 256 deploy/retrieval-models/model_manifest.lock.json | awk '{print $1}')"
+REMOTE_STAGE="/srv/bgpkb/retrieval-releases/.incoming-$RELEASE_ID"
+REMOTE_RELEASE="/srv/bgpkb/retrieval-releases/$RELEASE_ID"
 docker buildx build --platform linux/amd64 \
   -t bgpkb-retrieval-models:stage-b-v1 \
   --load -f deploy/retrieval-models/Dockerfile deploy/retrieval-models
 docker save bgpkb-retrieval-models:stage-b-v1 | gzip | \
   ssh root@10.99.8.28 'gunzip | docker load'
-ssh root@10.99.8.28 \
-  'mkdir -p /srv/bgpkb/retrieval-models /srv/bgpkb/retrieval-models-models'
+ssh root@10.99.8.28 "set -euo pipefail; \
+  mkdir -p /srv/bgpkb/retrieval-releases; \
+  test ! -e '$REMOTE_STAGE'; \
+  test ! -e '$REMOTE_RELEASE'; \
+  mkdir -p '$REMOTE_STAGE/app' '$REMOTE_STAGE/models'"
 rsync -az -e ssh deploy/retrieval-models/ \
-  root@10.99.8.28:/srv/bgpkb/retrieval-models/
-rsync -az --delete -e ssh "$MODEL_STAGE_DIR/" \
-  root@10.99.8.28:/srv/bgpkb/retrieval-models-models/
-ssh root@10.99.8.28 \
-  'cd /srv/bgpkb/retrieval-models && \
-   nvidia-smi && \
-   python3 select_gpu_devices.py --candidates 2,3 --env-output .env && \
-   python3 verify_runtime.py --phase prestart --model-root /srv/bgpkb/retrieval-models-models && \
-   docker compose up -d --pull never'
+  "root@10.99.8.28:$REMOTE_STAGE/app/"
+rsync -az -e ssh "$MODEL_STAGE_DIR/" \
+  "root@10.99.8.28:$REMOTE_STAGE/models/"
+ssh root@10.99.8.28 "set -euo pipefail; \
+  cd '$REMOTE_STAGE/app'; \
+  nvidia-smi; \
+  python3 select_gpu_devices.py --policy gpu_policy.json --output .env; \
+  mv '$REMOTE_STAGE' '$REMOTE_RELEASE'; \
+  cd '$REMOTE_RELEASE/app'; \
+  python3 deploy_release.py \
+    --release-root '$REMOTE_RELEASE' \
+    --app-link /srv/bgpkb/retrieval-models \
+    --models-link /srv/bgpkb/retrieval-models-models \
+    --prestart-command 'python3 verify_runtime.py --phase prestart --model-root $REMOTE_RELEASE/models' \
+    --compose-command 'docker compose up -d --pull never'"
 ```
 
-服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。远端代码使用 `/srv/bgpkb/retrieval-models`，模型使用 `/srv/bgpkb/retrieval-models-models`，不得回退到 `/tmp`。
+服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。`RELEASE_ID` 来自 lock 文件 SHA-256；代码和模型先同步到唯一且为空的临时目录，再 rename 为 `/srv/bgpkb/retrieval-releases/$RELEASE_ID/{app,models}`。正式路径 `/srv/bgpkb/retrieval-models` 与 `/srv/bgpkb/retrieval-models-models` 只作为 live symlink，不直接接收 rsync，也不得回退到 `/tmp`。
 
-部署命令必须先执行 `nvidia-smi`，再由 `select_gpu_devices.py` 只从 GPU 2、GPU 3 中选择两张满足显存要求的不同设备，并原子生成不入库的 `.env`。Compose 从 `.env` 读取 `EMBEDDING_GPU_DEVICE` 与 `RERANKER_GPU_DEVICE` 两个独立 CDI 设备变量（值形如 `nvidia.com/gpu=`）后才能启动。候选池不足两张时停止 Compose 并走 API 降级；不得自动使用 GPU 0 或 GPU 1，也不得硬编码 GPU 2、GPU 3 处于空闲状态。
+部署命令必须先执行 `nvidia-smi`，再执行精确命令 `select_gpu_devices.py --policy gpu_policy.json --output .env`。`deploy_release.py` 必须在 release 目录内完成 manifest/hash/GPU prestart 验证后才原子切换两个 live symlink，并以 `docker compose up -d --pull never` 启动；任何预检失败不得触碰 live link，Compose 失败必须回滚旧 link。候选池不足两张时停止 Compose 并走 API 降级；不得自动使用 GPU 0 或 GPU 1，也不得硬编码 GPU 2、GPU 3 处于空闲状态。
+
+旧 release 清理不得成为部署路径的一部分，也不得顺带删除任何正式目录。确认某个 release 已不被 live link 引用后，只能在独立维护窗口使用独立显式命令清理，例如：
+
+```bash
+OLD_RELEASE_ID="填写已人工确认的旧版本哈希"
+ssh root@10.99.8.28 "rm -rf -- /srv/bgpkb/retrieval-releases/$OLD_RELEASE_ID"
+```
 
 - [ ] **步骤 5：验证模型 revision、hash、GPU 与健康端点**
 
