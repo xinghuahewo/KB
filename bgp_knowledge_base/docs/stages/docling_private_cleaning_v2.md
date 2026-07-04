@@ -54,3 +54,10 @@ python3 -m bgpkb.pipeline.build_cleaning_v2_release_gate
 - 质量门禁：Schema 错误、清洗 v2 阻断项、制品清单大小不一致和 SHA-256 不一致均为 0。
 - 发布状态：活动指针、发布 manifest 和 SQLite 均为 v2，SQLite 外键检查错误为 0。
 - 工作树检查：变更范围仅包含本阶段的发布切换、下游兼容、测试、规格任务和机器生成制品；`git diff --check` 通过。
+
+## 2026-07-04 运行路由迁移
+
+- Docling 离线运行路由已迁移至 `root@10.99.8.28`。
+- 新服务器使用 4 × RTX 2080 Ti，默认通过 CDI 路由到 GPU 1。
+- 镜像、模型、SBOM 和许可证清单均从锁定输入重新构建，未从旧服务器迁移。
+- 新镜像 ID 为 `sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2`，已通过断网预检和 CUDA 实际运算。

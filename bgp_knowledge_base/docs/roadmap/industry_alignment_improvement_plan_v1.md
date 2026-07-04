@@ -51,7 +51,7 @@ last_reviewed: "2026-07-02"
 
 已完成的 v2 基线：
 
-- 私有 GPU 容器锁定 Docling、CUDA、Python 依赖和 5 个模型哈希，并已在 `--network none` 下通过 TITAN RTX 离线预检。
+- 私有 GPU 容器锁定 Docling、CUDA、Python 依赖和 5 个模型哈希，并已在新服务器的 RTX 2080 Ti GPU 1 上通过 `--network none` 离线预检和 CUDA 实际运算。
 - Canonical Block v2 保留标题层级、阅读顺序、页码、bbox、表格、代码、公式、图片引用、OCR 证据和逐次 transformation。
 - 54/54 文档完成迁移：23 篇使用 Docling 主结果，31 篇使用已人工确认的 legacy-preservation fallback，未审核 fallback 发布数为 0。
 - 发布指针支持 v1/v2 原子切换；主发布、RAG、SQLite 和标准化出口已通过 v2→v1→v2 回滚演练。

@@ -52,10 +52,13 @@ def test_runtime_assets_and_version_matrix_are_locked():
 
     operations = OPERATIONS_DOC.read_text(encoding="utf-8")
     for expected in (
-        "NVIDIA TITAN RTX",
-        "24576 MiB",
-        "570.133.07",
-        "Docker 28.0.4",
+        "root@10.99.8.28",
+        "4 × NVIDIA GeForce RTX 2080 Ti",
+        "11264 MiB",
+        "545.23.08",
+        "Docker 29.1.3",
+        "nvidia.com/gpu=1",
+        "sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2",
         "Python 3.11",
         "Docling 2.107.0",
         "CUDA 12.8",
