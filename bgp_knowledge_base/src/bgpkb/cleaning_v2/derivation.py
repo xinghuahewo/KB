@@ -32,7 +32,7 @@ def _render_block(block, assets_by_id):
     if block_type == "formula":
         return f"$$\n{text}\n$$", text
     if block_type == "table":
-        table_text = render_table_markdown(block.get("table", {}))
+        table_text = render_table_markdown(block.get("table") or {})
         return table_text, table_text
     if block_type == "picture":
         asset = next((assets_by_id.get(item) for item in block.get("asset_refs", []) if assets_by_id.get(item)), None)

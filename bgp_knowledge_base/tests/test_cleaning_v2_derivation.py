@@ -166,6 +166,21 @@ def test_retrieval_exclusion_audit_is_stable_digested_and_persisted(tmp_path):
     assert derived["retrieval_excluded_blocks"] == published["retrieval_excluded_blocks"]
 
 
+def test_null_table_is_excluded_without_breaking_stable_derivation(tmp_path):
+    document = _document()
+    document["blocks"] = [_block("null-table", "table", "", table=None)]
+
+    first = derivation.derive_document(document, tmp_path / "first")
+    second = derivation.derive_document(document, tmp_path / "second")
+
+    assert (tmp_path / "first" / "doc-1" / "document.md").read_text(encoding="utf-8") == "\n"
+    assert not any(chunk["chunk_type"] == "canonical_table" for chunk in first["chunks"])
+    assert first["retrieval_excluded_blocks"] == [
+        {"block_id": "null-table", "block_type": "table", "reason": "empty_content"}
+    ]
+    assert first["content_digest"] == second["content_digest"]
+
+
 def test_derivation_preserves_existing_chunk_id_algorithm_for_retrievable_blocks():
     document = _document()
     document["blocks"] = [_block("body", "paragraph", "abcdefghij")]
