@@ -52,6 +52,7 @@ python bgp_knowledge_base/deploy/docling/verify_offline_runtime.py \
 docker build \
   --pull \
   --network host \
+  --build-arg DEBIAN_MIRROR=https://mirrors.ustc.edu.cn \
   --build-context model_assets=/srv/bgpkb/docling-models \
   --tag bgpkb-docling-v2:2.107.0-cu128 \
   --file bgp_knowledge_base/deploy/docling/Dockerfile \
@@ -60,6 +61,8 @@ docker build \
 docker image inspect bgpkb-docling-v2:2.107.0-cu128 \
   --format '{{json .RepoDigests}}'
 ```
+
+`DEBIAN_MIRROR` 是可选构建参数；不传时继续使用 Debian 官方源。在官方源延迟较高的网络中，可显式指定可审计的 Debian 镜像站；该参数同时作用于 builder 和 runtime 阶段。
 
 ## 断网预检
 

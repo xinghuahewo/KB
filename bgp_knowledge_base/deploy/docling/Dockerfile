@@ -3,11 +3,18 @@ FROM python:3.11.15-slim-bookworm@sha256:961f57b66f6aee85ae11272cca9219123a860ab
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128
+ARG DEBIAN_MIRROR=
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
     PATH=/opt/venv/bin:$PATH
 
-RUN apt-get update \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+      sed -i \
+        -e "s|http://deb.debian.org/debian-security|${DEBIAN_MIRROR}/debian-security|g" \
+        -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}/debian|g" \
+        /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 RUN python -m venv /opt/venv
@@ -27,6 +34,8 @@ RUN cyclonedx-py environment --output-format JSON --output-file /opt/docling/sbo
 
 FROM python:3.11.15-slim-bookworm@sha256:961f57b66f6aee85ae11272cca9219123a860ab20e2a09a1238f57e0df495825 AS runtime
 
+ARG DEBIAN_MIRROR=
+
 # 生产必须同时使用 Docker 参数 --network=none 启动。
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
@@ -35,7 +44,13 @@ ENV HF_HUB_OFFLINE=1 \
     PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1
 
-RUN apt-get update \
+RUN if [ -n "$DEBIAN_MIRROR" ]; then \
+      sed -i \
+        -e "s|http://deb.debian.org/debian-security|${DEBIAN_MIRROR}/debian-security|g" \
+        -e "s|http://deb.debian.org/debian|${DEBIAN_MIRROR}/debian|g" \
+        /etc/apt/sources.list.d/debian.sources; \
+    fi \
+    && apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system docling && useradd --system --create-home --gid docling --home /home/docling docling
