@@ -46,7 +46,8 @@ def test_migration_builds_derivatives_diffs_terminal_records_and_chinese_report(
         v1_chunks_root=tmp_path / "empty-chunks", parsed_root=tmp_path / "parsed_v2",
         markdown_root=tmp_path / "markdown_v2", assets_root=tmp_path / "assets_v2",
         chunks_root=tmp_path / "chunks_v2", dataset_path=tmp_path / "diffs.jsonl",
-        report_path=tmp_path / "report.md", expected_document_count=2,
+        report_path=tmp_path / "report.md", section_catalog_path=tmp_path / "sections.jsonl",
+        expected_document_count=2,
     )
 
     assert result["terminal_count"] == 2
@@ -57,6 +58,10 @@ def test_migration_builds_derivatives_diffs_terminal_records_and_chinese_report(
     assert {row["doc_id"] for row in records} == {"doc-a", "doc-b"}
     assert next(row for row in records if row["doc_id"] == "doc-b")["blocking_issues"] == ["quarantined_document"]
     assert "# Docling 清洗 v2 全量迁移报告" in (tmp_path / "report.md").read_text(encoding="utf-8")
+    assert result["section_count"] == 1
+    assert result["resolved_chunk_count"] == 1
+    assert result["unresolved_chunk_count"] == 0
+    assert result["hierarchy_resolution_rate"] == 1.0
 
 
 def test_migration_applies_evidenced_approved_difference_decision(tmp_path):
@@ -99,8 +104,55 @@ def test_migration_applies_evidenced_approved_difference_decision(tmp_path):
         chunks_root=tmp_path / "chunks_v2",
         dataset_path=tmp_path / "diffs.jsonl",
         report_path=tmp_path / "report.md",
+        section_catalog_path=tmp_path / "sections.jsonl",
         decisions_path=decisions,
         expected_document_count=1,
     )
 
     assert result["gate_pass_count"] == 1
+
+
+def test_migration_writes_stable_cross_document_section_catalog(tmp_path):
+    authority_root = tmp_path / "authority"
+    statuses = []
+    for doc_id in ("doc-b", "doc-a"):
+        authority = authority_root / doc_id
+        authority.mkdir(parents=True)
+        document = _document(doc_id)
+        document["blocks"] = [
+            {**document["blocks"][0], "block_id": f"{doc_id}-h", "block_type": "heading", "heading_level": 1, "reading_order": 0, "cleaned_text": "章节"},
+            {**document["blocks"][0], "block_id": f"{doc_id}-p", "reading_order": 1},
+        ]
+        (authority / "cleaned_document.json").write_text(json.dumps(document), encoding="utf-8")
+        (authority / "parsed_document.json").write_text(json.dumps(document), encoding="utf-8")
+        statuses.append({"doc_id": doc_id, "state": "approved", "output_summary": {}})
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "document_status.jsonl").write_text("".join(json.dumps(row) + "\n" for row in statuses), encoding="utf-8")
+
+    kwargs = dict(
+        authority_root=authority_root, run_dir=run_dir, v1_markdown_root=tmp_path / "v1",
+        v1_chunks_root=tmp_path / "v1-chunks", parsed_root=tmp_path / "parsed",
+        markdown_root=tmp_path / "markdown", assets_root=tmp_path / "assets",
+        chunks_root=tmp_path / "chunks", dataset_path=tmp_path / "diff.jsonl",
+        report_path=tmp_path / "report.md", section_catalog_path=tmp_path / "sections.jsonl",
+        expected_document_count=2,
+    )
+    first = migration.build_migration(**kwargs)
+    first_bytes = (tmp_path / "sections.jsonl").read_bytes()
+    second = migration.build_migration(**kwargs)
+
+    sections = [json.loads(line) for line in first_bytes.decode().splitlines()]
+    assert [(row["doc_id"], row["section_order"]) for row in sections] == sorted(
+        (row["doc_id"], row["section_order"]) for row in sections
+    )
+    assert (tmp_path / "sections.jsonl").read_bytes() == first_bytes
+    assert first["section_count"] == second["section_count"] == 4
+    chunk_ids = {
+        row["chunk_id"]: row
+        for path in (tmp_path / "chunks").glob("*.jsonl")
+        for row in [json.loads(line) for line in path.read_text().splitlines()]
+    }
+    for section in sections:
+        for chunk_id in section["child_chunk_ids"]:
+            assert chunk_ids[chunk_id]["parent_section_id"] == section["section_id"]

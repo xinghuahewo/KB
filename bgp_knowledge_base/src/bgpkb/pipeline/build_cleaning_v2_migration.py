@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import tempfile
 
+import jsonschema
+
 from bgpkb import paths
 from bgpkb.cleaning_v2.contracts import atomic_write_json
 from bgpkb.cleaning_v2.derivation import (
@@ -26,6 +28,7 @@ DEFAULT_CHUNKS = paths.CORPUS_DIR / "chunks_v2"
 DEFAULT_DATASET = paths.DATASETS_DIR / "cleaning_v2_migration_diff.jsonl"
 DEFAULT_REPORT = paths.GENERATED_REPORTS_DIR / "corpus" / "cleaning_v2_migration_report.md"
 DEFAULT_DECISIONS = paths.REVIEW_INPUTS_DIR / "cleaning_v2_migration_decisions.jsonl"
+DEFAULT_SECTION_CATALOG = paths.DATASETS_DIR / "section_catalog.jsonl"
 
 
 def _atomic_text(path, content):
@@ -83,10 +86,41 @@ def _write_jsonl(path, rows):
     _atomic_text(path, content)
 
 
+def _validate_hierarchy(sections, chunks):
+    schema = json.loads((paths.SCHEMAS_DIR / "section_catalog.schema.json").read_text(encoding="utf-8"))
+    chunk_by_id = {}
+    for chunk in chunks:
+        chunk_id = chunk.get("chunk_id")
+        if chunk_id in chunk_by_id:
+            raise ValueError(f"重复 chunk_id: {chunk_id}")
+        chunk_by_id[chunk_id] = chunk
+    by_doc = {}
+    for section in sections:
+        jsonschema.validate(section, schema)
+        by_doc.setdefault(section["doc_id"], []).append(section)
+    for doc_id, doc_sections in by_doc.items():
+        ordered = sorted(doc_sections, key=lambda row: (row["section_order"], row["section_id"]))
+        ids = {row["section_id"] for row in ordered}
+        if len(ids) != len(ordered):
+            raise ValueError(f"文档 {doc_id} 存在重复 section_id")
+        for index, section in enumerate(ordered):
+            expected_previous = ordered[index - 1]["section_id"] if index else None
+            expected_next = ordered[index + 1]["section_id"] if index + 1 < len(ordered) else None
+            if section["previous_section_id"] != expected_previous or section["next_section_id"] != expected_next:
+                raise ValueError(f"section 邻接不连续: {section['section_id']}")
+            if any(child not in ids for child in section["child_section_ids"]):
+                raise ValueError(f"section 子级引用不存在: {section['section_id']}")
+            for chunk_id in section["child_chunk_ids"]:
+                chunk = chunk_by_id.get(chunk_id)
+                if not chunk or chunk.get("doc_id") != doc_id or chunk.get("parent_section_id") != section["section_id"]:
+                    raise ValueError(f"section/chunk 引用不一致: {section['section_id']} -> {chunk_id}")
+
+
 def build_migration(
     *, authority_root, run_dir, v1_markdown_root, v1_chunks_root,
     parsed_root, markdown_root, assets_root, chunks_root, dataset_path,
-    report_path, expected_document_count=54, decisions_path=None,
+    report_path, section_catalog_path=DEFAULT_SECTION_CATALOG,
+    expected_document_count=54, decisions_path=None,
 ):
     authority_root = Path(authority_root)
     run_dir = Path(run_dir)
@@ -96,6 +130,8 @@ def build_migration(
         row["doc_id"]: row for row in _load_jsonl(decisions_path)
     } if decisions_path else {}
     records = []
+    sections = []
+    chunks = []
 
     for status in sorted(statuses, key=lambda row: row["doc_id"]):
         doc_id = status["doc_id"]
@@ -122,6 +158,8 @@ def build_migration(
             document, markdown_root=markdown_root, assets_root=assets_root,
             chunks_root=chunks_root, asset_source_root=authority_dir,
         )
+        sections.extend(published["sections"])
+        chunks.extend(published["chunks"])
         v1_path = _v1_markdown_path(v1_markdown_root, doc_id)
         v1_markdown = v1_path.read_text(encoding="utf-8") if v1_path else ""
         diff = compare_v1_v2(
@@ -146,11 +184,17 @@ def build_migration(
             }
         )
 
+    sections.sort(key=lambda row: (row["doc_id"], row["section_order"], row["section_id"]))
+    _validate_hierarchy(sections, chunks)
+    _write_jsonl(section_catalog_path, sections)
     _write_jsonl(dataset_path, records)
     terminal_count = sum(row["state"] in {"approved", "quarantined"} for row in statuses)
     approved_count = sum(row["state"] == "approved" for row in statuses)
     quarantined_count = sum(row["state"] == "quarantined" for row in statuses)
     gate_pass_count = sum(row["gate_passed"] for row in records)
+    resolved_chunk_count = sum(row.get("hierarchy_status") == "resolved" for row in chunks)
+    unresolved_chunk_count = len(chunks) - resolved_chunk_count
+    hierarchy_resolution_rate = resolved_chunk_count / len(chunks) if chunks else 1.0
     issue_counts = {}
     for row in records:
         for issue in row["blocking_issues"]:
@@ -160,6 +204,11 @@ def build_migration(
         f"- 目标文档数：{expected_document_count}", f"- 终态文档数：{terminal_count}",
         f"- approved：{approved_count}", f"- quarantined：{quarantined_count}",
         f"- 逐文档迁移门禁通过：{gate_pass_count}/{len(records)}", "",
+        "## 层级派生摘要", "",
+        f"- section 数：{len(sections)}",
+        f"- 已解析 chunk：{resolved_chunk_count}",
+        f"- 未解析且排除检索 chunk：{unresolved_chunk_count}",
+        f"- 层级解析率：{hierarchy_resolution_rate:.2%}", "",
         "## 阻断项汇总", "",
     ]
     if issue_counts:
@@ -178,6 +227,10 @@ def build_migration(
         "approved_count": approved_count,
         "quarantined_count": quarantined_count,
         "gate_pass_count": gate_pass_count,
+        "section_count": len(sections),
+        "resolved_chunk_count": resolved_chunk_count,
+        "unresolved_chunk_count": unresolved_chunk_count,
+        "hierarchy_resolution_rate": hierarchy_resolution_rate,
         "records": records,
     }
 
@@ -194,6 +247,7 @@ def main(argv=None):
     parser.add_argument("--chunks-root", type=Path, default=DEFAULT_CHUNKS)
     parser.add_argument("--dataset-path", type=Path, default=DEFAULT_DATASET)
     parser.add_argument("--report-path", type=Path, default=DEFAULT_REPORT)
+    parser.add_argument("--section-catalog-path", type=Path, default=DEFAULT_SECTION_CATALOG)
     parser.add_argument("--decisions-path", type=Path, default=DEFAULT_DECISIONS)
     parser.add_argument("--expected-document-count", type=int, default=54)
     args = parser.parse_args(argv)

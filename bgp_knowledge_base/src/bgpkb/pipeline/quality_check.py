@@ -5,6 +5,8 @@ import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import jsonschema
+
 from bgpkb import paths
 
 
@@ -580,10 +582,138 @@ def load_schemas():
         "corpus_profile": load_schema("corpus_profile.schema.json"),
         "corpus_ocr_assessment": load_schema("corpus_ocr_assessment.schema.json"),
         "cleaning_v2_release_gate": load_schema("cleaning_v2_release_gate.schema.json"),
+        "section_catalog": load_schema("section_catalog.schema.json"),
     }
     for entity_type, filename in SCHEMA_BY_ENTITY_TYPE.items():
         schemas[entity_type] = load_schema(filename)
     return schemas
+
+
+def validate_stage_b_hierarchy(
+    *, corpus_version, generated_chunks, published_chunks, sections,
+    minimum_resolution_rate=0.99,
+):
+    """纯函数：验证阶段 B 的生成覆盖率与发布层级完整性。"""
+    if corpus_version != "v2":
+        return {"passed": True, "skipped": True, "reason": "v1 不适用阶段 B 层级门禁"}
+
+    errors = []
+    section_schema = load_schema("section_catalog.schema.json")
+    section_by_id = {}
+    sections_by_doc = defaultdict(list)
+    for section in sections:
+        section_id = section.get("section_id", "<missing>")
+        try:
+            jsonschema.validate(section, section_schema)
+        except jsonschema.ValidationError as exc:
+            errors.append(f"section schema 错误 {section_id}: {exc.message}")
+        if section_id in section_by_id:
+            errors.append(f"重复 section_id: {section_id}")
+        section_by_id[section_id] = section
+        sections_by_doc[section.get("doc_id")].append(section)
+
+    for doc_id, doc_sections in sections_by_doc.items():
+        ordered = sorted(doc_sections, key=lambda row: (row.get("section_order", -1), row.get("section_id", "")))
+        for index, section in enumerate(ordered):
+            section_id = section.get("section_id")
+            expected_previous = ordered[index - 1].get("section_id") if index else None
+            expected_next = ordered[index + 1].get("section_id") if index + 1 < len(ordered) else None
+            if section.get("previous_section_id") != expected_previous or section.get("next_section_id") != expected_next:
+                errors.append(f"section 邻接不互反: {section_id}")
+            parent_id = section.get("parent_section_id")
+            if parent_id:
+                parent = section_by_id.get(parent_id)
+                if parent is None:
+                    errors.append(f"parent section 不存在: {section_id} -> {parent_id}")
+                elif parent.get("doc_id") != doc_id:
+                    errors.append(f"section parent 跨文档: {section_id} -> {parent_id}")
+                elif section_id not in parent.get("child_section_ids", []):
+                    errors.append(f"parent/child section 不互反: {section_id}")
+            for child_id in section.get("child_section_ids", []):
+                child = section_by_id.get(child_id)
+                if child is None:
+                    errors.append(f"child section 不存在: {section_id} -> {child_id}")
+                elif child.get("doc_id") != doc_id:
+                    errors.append(f"child section 跨文档: {section_id} -> {child_id}")
+                elif child.get("parent_section_id") != section_id:
+                    errors.append(f"child/parent section 不互反: {section_id} -> {child_id}")
+
+    generated_by_id = {}
+    for chunk in generated_chunks:
+        chunk_id = chunk.get("chunk_id", "<missing>")
+        if chunk_id in generated_by_id:
+            errors.append(f"重复 generated chunk_id: {chunk_id}")
+        generated_by_id[chunk_id] = chunk
+    resolved = [chunk for chunk in generated_chunks if chunk.get("hierarchy_status") == "resolved"]
+    resolution_rate = len(resolved) / len(generated_chunks) if generated_chunks else 1.0
+    if resolution_rate < minimum_resolution_rate:
+        errors.append(f"生成层级解析率 {resolution_rate:.2%} 低于 99% 门槛")
+
+    def validate_resolved(chunks, *, label):
+        traceable = 0
+        by_parent = defaultdict(list)
+        seen = set()
+        for chunk in chunks:
+            chunk_id = chunk.get("chunk_id", "<missing>")
+            if chunk_id in seen:
+                errors.append(f"重复 {label} chunk_id: {chunk_id}")
+            seen.add(chunk_id)
+            required = ("parent_section_id", "chunk_order", "previous_chunk_id", "next_chunk_id", "source_ref", "source_block_ids")
+            if chunk.get("hierarchy_status") != "resolved" or any(field not in chunk for field in required):
+                errors.append(f"{label} chunk 非 resolved 或缺层级字段: {chunk_id}")
+                continue
+            section = section_by_id.get(chunk.get("parent_section_id"))
+            if section is None:
+                errors.append(f"{label} parent section 不存在: {chunk_id}")
+                continue
+            if section.get("doc_id") != chunk.get("doc_id"):
+                errors.append(f"{label} chunk/section 跨文档: {chunk_id}")
+                continue
+            if chunk_id not in section.get("child_chunk_ids", []):
+                errors.append(f"{label} section/chunk 不一致: {chunk_id}")
+                continue
+            if not chunk.get("source_ref") or not chunk.get("source_block_ids"):
+                errors.append(f"{label} source_ref/source_block 追溯为空: {chunk_id}")
+                continue
+            by_parent[chunk["parent_section_id"]].append(chunk)
+            traceable += 1
+        for parent_id, siblings in by_parent.items():
+            orders = [chunk.get("chunk_order") for chunk in siblings]
+            if len(set(orders)) != len(orders) or sorted(orders) != list(range(len(siblings))):
+                errors.append(f"{label} chunk_order 不连续或重复: {parent_id}")
+                continue
+            ordered = sorted(siblings, key=lambda chunk: chunk["chunk_order"])
+            for index, chunk in enumerate(ordered):
+                previous = ordered[index - 1]["chunk_id"] if index else None
+                following = ordered[index + 1]["chunk_id"] if index + 1 < len(ordered) else None
+                if chunk.get("previous_chunk_id") != previous or chunk.get("next_chunk_id") != following:
+                    errors.append(f"{label} chunk 邻接不互反: {chunk['chunk_id']}")
+        return traceable
+
+    validate_resolved(resolved, label="generated")
+    published_traceable = validate_resolved(published_chunks, label="published")
+    published_rate = published_traceable / len(published_chunks) if published_chunks else 1.0
+    if published_rate != 1.0:
+        errors.append(f"published 父级/邻接/来源追溯率必须为 100%，当前 {published_rate:.2%}")
+
+    resolved_ids = {chunk.get("chunk_id") for chunk in resolved}
+    for section in sections:
+        for chunk_id in section.get("child_chunk_ids", []):
+            chunk = generated_by_id.get(chunk_id)
+            if chunk_id not in resolved_ids or chunk is None or chunk.get("parent_section_id") != section.get("section_id"):
+                errors.append(f"section child_chunk_ids 与 generated chunk 不一致: {section.get('section_id')} -> {chunk_id}")
+
+    return {
+        "passed": not errors,
+        "skipped": False,
+        "generated_count": len(generated_chunks),
+        "resolved_count": len(resolved),
+        "unresolved_count": len(generated_chunks) - len(resolved),
+        "resolution_rate": resolution_rate,
+        "published_count": len(published_chunks),
+        "published_traceability_rate": published_rate,
+        "errors": errors,
+    }
 
 
 def corpus_profile_blocking_issues(records):
