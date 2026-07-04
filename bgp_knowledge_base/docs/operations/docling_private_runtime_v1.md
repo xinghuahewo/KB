@@ -2,13 +2,13 @@
 
 ## 目标服务器事实
 
-本基线采集于 2026-07-01，目标为独立 Linux x86_64 GPU 服务器：
+当前生产基线于 2026-07-04 在 `root@10.99.8.28` 重建并验收：
 
-- GPU：NVIDIA TITAN RTX，24576 MiB 显存。
-- NVIDIA 驱动：570.133.07。
-- Docker：Docker 28.0.4，Server API 1.48。
-- 容器 runtime：已安装 `nvidia` runtime，默认 runtime 保持 `runc`。
-- 运行方式：仅批处理，不启动 HTTP API；生产容器使用 `--gpus all --network none`。
+- GPU：4 × NVIDIA GeForce RTX 2080 Ti，单卡 11264 MiB 显存。
+- NVIDIA 驱动：545.23.08；不重置服务器，不升级驱动。
+- Docker：Docker 29.1.3，Server API 1.52，Buildx 0.17.1。
+- GPU 路由：NVIDIA CDI `nvidia.com/gpu=0..3`；Docling 默认使用 `nvidia.com/gpu=1`。
+- 运行方式：仅批处理，不启动 HTTP API；生产容器使用 `--device nvidia.com/gpu=1 --network none`。
 
 ## 锁定版本矩阵
 
@@ -17,7 +17,7 @@
 | Python | Python 3.11 | Docling 2.107.0 要求 Python 3.10 及以上；3.11 兼顾依赖成熟度与维护周期。 |
 | Docling | Docling 2.107.0 | 2026-06-24 发布的正式版本，依赖由 hash lock 固定。 |
 | PyTorch | PyTorch 2.10.0 + cu128 | 官方 CUDA 12.8 Linux x86_64 wheel，固定为 `torch==2.10.0+cu128`。 |
-| CUDA | CUDA 12.8 | NVIDIA 570.133.07 高于 CUDA 12.8 Update 1 的最低 Linux 驱动 570.124.06。 |
+| CUDA | CUDA 12.8 | 新服务器在保留 545.23.08 驱动的前提下，已通过容器启动、PyTorch CUDA 矩阵运算和 Docling 断网预检；该结论仅适用于当前锁定镜像。 |
 | OCR | RapidOCR 3.9.0 / PP-OCRv4 | Docling 标准安装的本地 OCR 路径，保留中英文模型，不调用外部服务。 |
 | 容器 | `python:3.11.15-slim-bookworm` | CUDA 用户态库由 cu128 wheel 锁定，宿主只提供 NVIDIA 驱动与容器 runtime。 |
 
@@ -68,7 +68,7 @@ docker image inspect bgpkb-docling-v2:2.107.0-cu128 \
 
 ```bash
 docker run --rm \
-  --gpus all \
+  --device nvidia.com/gpu=1 \
   --network none \
   bgpkb-docling-v2:2.107.0-cu128
 ```
@@ -82,7 +82,7 @@ docker run --rm \
 - 模型升级必须更新版本、实际 hash、许可证清单和镜像 digest，并重新执行断网 fixture 验收。
 - 当前不启用 VLM、图片语义解释、远程 OCR、Docling Serve 或任何 HTTP API。
 
-## 2026-07-01 实机验收证据
+## 2026-07-01 旧服务器历史验收证据
 
 - 镜像 ID：`sha256:4b33c39c5766c3a24496f3b8f4e559dd53f80b82755dc24ab253c9ec00682a16`。
 - 镜像运行用户：`docling`；镜像大小：11,262,041,042 字节。
@@ -93,3 +93,13 @@ docker run --rm \
 - 输出 fixture：Docling JSON 共 23 个文本 Block、20,467 字节，SHA-256 为 `aa96eb79141ff797516acfcf391c924ae1f200f7d46e73ac958aa879c41d8f18`。
 
 RapidOCR 必须显式配置 `backend="torch"`。实机日志确认检测、方向分类和识别模型均使用 GPU 0；不得使用 CLI 的默认 ONNX backend，因为本锁定环境有意不引入第二套 `onnxruntime` 推理运行时。
+
+## 2026-07-04 新服务器验收证据
+
+- SSH 目标：`root@10.99.8.28`。
+- 镜像 ID：`sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2`。
+- 模型从锁定 revision 重新下载，5 个目录的实际 SHA-256 全部与 manifest 匹配。
+- 镜像使用中科大 Debian 镜像作为显式 build arg 构建，默认 Dockerfile 仍保留官方源。
+- GPU 1 已通过 CDI 路由、`--network none` 离线预检和 PyTorch CUDA 实际矩阵运算。
+- SBOM 和 Python 许可证清单已生成并验证存在。
+- 持久化路径：`/srv/bgpkb/docling-build` 和 `/srv/bgpkb/docling-models`。
