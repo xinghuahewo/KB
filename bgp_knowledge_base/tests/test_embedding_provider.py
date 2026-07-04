@@ -17,7 +17,7 @@ def test_default_embedding_provider_is_private_service_and_never_runs_local_mode
     assert settings["default_provider"] == "private_bge_m3_service"
     assert settings["offline_fallback_provider"] == "deterministic_mock"
     assert settings["local_model_enabled"] is False
-    assert settings["active_provider"]["endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
+    assert settings["active_provider"]["endpoint"] == "http://10.99.8.28:8011/v1/embeddings"
     assert settings["active_provider"]["downloads_model"] is False
     assert settings["active_provider"]["requires_network"] is True
     assert settings["active_provider"]["runs_on_current_device"] is False

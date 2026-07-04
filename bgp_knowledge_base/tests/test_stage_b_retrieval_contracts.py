@@ -33,13 +33,13 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
     assert cfg["reranker"]["top_n_default"] == 5
     assert cfg["reranker"]["top_n_min"] == 5
     assert cfg["reranker"]["top_n_max"] == 8
-    assert cfg["reranker"]["local_endpoint"] == "http://10.109.242.145:8012/v1/rerank"
+    assert cfg["reranker"]["local_endpoint"] == "http://10.99.8.28:8012/v1/rerank"
     assert cfg["reranker"]["api_fallback"] == {
         "endpoint_env": "RERANK_API_ENDPOINT",
         "api_key_env": "RERANK_API_KEY",
         "model_env": "RERANK_API_MODEL",
     }
-    assert cfg["embedding"]["local_endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
+    assert cfg["embedding"]["local_endpoint"] == "http://10.99.8.28:8011/v1/embeddings"
     assert {"siliconflow_bge_m3", "aliyun_eas_bge_m3"} <= set(cfg["embedding"]["providers"])
     assert cfg["embedding"]["default_provider"] == "private_bge_m3_service"
     assert cfg["embedding"]["provider_chain"] == [
@@ -48,7 +48,7 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
         "aliyun_eas_bge_m3",
     ]
     private_embedding = cfg["embedding"]["providers"]["private_bge_m3_service"]
-    assert private_embedding["endpoint"] == "http://10.109.242.145:8011/v1/embeddings"
+    assert private_embedding["endpoint"] == "http://10.99.8.28:8011/v1/embeddings"
     assert private_embedding["model"] == "BAAI/bge-m3"
     assert private_embedding["requires_network"] is True
     assert private_embedding["runs_on_current_device"] is False

@@ -15,12 +15,12 @@ embedding:
     - aliyun_eas_bge_m3
   offline_fallback_provider: deterministic_mock
   local_model_enabled: false
-  local_endpoint: http://10.109.242.145:8011/v1/embeddings
+  local_endpoint: http://10.99.8.28:8011/v1/embeddings
   providers:
     private_bge_m3_service:
       enabled: true
       model: BAAI/bge-m3
-      endpoint: http://10.109.242.145:8011/v1/embeddings
+      endpoint: http://10.99.8.28:8011/v1/embeddings
       timeout_seconds: 30
       batch_size: 32
       payload_style: openai_compatible
@@ -118,7 +118,7 @@ reranker:
   top_n_default: 5
   top_n_min: 5
   top_n_max: 8
-  local_endpoint: http://10.109.242.145:8012/v1/rerank
+  local_endpoint: http://10.99.8.28:8012/v1/rerank
   api_fallback:
     endpoint_env: RERANK_API_ENDPOINT
     api_key_env: RERANK_API_KEY

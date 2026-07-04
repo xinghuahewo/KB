@@ -48,11 +48,12 @@
 - `deploy/retrieval-models/Dockerfile.prepare`：在可联网环境下载并封存模型的小型准备镜像。
 - `deploy/retrieval-models/requirements.in` 与 `requirements.lock`：锁定 GPU 服务依赖。
 - `deploy/retrieval-models/service.py`：按角色提供 embeddings 或 rerank 接口。
-- `deploy/retrieval-models/compose.yaml`：两个独立容器、端口、GPU、健康检查和持久模型卷。
+- `deploy/retrieval-models/compose.yaml`：两个独立容器、端口、从 `.env` 读取的两个独立 CDI 设备变量、健康检查和持久模型卷。
 - `deploy/retrieval-models/model_manifest.json`：模型 revision 与 SHA-256 清单。
 - `deploy/retrieval-models/prepare_models.py`：按精确 revision 下载到持久目录并生成逐文件 SHA-256 锁文件。
 - `deploy/retrieval-models/model_manifest.lock.json`：在本机模型准备阶段生成并提交的真实模型文件哈希清单。
 - `deploy/retrieval-models/verify_runtime.py`：启动前 GPU、模型哈希与接口预检。
+- `deploy/retrieval-models/select_gpu_devices.py`：只从 GPU 2、GPU 3 候选池选择两张满足显存要求的不同设备，并原子生成不入库的 `.env`；不足两张时失败并触发 API 降级，不得自动使用 GPU 0 或 GPU 1。
 - `docs/stages/stage_b_hierarchical_retrieval_v1.md`：中文交付与运维说明。
 
 ### 修改文件
@@ -138,9 +139,9 @@ reranker:
   top_n_default: 5
   top_n_min: 5
   top_n_max: 8
-  local_endpoint: http://10.109.242.145:8012/v1/rerank
+  local_endpoint: http://10.99.8.28:8012/v1/rerank
 embedding:
-  local_endpoint: http://10.109.242.145:8011/v1/embeddings
+  local_endpoint: http://10.99.8.28:8011/v1/embeddings
 query_type:
   allowed_values: [fact, procedure, policy, global, auto]
   default: auto
@@ -316,6 +317,7 @@ git commit -m "feat: 发布 section catalog 并隔离断链 chunk"
 - 新建：`deploy/retrieval-models/prepare_models.py`
 - 生成：`deploy/retrieval-models/model_manifest.lock.json`
 - 新建：`deploy/retrieval-models/verify_runtime.py`
+- 新建：`deploy/retrieval-models/select_gpu_devices.py`
 - 新建：`src/bgpkb/service/retrieval_model_client.py`
 - 修改：`src/bgpkb/service/bge_m3_remote_client.py`
 - 新建：`tests/test_retrieval_model_service.py`
@@ -384,7 +386,9 @@ API reranker 通过 `RERANK_API_ENDPOINT/API_KEY/MODEL` 环境变量配置，不
 
 - [ ] **步骤 8：写 Docker/Compose 与离线预检**
 
-Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `gpus: all`、`restart: unless-stopped`、只映射内网、只读挂载 `/home/nic/.local/share/bgpkb/models`。Compose 使用预构建镜像和 `pull_policy: never`，不要求服务器联网构建。`verify_runtime.py` 只使用 Python 标准库与 `nvidia-smi`，必须在启动前逐文件校验 lock manifest、GPU 和模型目录，启动后再校验健康端点。
+Compose 固定两个独立服务：8011 embeddings、8012 rerank，均 `restart: unless-stopped`、只映射内网、只读挂载 `/srv/bgpkb/retrieval-models-models`。Compose 使用预构建镜像和 `pull_policy: never`，不要求服务器联网构建。两个服务分别从不入库 `.env` 读取 `EMBEDDING_GPU_DEVICE` 与 `RERANKER_GPU_DEVICE` 两个独立 CDI 设备变量，值形如 `nvidia.com/gpu=`，并要求绑定不同 GPU。
+
+`select_gpu_devices.py` 读取 `nvidia-smi` 的实时显存数据，只从 GPU 2、GPU 3 候选池选择两张满足模型显存要求的不同设备，并原子生成 `.env`；不足两张时必须失败并让调用方使用 API 降级，不得自动使用 GPU 0 或 GPU 1，也不得硬编码候选卡已空闲。`verify_runtime.py` 只使用 Python 标准库与 `nvidia-smi`，必须在启动前逐文件校验 lock manifest、GPU 选择和模型目录，启动后再校验健康端点。
 
 - [ ] **步骤 9：运行本地契约测试**
 
@@ -748,11 +752,11 @@ git commit -m "feat: 接通阶段 B 服务与质量门禁"
 docker info
 docker buildx inspect
 df -h "$HOME"
-ssh -b 10.29.98.116 nic@10.109.242.145 \
-  'docker info >/dev/null && nvidia-smi >/dev/null && df -h /home/nic'
+ssh root@10.99.8.28 \
+  'docker info >/dev/null && nvidia-smi && df -h /srv/bgpkb'
 ```
 
-若本机 Docker daemon 未运行，先启动 Docker Desktop；若本机 cache 或远端 home 空间不足，停止部署并清理非项目缓存，不把模型转移到 `/tmp`。
+若本机 Docker daemon 未运行，先启动 Docker Desktop；若本机 cache 或远端 `/srv/bgpkb` 空间不足，停止部署并清理非项目缓存，不把模型转移到 `/tmp`。远端检查只收集实时状态，不得据此永久声明 GPU 2、GPU 3 处于空闲状态。
 
 - [ ] **步骤 1：先运行阶段 B 定向测试**
 
@@ -810,29 +814,33 @@ docker buildx build --platform linux/amd64 \
   -t bgpkb-retrieval-models:stage-b-v1 \
   --load -f deploy/retrieval-models/Dockerfile deploy/retrieval-models
 docker save bgpkb-retrieval-models:stage-b-v1 | gzip | \
-  ssh -b 10.29.98.116 nic@10.109.242.145 'gunzip | docker load'
-ssh -b 10.29.98.116 nic@10.109.242.145 \
-  'mkdir -p /home/nic/bgpkb-retrieval-models /home/nic/.local/share/bgpkb/models'
-rsync -az -e 'ssh -b 10.29.98.116' deploy/retrieval-models/ \
-  nic@10.109.242.145:/home/nic/bgpkb-retrieval-models/
-rsync -az --delete -e 'ssh -b 10.29.98.116' "$MODEL_STAGE_DIR/" \
-  nic@10.109.242.145:/home/nic/.local/share/bgpkb/models/
-ssh -b 10.29.98.116 nic@10.109.242.145 \
-  'cd /home/nic/bgpkb-retrieval-models && \
-   python3 verify_runtime.py --phase prestart --model-root /home/nic/.local/share/bgpkb/models && \
+  ssh root@10.99.8.28 'gunzip | docker load'
+ssh root@10.99.8.28 \
+  'mkdir -p /srv/bgpkb/retrieval-models /srv/bgpkb/retrieval-models-models'
+rsync -az -e ssh deploy/retrieval-models/ \
+  root@10.99.8.28:/srv/bgpkb/retrieval-models/
+rsync -az --delete -e ssh "$MODEL_STAGE_DIR/" \
+  root@10.99.8.28:/srv/bgpkb/retrieval-models-models/
+ssh root@10.99.8.28 \
+  'cd /srv/bgpkb/retrieval-models && \
+   nvidia-smi && \
+   python3 select_gpu_devices.py --candidates 2,3 --env-output .env && \
+   python3 verify_runtime.py --phase prestart --model-root /srv/bgpkb/retrieval-models-models && \
    docker compose up -d --pull never'
 ```
 
-服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。模型目录使用用户 home 下的持久路径，不得回退到 `/tmp`。
+服务器已知不能访问 Hugging Face，因此模型必须在本机可联网准备容器中按精确 commit 下载并生成真实逐文件 SHA-256 lock，再同步到服务器。服务镜像也在本机交叉构建为 `linux/amd64` 并通过 `docker load` 导入；服务器启动过程不得联网拉取镜像或模型。远端代码使用 `/srv/bgpkb/retrieval-models`，模型使用 `/srv/bgpkb/retrieval-models-models`，不得回退到 `/tmp`。
+
+部署命令必须先执行 `nvidia-smi`，再由 `select_gpu_devices.py` 只从 GPU 2、GPU 3 中选择两张满足显存要求的不同设备，并原子生成不入库的 `.env`。Compose 从 `.env` 读取 `EMBEDDING_GPU_DEVICE` 与 `RERANKER_GPU_DEVICE` 两个独立 CDI 设备变量（值形如 `nvidia.com/gpu=`）后才能启动。候选池不足两张时停止 Compose 并走 API 降级；不得自动使用 GPU 0 或 GPU 1，也不得硬编码 GPU 2、GPU 3 处于空闲状态。
 
 - [ ] **步骤 5：验证模型 revision、hash、GPU 与健康端点**
 
 ```bash
-ssh -b 10.29.98.116 nic@10.109.242.145 \
-  'cd /home/nic/bgpkb-retrieval-models && \
-   python3 verify_runtime.py --phase running --model-root /home/nic/.local/share/bgpkb/models'
-curl --fail http://10.109.242.145:8011/health
-curl --fail http://10.109.242.145:8012/health
+ssh root@10.99.8.28 \
+  'cd /srv/bgpkb/retrieval-models && \
+   python3 verify_runtime.py --phase running --model-root /srv/bgpkb/retrieval-models-models'
+curl --fail http://10.99.8.28:8011/health
+curl --fail http://10.99.8.28:8012/health
 ```
 
 本机生成的 lock manifest 必须提交到仓库；后续部署在同步前后都按它校验文件，任何缺失或 hash 漂移都阻断启动。模型二进制只保存在本机 cache 与服务器持久目录，不进入 Git。
