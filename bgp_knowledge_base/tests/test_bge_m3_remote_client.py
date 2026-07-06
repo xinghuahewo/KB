@@ -59,6 +59,7 @@ def test_remote_client_parses_vectors_without_leaking_key(monkeypatch):
         captured["request"] = request
         captured["timeout"] = timeout
         return FakeResponse({
+            "revision": "fixed-revision",
             "data": [
                 {"index": 1, "embedding": [0.0, 1.0]},
                 {"index": 0, "embedding": [1.0, 0.0]},
@@ -78,6 +79,8 @@ def test_remote_client_parses_vectors_without_leaking_key(monkeypatch):
     assert result["vectors"] == [[1.0, 0.0], [0.0, 1.0]]
     assert result["dimension"] == 2
     assert result["provider"] == "siliconflow_bge_m3"
+    assert result["revision"] == "fixed-revision"
+    assert result["latency_ms"] >= 0
     assert captured["timeout"] == 12
     assert "secret-test-key" not in repr(client)
     assert "secret-test-key" not in json.dumps(result)
@@ -93,3 +96,16 @@ def test_remote_client_reports_unavailable_without_api_key():
 
     assert result["ok"] is False
     assert result["error_code"] == "missing_api_key"
+
+
+def test_generic_embedding_api_environment(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_API_ENDPOINT", "https://internal.invalid/v1/embeddings")
+    monkeypatch.setenv("EMBEDDING_API_KEY", "secret")
+    monkeypatch.setenv("EMBEDDING_API_MODEL", "BAAI/bge-m3")
+
+    client = bge_m3_remote_client.BgeM3RemoteClient.from_env("generic")
+
+    assert client.base_url == "https://internal.invalid/v1/embeddings"
+    assert client.api_key == "secret"
+    assert client.model == "BAAI/bge-m3"
+    assert "secret" not in repr(client)

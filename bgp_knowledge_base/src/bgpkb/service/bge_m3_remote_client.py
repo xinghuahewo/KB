@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -33,6 +34,14 @@ class BgeM3RemoteClient:
 
     @classmethod
     def from_env(cls, provider="siliconflow_bge_m3"):
+        if provider == "generic":
+            return cls(
+                provider=provider,
+                api_key=os.environ.get("EMBEDDING_API_KEY", ""),
+                base_url=os.environ.get("EMBEDDING_API_ENDPOINT", ""),
+                model=os.environ.get("EMBEDDING_API_MODEL", DEFAULT_MODEL),
+                timeout=int(os.environ.get("EMBEDDING_API_TIMEOUT_SECONDS", "30")),
+            )
         if provider == "aliyun_eas_bge_m3":
             return cls(
                 provider=provider,
@@ -83,6 +92,7 @@ class BgeM3RemoteClient:
             },
             method="POST",
         )
+        started = time.monotonic()
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -98,6 +108,8 @@ class BgeM3RemoteClient:
             "ok": True,
             "provider": self.provider,
             "model": self.model,
+            "revision": payload.get("revision", ""),
+            "latency_ms": round((time.monotonic() - started) * 1000, 3),
             "vectors": vectors,
             "dimension": len(vectors[0]),
             "input_count": len(texts),
