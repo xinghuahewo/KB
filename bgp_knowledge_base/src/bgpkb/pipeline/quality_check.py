@@ -597,6 +597,7 @@ def validate_stage_b_hierarchy(
     if corpus_version != "v2":
         return {"passed": True, "skipped": True, "reason": "v1 不适用阶段 B 层级门禁"}
 
+    empty_samples = not generated_chunks and not published_chunks and not sections
     errors = []
     if not generated_chunks:
         errors.append("v2 generated chunk 样本为空")
@@ -732,12 +733,12 @@ def validate_stage_b_hierarchy(
         "generated_count": len(generated_chunks),
         "resolved_count": len(resolved),
         "unresolved_count": len(generated_chunks) - len(resolved),
-        "resolution_rate": resolution_rate,
+        "resolution_rate": None if empty_samples else resolution_rate,
         "adjacent_context_eligible_count": adjacent_eligible,
         "adjacent_context_correct_count": adjacent_correct,
-        "adjacent_context_accuracy": adjacent_accuracy,
+        "adjacent_context_accuracy": None if empty_samples else adjacent_accuracy,
         "published_count": len(published_chunks),
-        "published_traceability_rate": published_rate,
+        "published_traceability_rate": None if empty_samples else published_rate,
         "errors": errors,
     }
 

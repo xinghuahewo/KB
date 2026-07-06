@@ -238,6 +238,52 @@ def test_v2_catalog_rejects_broken_section_parent_child_tree(tmp_path, cross_doc
         )
 
 
+@pytest.mark.parametrize(
+    ("second_doc_id", "first_next", "second_previous"),
+    [
+        ("doc-a", "ghost-section", "section-a"),
+        ("doc-a", "section-b", None),
+        ("doc-b", "section-b", "section-a"),
+    ],
+)
+def test_v2_catalog_rejects_invalid_section_adjacency(
+    tmp_path, second_doc_id, first_next, second_previous,
+):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(_resolved_chunk()) + "\n", encoding="utf-8")
+    sections = [
+        _section(next_section_id=first_next),
+        _section(
+            section_id="section-b",
+            doc_id=second_doc_id,
+            section_order=1 if second_doc_id == "doc-a" else 0,
+            previous_section_id=second_previous,
+            child_chunk_ids=[],
+            block_ids=["block-b"],
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="邻接"):
+        published.build_chunk_catalog(
+            chunk_dir, project_root=tmp_path, corpus_version="v2", section_records=sections,
+        )
+
+
+def test_v2_catalog_rejects_ghost_section_child_chunk(tmp_path):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(_resolved_chunk()) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="child_chunk_ids"):
+        published.build_chunk_catalog(
+            chunk_dir,
+            project_root=tmp_path,
+            corpus_version="v2",
+            section_records=[_section(child_chunk_ids=["chunk-v2-a", "ghost-chunk"])],
+        )
+
+
 def test_v1_catalog_keeps_legacy_chunks_without_hierarchy(tmp_path):
     chunk_dir = tmp_path / "chunks"
     chunk_dir.mkdir()

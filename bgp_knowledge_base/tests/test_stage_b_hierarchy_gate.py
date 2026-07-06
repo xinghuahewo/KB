@@ -64,6 +64,12 @@ def test_v2_empty_hierarchy_samples_are_blocked():
     )
 
     assert result["passed"] is False
+    assert result["generated_count"] == 0
+    assert result["published_count"] == 0
+    assert result["adjacent_context_eligible_count"] == 0
+    assert result["resolution_rate"] is None
+    assert result["adjacent_context_accuracy"] is None
+    assert result["published_traceability_rate"] is None
     assert any("为空" in error for error in result["errors"])
 
 

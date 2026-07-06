@@ -175,6 +175,7 @@ def _validate_resolved_v2_chunks(chunks, sections):
         (paths.SCHEMAS_DIR / "section_catalog.schema.json").read_text(encoding="utf-8")
     )
     section_by_id = {}
+    sections_by_doc = defaultdict(list)
     for section in sections:
         try:
             jsonschema.validate(section, section_schema)
@@ -184,6 +185,7 @@ def _validate_resolved_v2_chunks(chunks, sections):
         if not section_id or section_id in section_by_id:
             raise ValueError(f"重复或缺失 section_id: {section_id}")
         section_by_id[section_id] = section
+        sections_by_doc[section["doc_id"]].append(section)
     for section_id, section in section_by_id.items():
         doc_id = section["doc_id"]
         parent_id = section["parent_section_id"]
@@ -203,6 +205,18 @@ def _validate_resolved_v2_chunks(chunks, sections):
                 raise ValueError(f"section child 跨文档: {section_id} -> {child_id}")
             if child["parent_section_id"] != section_id:
                 raise ValueError(f"section child/parent 不互反: {section_id} -> {child_id}")
+    for doc_id, doc_sections in sections_by_doc.items():
+        ordered = sorted(
+            doc_sections, key=lambda section: (section["section_order"], section["section_id"])
+        )
+        for index, section in enumerate(ordered):
+            expected_previous = ordered[index - 1]["section_id"] if index else None
+            expected_next = ordered[index + 1]["section_id"] if index + 1 < len(ordered) else None
+            if (
+                section["previous_section_id"] != expected_previous
+                or section["next_section_id"] != expected_next
+            ):
+                raise ValueError(f"section 邻接不连续或跨文档: {doc_id} -> {section['section_id']}")
     chunk_ids = set()
     by_parent = defaultdict(list)
     for chunk in chunks:
@@ -228,9 +242,16 @@ def _validate_resolved_v2_chunks(chunks, sections):
             raise ValueError(f"parent section 不存在: {chunk_id}")
         if section.get("doc_id") != chunk.get("doc_id"):
             raise ValueError(f"chunk 与 parent section 跨文档: {chunk_id}")
-        if chunk_id not in section.get("child_chunk_ids", []):
-            raise ValueError(f"section.child_chunk_ids 不包含 chunk: {chunk_id}")
         by_parent[chunk["parent_section_id"]].append(chunk)
+    for section_id, section in section_by_id.items():
+        expected_child_ids = {chunk["chunk_id"] for chunk in by_parent.get(section_id, [])}
+        actual_child_ids = set(section["child_chunk_ids"])
+        if actual_child_ids != expected_child_ids:
+            raise ValueError(
+                f"section.child_chunk_ids 与 resolved chunks 不一致: {section_id}; "
+                f"缺失={sorted(expected_child_ids - actual_child_ids)}; "
+                f"多余={sorted(actual_child_ids - expected_child_ids)}"
+            )
     for parent_id, siblings in by_parent.items():
         orders = [chunk.get("chunk_order") for chunk in siblings]
         if len(set(orders)) != len(orders) or sorted(orders) != list(range(len(siblings))):
