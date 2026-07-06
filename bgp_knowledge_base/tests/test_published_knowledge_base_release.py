@@ -9,6 +9,7 @@ from bgpkb.pipeline import build_sqlite_knowledge_base as sqlite_builder
 def _resolved_chunk(chunk_id="chunk-v2-a", **overrides):
     row = {
         "schema_version": "chunk_v2_hierarchical", "chunk_id": chunk_id, "doc_id": "doc-a",
+        "source_type": "standard", "chunk_type": "document", "topics": [],
         "content": "approved v2 content", "review_status": "approved", "source_ref": "raw.pdf#p1",
         "source_block_ids": ["block-a"], "section_path": ["A"], "parent_section_id": "section-a",
         "chunk_order": 0, "previous_chunk_id": None, "next_chunk_id": None, "hierarchy_status": "resolved",
@@ -18,7 +19,14 @@ def _resolved_chunk(chunk_id="chunk-v2-a", **overrides):
 
 
 def _section(**overrides):
-    row = {"section_id": "section-a", "doc_id": "doc-a", "child_chunk_ids": ["chunk-v2-a"]}
+    row = {
+        "schema_version": "section_catalog_v1", "section_id": "section-a",
+        "content_hash": "sha256:x", "doc_id": "doc-a", "heading": "A",
+        "section_path": ["A"], "section_order": 0, "parent_section_id": None,
+        "child_section_ids": [], "previous_section_id": None, "next_section_id": None,
+        "source_ref": "raw.pdf#p1", "child_chunk_ids": ["chunk-v2-a"],
+        "block_ids": ["block-a"], "content_chars": 10, "estimated_tokens": 3,
+    }
     row.update(overrides)
     return row
 
@@ -157,6 +165,79 @@ def test_v2_catalog_rejects_broken_resolved_hierarchy(tmp_path, chunks, sections
         )
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"section_path": "A"}, "section_path"),
+        ({"source_block_ids": "block-a"}, "source_block_ids"),
+        ({"chunk_order": False}, "chunk_order"),
+    ],
+)
+def test_v2_catalog_validates_chunk_schema_types(tmp_path, overrides, message):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    chunk = _resolved_chunk(**overrides)
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(chunk) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        published.build_chunk_catalog(
+            chunk_dir, project_root=tmp_path, corpus_version="v2", section_records=[_section()],
+        )
+
+
+def test_v2_catalog_validates_section_schema_types(tmp_path):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(_resolved_chunk()) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="section_path"):
+        published.build_chunk_catalog(
+            chunk_dir,
+            project_root=tmp_path,
+            corpus_version="v2",
+            section_records=[_section(section_path="A")],
+        )
+
+
+def test_v2_catalog_validates_unresolved_chunk_schema_before_isolation(tmp_path):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    chunk = _resolved_chunk(
+        hierarchy_status="unresolved", parent_section_id=None, source_block_ids="block-a",
+    )
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(chunk) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source_block_ids"):
+        published.build_chunk_catalog(
+            chunk_dir, project_root=tmp_path, corpus_version="v2", section_records=[_section()],
+        )
+
+
+@pytest.mark.parametrize("cross_document", [False, True])
+def test_v2_catalog_rejects_broken_section_parent_child_tree(tmp_path, cross_document):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(_resolved_chunk()) + "\n", encoding="utf-8")
+    root = _section(child_section_ids=["section-b"], next_section_id="section-b")
+    child = _section(
+        section_id="section-b",
+        doc_id="doc-b" if cross_document else "doc-a",
+        section_order=1,
+        parent_section_id="section-a" if cross_document else None,
+        previous_section_id="section-a",
+        child_chunk_ids=[],
+        block_ids=["block-b"],
+    )
+
+    with pytest.raises(ValueError, match="跨文档" if cross_document else "互反"):
+        published.build_chunk_catalog(
+            chunk_dir,
+            project_root=tmp_path,
+            corpus_version="v2",
+            section_records=[root, child],
+        )
+
+
 def test_v1_catalog_keeps_legacy_chunks_without_hierarchy(tmp_path):
     chunk_dir = tmp_path / "chunks"
     chunk_dir.mkdir()
@@ -186,6 +267,21 @@ def test_resolved_v2_chunk_with_wrong_schema_version_is_broken(tmp_path):
         published.build_chunk_catalog(
             chunk_dir, project_root=tmp_path, corpus_version="v2", section_records=[_section()],
         )
+
+
+@pytest.mark.parametrize(
+    ("corpus_version", "contains_section_catalog"),
+    [("v2", True), ("v1", False)],
+)
+def test_manifest_inputs_register_section_catalog_only_for_v2(
+    corpus_version, contains_section_catalog,
+):
+    inputs = published.build_manifest_inputs({
+        "version": corpus_version,
+        "chunks": f"data/corpus/chunks_{corpus_version}",
+    })
+
+    assert ("data/derived/datasets/section_catalog.jsonl" in inputs) is contains_section_catalog
 
 
 def test_publish_report_records_hierarchy_integrity_and_isolation(monkeypatch, tmp_path):

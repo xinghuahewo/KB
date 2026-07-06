@@ -58,9 +58,47 @@ def test_generated_resolution_below_99_percent_is_blocked():
     assert any("99%" in error for error in result["errors"])
 
 
+def test_v2_empty_hierarchy_samples_are_blocked():
+    result = quality_check.validate_stage_b_hierarchy(
+        corpus_version="v2", generated_chunks=[], published_chunks=[], sections=[],
+    )
+
+    assert result["passed"] is False
+    assert any("为空" in error for error in result["errors"])
+
+
+def test_generated_hierarchy_status_rejects_unknown_value():
+    generated, sections = _fixture(count=100, unresolved=1)
+    generated[-1]["hierarchy_status"] = "resovled"
+
+    result = quality_check.validate_stage_b_hierarchy(
+        corpus_version="v2",
+        generated_chunks=generated,
+        published_chunks=generated[:-1],
+        sections=sections,
+    )
+
+    assert result["passed"] is False
+    assert any("hierarchy_status" in error for error in result["errors"])
+
+
+def test_published_chunk_ids_must_cover_all_resolved_chunks():
+    generated, sections = _fixture(count=1, unresolved=0)
+
+    result = quality_check.validate_stage_b_hierarchy(
+        corpus_version="v2",
+        generated_chunks=generated,
+        published_chunks=[],
+        sections=sections,
+    )
+
+    assert result["passed"] is False
+    assert any("published" in error and "chunk_id" in error for error in result["errors"])
+
+
 @pytest.mark.parametrize(
     ("wrong_link_count", "expected_accuracy", "expected_passed"),
-    [(1, 0.99, True), (3, 0.97, False)],
+    [(1, 0.99, True), (2, 0.98, True), (3, 0.97, False)],
 )
 def test_generated_adjacency_uses_98_percent_accuracy_gate(
     wrong_link_count, expected_accuracy, expected_passed,
@@ -72,7 +110,7 @@ def test_generated_adjacency_uses_98_percent_accuracy_gate(
     result = quality_check.validate_stage_b_hierarchy(
         corpus_version="v2",
         generated_chunks=generated,
-        published_chunks=[],
+        published_chunks=generated,
         sections=sections,
     )
 

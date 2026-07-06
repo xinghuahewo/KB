@@ -8,6 +8,8 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+import jsonschema
+
 from bgpkb import paths
 from bgpkb.cleaning_v2.release import resolve_release
 
@@ -169,12 +171,38 @@ def resolve_active_release(pointer_path=None, *, project_root=ROOT):
 
 
 def _validate_resolved_v2_chunks(chunks, sections):
+    section_schema = json.loads(
+        (paths.SCHEMAS_DIR / "section_catalog.schema.json").read_text(encoding="utf-8")
+    )
     section_by_id = {}
     for section in sections:
+        try:
+            jsonschema.validate(section, section_schema)
+        except jsonschema.ValidationError as exc:
+            raise ValueError(f"section schema 错误 {exc.json_path}: {exc.message}") from exc
         section_id = section.get("section_id")
         if not section_id or section_id in section_by_id:
             raise ValueError(f"重复或缺失 section_id: {section_id}")
         section_by_id[section_id] = section
+    for section_id, section in section_by_id.items():
+        doc_id = section["doc_id"]
+        parent_id = section["parent_section_id"]
+        if parent_id:
+            parent = section_by_id.get(parent_id)
+            if parent is None:
+                raise ValueError(f"section parent 不存在: {section_id} -> {parent_id}")
+            if parent["doc_id"] != doc_id:
+                raise ValueError(f"section parent 跨文档: {section_id} -> {parent_id}")
+            if section_id not in parent["child_section_ids"]:
+                raise ValueError(f"section parent/child 不互反: {section_id} -> {parent_id}")
+        for child_id in section["child_section_ids"]:
+            child = section_by_id.get(child_id)
+            if child is None:
+                raise ValueError(f"section child 不存在: {section_id} -> {child_id}")
+            if child["doc_id"] != doc_id:
+                raise ValueError(f"section child 跨文档: {section_id} -> {child_id}")
+            if child["parent_section_id"] != section_id:
+                raise ValueError(f"section child/parent 不互反: {section_id} -> {child_id}")
     chunk_ids = set()
     by_parent = defaultdict(list)
     for chunk in chunks:
@@ -231,9 +259,16 @@ def build_chunk_catalog(
 
     isolated_reasons = Counter()
     if corpus_version == "v2":
+        chunk_schema = json.loads(
+            (paths.SCHEMAS_DIR / "chunk.schema.json").read_text(encoding="utf-8")
+        )
         resolved = []
         resolved_records = []
         for chunk, chunk_file in raw_records:
+            try:
+                jsonschema.validate(chunk, chunk_schema)
+            except jsonschema.ValidationError as exc:
+                raise ValueError(f"chunk schema 错误 {exc.json_path}: {exc.message}") from exc
             hierarchy_status = chunk.get("hierarchy_status")
             if hierarchy_status == "unresolved":
                 isolated_reasons["hierarchy_status_unresolved"] += 1
@@ -491,6 +526,30 @@ def write_report(manifest):
     _atomic_text(REPORT, "\n".join(lines) + "\n")
 
 
+def build_manifest_inputs(release_manifest):
+    inputs = [
+        "data/sources/inventory/sources.csv",
+        f"{release_manifest['chunks']}/*.jsonl",
+        "data/knowledge/entities/*.jsonl",
+        "data/knowledge/relationships/relationships.jsonl",
+        "data/derived/datasets/entity_source_evidence.jsonl",
+        "data/derived/datasets/entity_review_packets.jsonl",
+        "data/derived/datasets/source_processing_status.jsonl",
+        "data/derived/datasets/next_action_queue.jsonl",
+        "data/derived/datasets/human_review_decision_audit.jsonl",
+        "data/derived/datasets/human_review_decision_apply_preview.jsonl",
+        "data/derived/datasets/human_review_input_validation.jsonl",
+        "data/derived/datasets/human_review_progress.jsonl",
+        "data/derived/datasets/human_review_field_checklist.jsonl",
+        "data/derived/datasets/human_review_source_matrix.jsonl",
+        "data/derived/datasets/human_review_task_board.jsonl",
+        "data/derived/datasets/human_review_handoff.jsonl",
+    ]
+    if release_manifest["version"] == "v2":
+        inputs.append("data/derived/datasets/section_catalog.jsonl")
+    return inputs
+
+
 def main():
     PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -523,24 +582,7 @@ def main():
         "corpus_input_snapshot": active_release["manifest"]["input_snapshot"],
         "corpus_authority": active_release["manifest"]["authority"],
         "historical_review_evidence_corpus_version": "v1",
-        "inputs": [
-            "data/sources/inventory/sources.csv",
-            f"{active_release['manifest']['chunks']}/*.jsonl",
-            "data/knowledge/entities/*.jsonl",
-            "data/knowledge/relationships/relationships.jsonl",
-            "data/derived/datasets/entity_source_evidence.jsonl",
-            "data/derived/datasets/entity_review_packets.jsonl",
-            "data/derived/datasets/source_processing_status.jsonl",
-            "data/derived/datasets/next_action_queue.jsonl",
-            "data/derived/datasets/human_review_decision_audit.jsonl",
-            "data/derived/datasets/human_review_decision_apply_preview.jsonl",
-            "data/derived/datasets/human_review_input_validation.jsonl",
-            "data/derived/datasets/human_review_progress.jsonl",
-            "data/derived/datasets/human_review_field_checklist.jsonl",
-            "data/derived/datasets/human_review_source_matrix.jsonl",
-            "data/derived/datasets/human_review_task_board.jsonl",
-            "data/derived/datasets/human_review_handoff.jsonl",
-        ],
+        "inputs": build_manifest_inputs(active_release["manifest"]),
         "outputs": [
             "data/published/README.md",
             "data/published/manifest.json",

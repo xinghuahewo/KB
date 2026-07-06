@@ -1,3 +1,4 @@
+import copy
 import json
 
 import pytest
@@ -178,3 +179,47 @@ def test_migration_rejects_chunks_not_bidirectionally_linked_to_sections(mutatio
 
     with pytest.raises(ValueError, match=message):
         migration._validate_hierarchy(sections, chunks)
+
+
+def test_migration_accepts_unresolved_chunk_without_parent_section():
+    derivatives = build_derivatives(_document())
+    sections = derivatives["sections"]
+    chunks = derivatives["chunks"]
+    chunk = chunks[0]
+    chunk["hierarchy_status"] = "unresolved"
+    chunk["parent_section_id"] = None
+    sections[0]["child_chunk_ids"].remove(chunk["chunk_id"])
+
+    migration._validate_hierarchy(sections, chunks)
+
+
+def test_migration_rejects_unknown_chunk_hierarchy_status():
+    derivatives = build_derivatives(_document())
+    derivatives["chunks"][0]["hierarchy_status"] = "resovled"
+
+    with pytest.raises(ValueError, match="hierarchy_status"):
+        migration._validate_hierarchy(derivatives["sections"], derivatives["chunks"])
+
+
+@pytest.mark.parametrize("cross_document", [False, True])
+def test_migration_rejects_broken_section_parent_child_tree(cross_document):
+    derivatives = build_derivatives(_document())
+    root = derivatives["sections"][0]
+    child = copy.deepcopy(root)
+    child["section_id"] = "section-child"
+    child["doc_id"] = "doc-b" if cross_document else "doc-a"
+    child["section_order"] = 1
+    child["parent_section_id"] = root["section_id"] if cross_document else None
+    child["child_section_ids"] = []
+    child["child_chunk_ids"] = []
+    child["block_ids"] = []
+    root["child_section_ids"] = [child["section_id"]]
+    if cross_document:
+        root["next_section_id"] = None
+        child["previous_section_id"] = None
+    else:
+        root["next_section_id"] = child["section_id"]
+        child["previous_section_id"] = root["section_id"]
+
+    with pytest.raises(ValueError, match="跨文档" if cross_document else "互反"):
+        migration._validate_hierarchy([root, child], derivatives["chunks"])

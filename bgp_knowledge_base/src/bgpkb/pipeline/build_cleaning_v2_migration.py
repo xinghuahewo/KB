@@ -104,6 +104,13 @@ def _validate_hierarchy(sections, chunks):
         section_by_id[section_id] = section
         by_doc.setdefault(section["doc_id"], []).append(section)
     for chunk_id, chunk in chunk_by_id.items():
+        hierarchy_status = chunk.get("hierarchy_status")
+        if hierarchy_status not in {"resolved", "unresolved"}:
+            raise ValueError(
+                f"chunk hierarchy_status 非法: {chunk_id} -> {hierarchy_status!r}"
+            )
+        if hierarchy_status == "unresolved":
+            continue
         parent_id = chunk.get("parent_section_id")
         if not parent_id:
             raise ValueError(f"chunk 缺少 parent_section_id: {chunk_id}")
@@ -114,16 +121,32 @@ def _validate_hierarchy(sections, chunks):
             raise ValueError(f"chunk 与 parent section 跨文档: {chunk_id} -> {parent_id}")
         if chunk_id not in parent["child_chunk_ids"]:
             raise ValueError(f"parent section 未收录 chunk: {parent_id} -> {chunk_id}")
+    for section_id, section in section_by_id.items():
+        doc_id = section["doc_id"]
+        parent_id = section["parent_section_id"]
+        if parent_id:
+            parent = section_by_id.get(parent_id)
+            if parent is None:
+                raise ValueError(f"section 父级引用不存在: {section_id} -> {parent_id}")
+            if parent["doc_id"] != doc_id:
+                raise ValueError(f"section 父级跨文档: {section_id} -> {parent_id}")
+            if section_id not in parent["child_section_ids"]:
+                raise ValueError(f"section parent/child 不互反: {section_id} -> {parent_id}")
+        for child_id in section["child_section_ids"]:
+            child = section_by_id.get(child_id)
+            if child is None:
+                raise ValueError(f"section 子级引用不存在: {section_id} -> {child_id}")
+            if child["doc_id"] != doc_id:
+                raise ValueError(f"section 子级跨文档: {section_id} -> {child_id}")
+            if child["parent_section_id"] != section_id:
+                raise ValueError(f"section child/parent 不互反: {section_id} -> {child_id}")
     for doc_id, doc_sections in by_doc.items():
         ordered = sorted(doc_sections, key=lambda row: (row["section_order"], row["section_id"]))
-        ids = {row["section_id"] for row in ordered}
         for index, section in enumerate(ordered):
             expected_previous = ordered[index - 1]["section_id"] if index else None
             expected_next = ordered[index + 1]["section_id"] if index + 1 < len(ordered) else None
             if section["previous_section_id"] != expected_previous or section["next_section_id"] != expected_next:
                 raise ValueError(f"section 邻接不连续: {section['section_id']}")
-            if any(child not in ids for child in section["child_section_ids"]):
-                raise ValueError(f"section 子级引用不存在: {section['section_id']}")
             for chunk_id in section["child_chunk_ids"]:
                 chunk = chunk_by_id.get(chunk_id)
                 if not chunk or chunk.get("doc_id") != doc_id or chunk.get("parent_section_id") != section["section_id"]:

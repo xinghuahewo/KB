@@ -598,6 +598,8 @@ def validate_stage_b_hierarchy(
         return {"passed": True, "skipped": True, "reason": "v1 不适用阶段 B 层级门禁"}
 
     errors = []
+    if not generated_chunks:
+        errors.append("v2 generated chunk 样本为空")
     section_schema = load_schema("section_catalog.schema.json")
     section_by_id = {}
     sections_by_doc = defaultdict(list)
@@ -644,6 +646,11 @@ def validate_stage_b_hierarchy(
         if chunk_id in generated_by_id:
             errors.append(f"重复 generated chunk_id: {chunk_id}")
         generated_by_id[chunk_id] = chunk
+        if chunk.get("hierarchy_status") not in {"resolved", "unresolved"}:
+            errors.append(
+                f"generated hierarchy_status 非法: {chunk_id} -> "
+                f"{chunk.get('hierarchy_status')!r}"
+            )
     resolved = [chunk for chunk in generated_chunks if chunk.get("hierarchy_status") == "resolved"]
     resolution_rate = len(resolved) / len(generated_chunks) if generated_chunks else 1.0
     if resolution_rate < minimum_resolution_rate:
@@ -707,6 +714,12 @@ def validate_stage_b_hierarchy(
         errors.append(f"published 父级/来源追溯率必须为 100%，当前 {published_rate:.2%}")
 
     resolved_ids = {chunk.get("chunk_id") for chunk in resolved}
+    published_ids = {chunk.get("chunk_id") for chunk in published_chunks}
+    if published_ids != resolved_ids:
+        errors.append(
+            "published chunk_id 未完整覆盖 resolved chunks: "
+            f"缺失={sorted(resolved_ids - published_ids)}，多余={sorted(published_ids - resolved_ids)}"
+        )
     for section in sections:
         for chunk_id in section.get("child_chunk_ids", []):
             chunk = generated_by_id.get(chunk_id)
