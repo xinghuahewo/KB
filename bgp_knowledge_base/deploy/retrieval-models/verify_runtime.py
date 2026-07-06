@@ -13,6 +13,23 @@ import urllib.request
 GPU_COMMAND = ["nvidia-smi", "--query-gpu=index,memory.total,memory.used", "--format=csv,noheader,nounits"]
 
 
+def _safe_relative(value, label):
+    if not isinstance(value, str) or not value or value.startswith("/"):
+        raise RuntimeError(f"{label} 路径必须是非空相对路径")
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise RuntimeError(f"{label} 路径包含空段或逃逸段")
+    return Path(*parts)
+
+
+def _inside(path, root, label):
+    resolved = path.resolve()
+    root = root.resolve()
+    if resolved == root or root not in resolved.parents:
+        raise RuntimeError(f"{label} 路径逃逸")
+    return resolved
+
+
 def _sha256(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -22,11 +39,16 @@ def _sha256(path):
 
 
 def verify_model_lock(models_root, lock_path):
-    models_root = Path(models_root)
+    models_root = Path(models_root).resolve()
     lock = json.loads(Path(lock_path).read_text(encoding="utf-8"))
     for model in lock["models"]:
-        directory = models_root / model["model"]
-        expected = {item["path"]: item["sha256"] for item in model["files"]}
+        model_relative = _safe_relative(model["model"], "model")
+        directory = _inside(models_root / model_relative, models_root, "model")
+        expected = {}
+        for item in model["files"]:
+            file_relative = _safe_relative(item["path"], "模型文件")
+            _inside(directory / file_relative, directory, "模型文件")
+            expected[item["path"]] = item["sha256"]
         actual_paths = {path.relative_to(directory).as_posix() for path in directory.rglob("*") if path.is_file()}
         if actual_paths != set(expected):
             raise RuntimeError(f"模型文件集合与 lock 不一致: {model['model']}")

@@ -14,6 +14,12 @@ services:
     ports: ["${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8011:8011"]
     devices: ["${EMBEDDING_GPU_CDI}"]
     volumes: ["/srv/bgpkb/retrieval-models-models:/models:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8011/health',timeout=5); p=json.load(r); assert r.status == 200 and p.get('loaded') is True and p.get('role') == 'embedding'"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
   reranker:
     image: ${RETRIEVAL_IMAGE}
     pull_policy: never
@@ -28,3 +34,9 @@ services:
     ports: ["${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8012:8012"]
     devices: ["${RERANKER_GPU_CDI}"]
     volumes: ["/srv/bgpkb/retrieval-models-models:/models:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8012/health',timeout=5); p=json.load(r); assert r.status == 200 and p.get('loaded') is True and p.get('role') == 'reranker'"]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 30s

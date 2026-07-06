@@ -287,7 +287,7 @@ def test_default_health_uses_private_bind_address(monkeypatch):
         def __exit__(self, *args):
             return False
         def read(self):
-            return b'{"loaded":false}'
+            return b'{"role":"embedding","model":"BAAI/bge-m3","loaded":true}'
 
     def urlopen(url, timeout):
         captured["url"] = url
@@ -363,3 +363,83 @@ def test_first_deploy_force_cleanup_or_verification_failure_returns_four(tmp_pat
         diagnostic = json.loads(capsys.readouterr().err.splitlines()[-1])
         assert diagnostic["诊断码"] == "first_deploy_cleanup_failed"
         assert "原因" in diagnostic and diagnostic["原因"]
+
+
+def test_new_release_symlink_escape_is_rejected_before_switch(tmp_path):
+    module = load_module()
+    releases = tmp_path / "releases"
+    releases.mkdir()
+    outside = tmp_path / "outside"
+    release_id, outside_release = stage_release(outside)
+    (releases / release_id).symlink_to(outside_release)
+    live_app, live_models = tmp_path / "live-app", tmp_path / "live-models"
+
+    code = module.deploy_release(
+        release_id, releases, live_app, live_models,
+        Recorder(image_map(release_id)), lambda port: True, lambda app, models, env: None,
+    )
+
+    assert code == 2
+    assert not os.path.lexists(live_app) and not os.path.lexists(live_models)
+
+
+def test_old_live_targets_outside_release_root_are_rejected_untouched(tmp_path):
+    module = load_module()
+    releases = tmp_path / "releases"
+    release_id, _ = stage_release(releases)
+    old_id, old = stage_release(tmp_path / "outside", "old", "sha256:" + "b" * 64)
+    live_app, live_models = tmp_path / "live-app", tmp_path / "live-models"
+    live_app.symlink_to(old / "app")
+    live_models.symlink_to(old / "models")
+
+    code = module.deploy_release(
+        release_id, releases, live_app, live_models,
+        Recorder({**image_map(release_id), **image_map(old_id, "sha256:" + "b" * 64)}),
+        lambda port: True, lambda app, models, env: None,
+    )
+
+    assert code == 2
+    assert live_app.resolve() == (old / "app").resolve()
+    assert live_models.resolve() == (old / "models").resolve()
+
+
+def test_default_health_retries_until_loaded_and_role_matches(monkeypatch):
+    module = load_module()
+    payloads = [
+        {"role": "embedding", "model": "BAAI/bge-m3", "loaded": False},
+        {"role": "wrong", "model": "BAAI/bge-m3", "loaded": True},
+        {"role": "embedding", "model": "BAAI/bge-m3", "loaded": True},
+    ]
+    sleeps = []
+    clock_values = iter([0.0, 0.1, 0.2, 0.3])
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return json.dumps(payloads.pop(0)).encode()
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *args, **kwargs: Response())
+
+    assert module._default_health(
+        8011, deadline_seconds=1, interval_seconds=0.01,
+        clock=lambda: next(clock_values), sleeper=lambda value: sleeps.append(value),
+    ) is True
+    assert len(sleeps) == 2
+
+
+def test_default_health_loaded_false_times_out(monkeypatch):
+    module = load_module()
+    clock_values = iter([0.0, 0.1, 1.1])
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return b'{"role":"embedding","model":"BAAI/bge-m3","loaded":false}'
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *args, **kwargs: Response())
+    assert module._default_health(
+        8011, deadline_seconds=1, interval_seconds=0,
+        clock=lambda: next(clock_values), sleeper=lambda value: None,
+    ) is False

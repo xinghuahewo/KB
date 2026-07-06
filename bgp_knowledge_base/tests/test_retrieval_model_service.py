@@ -1,5 +1,7 @@
 import importlib.util
 from pathlib import Path
+import threading
+import time
 
 from fastapi.testclient import TestClient
 
@@ -194,3 +196,117 @@ def test_runtime_lock_is_fully_pinned_for_linux_amd64_python_311():
     dockerfile = (root / "Dockerfile").read_text()
     assert "python:3.11." in dockerfile.splitlines()[0]
     assert "--requirement /app/requirements.lock" in dockerfile
+
+
+def test_health_warmup_success_and_model_failure_is_not_ready():
+    service = load_service()
+    ready = TestClient(service.create_app(role="embedding", model=FakeEmbeddingModel()))
+
+    class Broken:
+        def encode(self, texts):
+            raise RuntimeError("secret model path /models/private")
+
+    broken = TestClient(service.create_app(role="embedding", model=Broken()))
+
+    assert ready.get("/health").status_code == 200
+    assert ready.get("/health").json()["loaded"] is True
+    assert broken.get("/health").status_code == 503
+
+
+def test_lazy_model_concurrent_first_load_happens_once():
+    service = load_service()
+    calls = []
+    model = object()
+    lazy = service.LazyModel("embedding", "/models", "cuda:0", loader=lambda: (calls.append(1), model)[1])
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(lazy.get())) for _ in range(8)]
+
+    for thread in threads: thread.start()
+    for thread in threads: thread.join()
+
+    assert calls == [1]
+    assert results == [model] * 8
+
+
+def test_inference_is_semaphore_bounded_and_oversized_inputs_rejected():
+    service = load_service()
+
+    class BlockingEmbedding:
+        def __init__(self):
+            self.active = 0
+            self.max_active = 0
+            self.lock = threading.Lock()
+        def encode(self, texts):
+            with self.lock:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            time.sleep(0.02)
+            with self.lock:
+                self.active -= 1
+            return {"dense_vecs": [[1.0] for _ in texts]}
+
+    model = BlockingEmbedding()
+    client = TestClient(service.create_app(role="embedding", model=model, max_concurrency=1))
+    threads = [threading.Thread(target=lambda: client.post(
+        "/v1/embeddings", json={"model": "BAAI/bge-m3", "input": ["x"]}
+    )) for _ in range(2)]
+    for thread in threads: thread.start()
+    for thread in threads: thread.join()
+    assert model.max_active == 1
+
+    assert client.post("/v1/embeddings", json={
+        "model": "BAAI/bge-m3", "input": ["x"] * 65,
+    }).status_code == 422
+    assert client.post("/v1/embeddings", json={
+        "model": "BAAI/bge-m3", "input": ["x" * 4097],
+    }).status_code == 422
+
+    reranker = TestClient(service.create_app(role="reranker", model=FakeReranker()))
+    assert reranker.post("/v1/rerank", json={
+        "model": "BAAI/bge-reranker-v2-m3", "query": "q",
+        "documents": ["d"] * 21, "top_n": 5,
+    }).status_code == 422
+    assert reranker.post("/v1/rerank", json={
+        "model": "BAAI/bge-reranker-v2-m3", "query": "q" * 4097,
+        "documents": ["d"] * 5, "top_n": 5,
+    }).status_code == 422
+
+
+def test_compose_has_real_readiness_healthchecks():
+    compose = (Path(__file__).resolve().parents[1] / "deploy/retrieval-models/compose.yaml").read_text()
+    assert compose.count("healthcheck:") == 2
+    for key in ("interval:", "timeout:", "retries:", "start_period:"):
+        assert compose.count(key) == 2
+    assert "urllib.request" in compose
+
+
+def test_runtime_lock_rejects_path_traversal_and_symlink_escape(tmp_path):
+    root = Path(__file__).resolve().parents[1] / "deploy/retrieval-models"
+    spec = importlib.util.spec_from_file_location("verify_runtime_paths", root / "verify_runtime.py")
+    verify = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verify)
+    models = tmp_path / "models"
+    models.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "weights.bin").write_bytes(b"x")
+    (models / "escape").symlink_to(outside)
+    import hashlib
+    import json
+
+    bad_locks = [
+        {"models": [{"model": "../outside", "revision": "r", "files": []}]},
+        {"models": [{"model": "escape", "revision": "r", "files": [{
+            "path": "weights.bin", "sha256": hashlib.sha256(b"x").hexdigest(),
+        }]}]},
+        {"models": [{"model": "safe", "revision": "r", "files": [{"path": "../x", "sha256": "0" * 64}]}]},
+    ]
+    for index, payload in enumerate(bad_locks):
+        lock = tmp_path / f"bad-{index}.json"
+        lock.write_text(json.dumps(payload))
+        try:
+            verify.verify_model_lock(models, lock)
+        except RuntimeError as exc:
+            assert "路径" in str(exc) or "逃逸" in str(exc)
+        else:
+            raise AssertionError("危险 lock 路径必须被拒绝")

@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 
 
@@ -68,18 +69,51 @@ def verify_preloaded_image(runner, tag, expected_digest, cwd, env):
         raise RuntimeError(f"预载镜像与 manifest 不匹配: expected={expected_digest}, actual={sorted(identifiers)}")
 
 
+def validated_release_path(releases_root, release_id):
+    root = Path(releases_root).resolve()
+    candidate = root / release_id
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError("release 必须是 releases_root 下的真实目录")
+    resolved = candidate.resolve()
+    if resolved != candidate or resolved.parent != root:
+        raise ValueError("release 路径逃逸或不是直接子目录")
+    return resolved
+
+
 def _default_runner(command, cwd=None, env=None):
     return subprocess.run(command, cwd=cwd, env=env, check=True, text=True, capture_output=True).stdout
 
 
-def _default_health(port):
-    try:
-        address = os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
-        with urllib.request.urlopen(f"http://{address}:{port}/health", timeout=10) as response:
-            payload = json.loads(response.read())
-            return response.status == 200 and isinstance(payload.get("loaded"), bool)
-    except Exception:
-        return False
+def _default_health(
+    port,
+    deadline_seconds=30,
+    interval_seconds=1,
+    clock=time.monotonic,
+    sleeper=time.sleep,
+):
+    expected = {
+        8011: ("embedding", "BAAI/bge-m3"),
+        8012: ("reranker", "BAAI/bge-reranker-v2-m3"),
+    }
+    role, model = expected[port]
+    deadline = clock() + deadline_seconds
+    while True:
+        try:
+            address = os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
+            with urllib.request.urlopen(f"http://{address}:{port}/health", timeout=10) as response:
+                payload = json.loads(response.read())
+                if (
+                    200 <= response.status < 300
+                    and payload.get("loaded") is True
+                    and payload.get("role") == role
+                    and payload.get("model") == model
+                ):
+                    return True
+        except Exception:
+            pass
+        if clock() >= deadline:
+            return False
+        sleeper(interval_seconds)
 
 
 def _replace_link(link, target):
@@ -153,10 +187,10 @@ def deploy_release(
         return 2
     runner = command_runner or _default_runner
     health = health_checker or _default_health
-    release = Path(releases_root) / release_id
-    app = release / "app"
-    models = release / "models"
     try:
+        release = validated_release_path(releases_root, release_id)
+        app = release / "app"
+        models = release / "models"
         manifest = verify_manifest(release_id, app, models)
         env_path = app / ".env"
         if prestart_checker is None:
@@ -202,6 +236,9 @@ def deploy_release(
             old_release_id = old_app.parent.name
             if not RELEASE_PATTERN.fullmatch(old_release_id):
                 raise RuntimeError("旧 release ID 非法")
+            old_release = validated_release_path(releases_root, old_release_id)
+            if old_app != old_release / "app" or old_models != old_release / "models":
+                raise RuntimeError("旧 live target 不属于 releases_root 的标准 app/models")
             old_manifest = verify_manifest(old_release_id, old_app, old_models)
             old_runtime_env = os.environ.copy()
             old_runtime_env.update({

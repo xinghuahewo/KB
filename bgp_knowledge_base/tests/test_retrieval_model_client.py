@@ -61,7 +61,7 @@ def test_embedding_timeout_falls_back_to_api_and_records_degradation():
 
     assert result["ok"] is True
     assert result["provider"] == "api"
-    assert "local timeout" in result["degraded_reason"]
+    assert "超时" in result["degraded_reason"]
     assert result["degraded"] is True
 
 
@@ -73,7 +73,7 @@ def test_embedding_double_failure_is_aggregated():
 
     assert result["ok"] is False
     assert "local unavailable" in result["error"]
-    assert "api down" in result["error"]
+    assert "provider 调用失败" in result["error"]
     assert [attempt["provider"] for attempt in result["attempts"]] == ["local", "api"]
 
 
@@ -103,7 +103,7 @@ def test_reranker_local_success_fallback_and_require_model_contract():
     assert result["ok"] is True
     assert result["provider"] == "api"
     assert result["model"] == "BAAI/bge-reranker-v2-m3"
-    assert "reranker timeout" in result["degraded_reason"]
+    assert "超时" in result["degraded_reason"]
     assert result["degraded"] is True
 
 
@@ -133,7 +133,7 @@ def test_local_http_providers_call_service_without_required_auth(monkeypatch):
             })
         return FakeResponse({
             "model": "BAAI/bge-reranker-v2-m3", "revision": "rr",
-            "results": [{"index": 0, "relevance_score": 0.8}],
+            "results": [{"index": index, "relevance_score": 0.8 - index / 10} for index in range(5)],
         })
 
     monkeypatch.setattr("bgpkb.service.retrieval_model_client.urllib.request.urlopen", urlopen)
@@ -165,3 +165,74 @@ def test_default_chains_from_env_use_local_then_external_api(monkeypatch):
     assert embedding.api.base_url == "https://external.invalid/embeddings"
     assert reranker.local.endpoint.startswith("http://10.99.8.28:8012")
     assert reranker.api.endpoint == "https://external.invalid/rerank"
+
+
+def test_malformed_local_embedding_200_falls_back_to_api(monkeypatch):
+    responses = iter([
+        {"model": "BAAI/bge-m3", "revision": "bad", "data": [
+            {"index": 0, "embedding": [1.0, float("nan")]},
+        ]},
+        {"model": "BAAI/bge-m3", "revision": "good", "data": [
+            {"index": 0, "embedding": [1.0, 0.0]},
+        ]},
+    ])
+    monkeypatch.setattr(
+        "bgpkb.service.retrieval_model_client.urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(next(responses)),
+    )
+    chain = EmbeddingProviderChain(
+        EmbeddingHttpProvider("http://local/embeddings"),
+        EmbeddingHttpProvider("https://api/embeddings", provider="api"),
+    )
+
+    result = chain.embed_texts(["BGP"])
+
+    assert result["ok"] is True and result["provider"] == "api"
+    assert result["degraded"] is True
+    assert "finite" in result["degraded_reason"]
+
+
+def test_both_malformed_rerank_200_responses_are_aggregated(monkeypatch):
+    responses = iter([
+        {"model": "BAAI/bge-reranker-v2-m3", "results": [
+            {"index": 99, "relevance_score": 0.8},
+        ] * 5},
+        {"model": "BAAI/bge-reranker-v2-m3", "results": [
+            {"index": 0, "relevance_score": True},
+        ] * 5},
+    ])
+    monkeypatch.setattr(
+        "bgpkb.service.retrieval_model_client.urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(next(responses)),
+    )
+    chain = RerankerProviderChain(
+        RerankerHttpProvider("http://local/rerank"),
+        RerankerHttpProvider("https://api/rerank", provider="api"),
+    )
+
+    result = chain.rerank("q", ["d"] * 5, 5)
+
+    assert result["ok"] is False
+    assert len(result["attempts"]) == 2
+    assert all(attempt.get("error_code") == "invalid_response" for attempt in result["attempts"])
+
+
+def test_provider_errors_redact_credentials_and_endpoint_query(monkeypatch):
+    secret = "super-secret-token"
+    endpoint = f"https://user:{secret}@example.invalid/embed?api_key={secret}"
+    monkeypatch.setattr(
+        "bgpkb.service.retrieval_model_client.urllib.request.urlopen",
+        lambda request, timeout: (_ for _ in ()).throw(RuntimeError(f"failed {request.full_url} {secret}")),
+    )
+    chain = EmbeddingProviderChain(
+        EmbeddingHttpProvider(endpoint, api_key=secret),
+        EmbeddingHttpProvider(endpoint, api_key=secret, provider="api"),
+    )
+
+    result = chain.embed_texts(["BGP"])
+    serialized = json.dumps(result)
+
+    assert secret not in serialized
+    assert "api_key" not in serialized
+    assert result["attempts"][0]["error_code"] == "request_failed"
+    assert result["attempts"][0]["endpoint"] == "https://example.invalid/embed"
