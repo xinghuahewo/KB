@@ -235,4 +235,4 @@ def test_provider_errors_redact_credentials_and_endpoint_query(monkeypatch):
     assert secret not in serialized
     assert "api_key" not in serialized
     assert result["attempts"][0]["error_code"] == "request_failed"
-    assert result["attempts"][0]["endpoint"] == "https://example.invalid/embed"
+    assert result["attempts"][0]["endpoint"] == "https://example.invalid"

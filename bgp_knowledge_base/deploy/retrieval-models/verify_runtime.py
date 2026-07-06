@@ -104,7 +104,9 @@ def verify_health(fetcher=None):
         payload = fetcher(port)
         if payload.get("role") != role or payload.get("model") != model:
             raise RuntimeError(f"端口 {port} health 角色或模型错误")
-        if not isinstance(payload.get("loaded"), bool) or not all(payload.get(key) for key in ("revision", "device")):
+        if payload.get("loaded") is not True:
+            raise RuntimeError(f"端口 {port} loaded 未就绪")
+        if not all(payload.get(key) for key in ("revision", "device")):
             raise RuntimeError(f"端口 {port} health 元数据不完整")
         if any(key in payload for key in ("path", "model_root", "api_key", "token")):
             raise RuntimeError(f"端口 {port} health 暴露敏感字段")

@@ -80,6 +80,16 @@ def validated_release_path(releases_root, release_id):
     return resolved
 
 
+def validated_release_internal(release, name):
+    candidate = release / name
+    if candidate.is_symlink() or not candidate.is_dir():
+        raise ValueError(f"release 内部 {name} 必须是真实目录")
+    resolved = candidate.resolve()
+    if resolved != candidate or release not in resolved.parents:
+        raise ValueError(f"release 内部 {name} 路径逃逸")
+    return resolved
+
+
 def _default_runner(command, cwd=None, env=None):
     return subprocess.run(command, cwd=cwd, env=env, check=True, text=True, capture_output=True).stdout
 
@@ -88,6 +98,7 @@ def _default_health(
     port,
     deadline_seconds=30,
     interval_seconds=1,
+    request_timeout_seconds=10,
     clock=time.monotonic,
     sleeper=time.sleep,
 ):
@@ -98,9 +109,15 @@ def _default_health(
     role, model = expected[port]
     deadline = clock() + deadline_seconds
     while True:
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return False
         try:
             address = os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
-            with urllib.request.urlopen(f"http://{address}:{port}/health", timeout=10) as response:
+            with urllib.request.urlopen(
+                f"http://{address}:{port}/health",
+                timeout=min(request_timeout_seconds, remaining),
+            ) as response:
                 payload = json.loads(response.read())
                 if (
                     200 <= response.status < 300
@@ -111,8 +128,6 @@ def _default_health(
                     return True
         except Exception:
             pass
-        if clock() >= deadline:
-            return False
         sleeper(interval_seconds)
 
 
@@ -189,8 +204,8 @@ def deploy_release(
     health = health_checker or _default_health
     try:
         release = validated_release_path(releases_root, release_id)
-        app = release / "app"
-        models = release / "models"
+        app = validated_release_internal(release, "app")
+        models = validated_release_internal(release, "models")
         manifest = verify_manifest(release_id, app, models)
         env_path = app / ".env"
         if prestart_checker is None:
@@ -237,7 +252,9 @@ def deploy_release(
             if not RELEASE_PATTERN.fullmatch(old_release_id):
                 raise RuntimeError("旧 release ID 非法")
             old_release = validated_release_path(releases_root, old_release_id)
-            if old_app != old_release / "app" or old_models != old_release / "models":
+            expected_old_app = validated_release_internal(old_release, "app")
+            expected_old_models = validated_release_internal(old_release, "models")
+            if old_app != expected_old_app or old_models != expected_old_models:
                 raise RuntimeError("旧 live target 不属于 releases_root 的标准 app/models")
             old_manifest = verify_manifest(old_release_id, old_app, old_models)
             old_runtime_env = os.environ.copy()

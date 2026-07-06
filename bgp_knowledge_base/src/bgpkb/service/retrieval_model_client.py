@@ -140,7 +140,7 @@ class _HttpProvider:
         if ":" in host and not host.startswith("["):
             host = f"[{host}]"
         netloc = host + (f":{parsed.port}" if parsed.port else "")
-        return urllib.parse.urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+        return urllib.parse.urlunsplit((parsed.scheme, netloc, "", "", ""))
 
     def _safe_error(self, exc):
         if isinstance(exc, urllib.error.HTTPError):

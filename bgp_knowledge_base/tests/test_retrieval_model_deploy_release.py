@@ -443,3 +443,45 @@ def test_default_health_loaded_false_times_out(monkeypatch):
         8011, deadline_seconds=1, interval_seconds=0,
         clock=lambda: next(clock_values), sleeper=lambda value: None,
     ) is False
+
+
+def test_new_release_internal_app_or_models_symlink_is_rejected(tmp_path):
+    module = load_module()
+    for internal in ("app", "models"):
+        releases = tmp_path / internal / "releases"
+        release_id, release = stage_release(releases)
+        original = release / internal
+        relocated = release / f"{internal}-real"
+        original.rename(relocated)
+        original.symlink_to(relocated)
+        live_app = tmp_path / internal / "live-app"
+        live_models = tmp_path / internal / "live-models"
+
+        code = module.deploy_release(
+            release_id, releases, live_app, live_models,
+            Recorder(image_map(release_id)), lambda port: True, lambda app, models, env: None,
+        )
+
+        assert code == 2
+        assert not os.path.lexists(live_app) and not os.path.lexists(live_models)
+
+
+def test_health_request_timeout_never_exceeds_remaining_deadline(monkeypatch):
+    module = load_module()
+    timeouts = []
+    clock_values = iter([0.0, 0.2, 0.5, 1.1])
+
+    def urlopen(url, timeout):
+        timeouts.append(timeout)
+        raise OSError("not ready")
+
+    monkeypatch.setattr(module.urllib.request, "urlopen", urlopen)
+
+    result = module._default_health(
+        8011, deadline_seconds=1, interval_seconds=0,
+        request_timeout_seconds=10,
+        clock=lambda: next(clock_values), sleeper=lambda value: None,
+    )
+
+    assert result is False
+    assert timeouts == [0.8, 0.5]

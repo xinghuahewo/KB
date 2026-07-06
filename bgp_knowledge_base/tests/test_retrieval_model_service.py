@@ -163,7 +163,7 @@ def test_runtime_preflight_checks_model_hashes_gpu_policy_and_health(tmp_path, m
         "model": "BAAI/bge-m3" if port == 8011 else "BAAI/bge-reranker-v2-m3",
         "revision": "r",
         "device": "cuda:0",
-        "loaded": port == 8011,
+        "loaded": True,
     })
 
     captured = {}
@@ -178,6 +178,25 @@ def test_runtime_preflight_checks_model_hashes_gpu_policy_and_health(tmp_path, m
     monkeypatch.setattr(verify.urllib.request, "urlopen", lambda url, timeout: captured.setdefault("url", url) and Response())
     verify._fetch_health(8011)
     assert captured["url"] == "http://10.99.8.28:8011/health"
+
+
+def test_runtime_health_rejects_loaded_false_missing_or_non_boolean():
+    root = Path(__file__).resolve().parents[1] / "deploy/retrieval-models"
+    spec = importlib.util.spec_from_file_location("verify_runtime_readiness", root / "verify_runtime.py")
+    verify = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(verify)
+
+    for loaded in (False, None, 1):
+        try:
+            verify.verify_health(lambda port, loaded=loaded: {
+                "role": "embedding" if port == 8011 else "reranker",
+                "model": "BAAI/bge-m3" if port == 8011 else "BAAI/bge-reranker-v2-m3",
+                "revision": "r", "device": "cuda:0", "loaded": loaded,
+            })
+        except RuntimeError as exc:
+            assert "loaded" in str(exc) or "就绪" in str(exc)
+        else:
+            raise AssertionError("loaded 非 true 必须拒绝")
 
 
 def test_runtime_lock_is_fully_pinned_for_linux_amd64_python_311():
