@@ -110,8 +110,9 @@ def test_model_manifest_and_runtime_deployment_contracts():
         ]
     }
     compose = (root / "compose.yaml").read_text()
-    assert "127.0.0.1:8011:8011" in compose
-    assert "127.0.0.1:8012:8012" in compose
+    assert "${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8011:8011" in compose
+    assert "${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8012:8012" in compose
+    assert "0.0.0.0:8011" not in compose and "0.0.0.0:8012" not in compose
     assert "pull_policy: never" in compose
     assert "restart: unless-stopped" in compose
     assert "${EMBEDDING_GPU_CDI}" in compose
@@ -122,7 +123,7 @@ def test_model_manifest_and_runtime_deployment_contracts():
     assert not (root / "model_manifest.lock.json").exists()
 
 
-def test_runtime_preflight_checks_model_hashes_gpu_policy_and_health(tmp_path):
+def test_runtime_preflight_checks_model_hashes_gpu_policy_and_health(tmp_path, monkeypatch):
     root = Path(__file__).resolve().parents[1] / "deploy/retrieval-models"
     spec = importlib.util.spec_from_file_location("verify_runtime", root / "verify_runtime.py")
     verify = importlib.util.module_from_spec(spec)
@@ -162,3 +163,34 @@ def test_runtime_preflight_checks_model_hashes_gpu_policy_and_health(tmp_path):
         "device": "cuda:0",
         "loaded": port == 8011,
     })
+
+    captured = {}
+    class Response:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+        def read(self):
+            return b'{"loaded":false}'
+    monkeypatch.setenv("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
+    monkeypatch.setattr(verify.urllib.request, "urlopen", lambda url, timeout: captured.setdefault("url", url) and Response())
+    verify._fetch_health(8011)
+    assert captured["url"] == "http://10.99.8.28:8011/health"
+
+
+def test_runtime_lock_is_fully_pinned_for_linux_amd64_python_311():
+    root = Path(__file__).resolve().parents[1] / "deploy/retrieval-models"
+    lines = [
+        line.strip() for line in (root / "requirements.lock").read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#") and not line.startswith((" ", "-"))
+    ]
+    assert all("==" in line.split(";", 1)[0] for line in lines)
+    names = {line.split("==", 1)[0].lower() for line in lines}
+    for required in (
+        "fastapi", "starlette", "pydantic", "uvicorn", "flagembedding", "torch",
+        "transformers", "sentence-transformers", "huggingface-hub",
+    ):
+        assert required in names
+    dockerfile = (root / "Dockerfile").read_text()
+    assert "python:3.11." in dockerfile.splitlines()[0]
+    assert "--requirement /app/requirements.lock" in dockerfile

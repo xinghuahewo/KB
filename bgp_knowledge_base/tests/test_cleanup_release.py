@@ -63,3 +63,17 @@ def test_rejects_release_containing_live_app_or_models(tmp_path):
     assert module.cleanup_release(models_id, releases, live_app, live_models) != 0
     assert app_release.exists()
     assert models_release.exists()
+
+
+def test_rejects_release_that_is_any_live_target_ancestor(tmp_path):
+    module = load_module()
+    releases = tmp_path / "releases"
+    release_id = "e" * 64
+    release = releases / release_id
+    nested = release / "app/runtime/deeper"
+    nested.mkdir(parents=True)
+    live_app = tmp_path / "live-app"
+    live_app.symlink_to(nested)
+
+    assert module.cleanup_release(release_id, releases, live_app, tmp_path / "live-models") != 0
+    assert release.exists()

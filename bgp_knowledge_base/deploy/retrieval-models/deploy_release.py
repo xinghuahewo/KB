@@ -31,6 +31,19 @@ def verify_manifest(release_id, app, models):
         raise ValueError("release ID 与 manifest 不匹配")
     manifest = json.loads(content)
     files = manifest["app_files"]
+    expected_paths = {entry["path"] for entry in files}
+    actual_paths = set()
+    for path in app.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(app).as_posix()
+        if relative not in {"release_manifest.json", ".env", "model_manifest.lock.json"}:
+            actual_paths.add(relative)
+    if actual_paths != expected_paths:
+        raise ValueError(
+            f"app 文件集合不匹配: 缺失={sorted(expected_paths - actual_paths)}, "
+            f"未登记={sorted(actual_paths - expected_paths)}"
+        )
     for entry in files:
         path = (app / entry["path"]).resolve()
         if app.resolve() not in path.parents or _sha256(path) != entry["sha256"]:
@@ -45,13 +58,24 @@ def verify_manifest(release_id, app, models):
     return manifest
 
 
+def verify_preloaded_image(runner, tag, expected_digest, cwd, env):
+    output = runner(["docker", "image", "inspect", tag], cwd=cwd, env=env)
+    inspected = json.loads(output)
+    record = inspected[0] if isinstance(inspected, list) else inspected
+    identifiers = {record.get("Id", "")}
+    identifiers.update(item.rsplit("@", 1)[-1] for item in record.get("RepoDigests", []))
+    if expected_digest not in identifiers:
+        raise RuntimeError(f"预载镜像与 manifest 不匹配: expected={expected_digest}, actual={sorted(identifiers)}")
+
+
 def _default_runner(command, cwd=None, env=None):
     return subprocess.run(command, cwd=cwd, env=env, check=True, text=True, capture_output=True).stdout
 
 
 def _default_health(port):
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=10) as response:
+        address = os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
+        with urllib.request.urlopen(f"http://{address}:{port}/health", timeout=10) as response:
             payload = json.loads(response.read())
             return response.status == 200 and isinstance(payload.get("loaded"), bool)
     except Exception:
@@ -103,23 +127,13 @@ def deploy_release(
         if prestart_checker is None:
             runner([
                 sys.executable, str(app / "select_gpu_devices.py"),
-                "--policy", str(app / "gpu_policy.json"), "--env", str(env_path),
+                "--policy", str(app / "gpu_policy.json"), "--output", str(env_path),
             ], cwd=app, env=os.environ.copy())
-        prior_env = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-        retained = "\n".join(
-            line for line in prior_env.splitlines()
-            if line.startswith(("EMBEDDING_GPU_", "RERANKER_GPU_"))
-        )
-        env_path.write_text(
-            (retained + "\n" if retained else "")
-            + f"RETRIEVAL_IMAGE=bgpkb-retrieval-models:{release_id}\n"
-            + f"COMPOSE_PROJECT_NAME={PROJECT_NAME}\n",
-            encoding="utf-8",
-        )
         runtime_env = os.environ.copy()
         runtime_env.update({
             "RETRIEVAL_IMAGE": f"bgpkb-retrieval-models:{release_id}",
             "COMPOSE_PROJECT_NAME": PROJECT_NAME,
+            "RETRIEVAL_BIND_ADDRESS": os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28"),
         })
         if prestart_checker:
             prestart_checker(app, models, runtime_env)
@@ -131,18 +145,41 @@ def deploy_release(
                 "--env", str(env_path),
                 "--policy", str(app / "gpu_policy.json"),
             ], cwd=app, env=runtime_env)
-        try:
-            existing = runner(["docker", "image", "inspect", f"bgpkb-retrieval-models:{release_id}"], cwd=app, env=runtime_env)
-        except Exception:
-            existing = None
-        if existing:
-            raise RuntimeError("release 镜像 tag 已存在，禁止覆盖")
-        runner(["docker", "image", "tag", manifest["image_digest"], f"bgpkb-retrieval-models:{release_id}"], cwd=app, env=runtime_env)
-    except Exception:
+        verify_preloaded_image(
+            runner, f"bgpkb-retrieval-models:{release_id}", manifest["image_digest"], app, runtime_env
+        )
+    except Exception as exc:
+        print(json.dumps({"阶段": "切换前预检", "错误": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
 
     old_app = Path(live_app).resolve() if os.path.lexists(live_app) else None
     old_models = Path(live_models).resolve() if os.path.lexists(live_models) else None
+    old_release_id = None
+    old_manifest = None
+    old_runtime_env = None
+    if (old_app is None) != (old_models is None):
+        print(json.dumps({"阶段": "旧 release 记录", "错误": "两个 live link 状态不一致"}, ensure_ascii=False), file=sys.stderr)
+        return 2
+    if old_app is not None:
+        try:
+            if old_app.parent != old_models.parent:
+                raise RuntimeError("旧 app/models 不属于同一 release")
+            old_release_id = old_app.parent.name
+            if not RELEASE_PATTERN.fullmatch(old_release_id):
+                raise RuntimeError("旧 release ID 非法")
+            old_manifest = verify_manifest(old_release_id, old_app, old_models)
+            old_runtime_env = os.environ.copy()
+            old_runtime_env.update({
+                "RETRIEVAL_IMAGE": f"bgpkb-retrieval-models:{old_release_id}",
+                "COMPOSE_PROJECT_NAME": PROJECT_NAME,
+                "RETRIEVAL_BIND_ADDRESS": os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28"),
+            })
+            verify_preloaded_image(
+                runner, old_runtime_env["RETRIEVAL_IMAGE"], old_manifest["image_digest"], old_app, old_runtime_env
+            )
+        except Exception as exc:
+            print(json.dumps({"阶段": "旧 release 记录", "错误": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
     try:
         _replace_link(live_app, app)
         _replace_link(live_models, models)
@@ -162,10 +199,16 @@ def deploy_release(
         try:
             _replace_link(live_app, old_app)
             _replace_link(live_models, old_models)
-            _compose_up(runner, old_app, os.environ.copy(), force=True)
+            verify_preloaded_image(
+                runner, old_runtime_env["RETRIEVAL_IMAGE"], old_manifest["image_digest"], old_app, old_runtime_env
+            )
+            _compose_up(runner, old_app, old_runtime_env, force=True)
             if not health(8011) or not health(8012):
                 raise RuntimeError("旧 release health 恢复失败")
-        except Exception:
+        except Exception as exc:
+            print(json.dumps({
+                "诊断码": "rollback_failed", "阶段": "回滚旧 release", "错误": str(exc)
+            }, ensure_ascii=False), file=sys.stderr)
             return 4
         return 3
 

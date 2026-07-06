@@ -43,6 +43,19 @@ def test_manifest_is_canonical_deterministic_and_excludes_special_files(tmp_path
     assert len(module.release_id(first)) == 64
 
 
+def test_manifest_only_excludes_root_runtime_files(tmp_path):
+    module = load_module()
+    app, lock = make_tree(tmp_path)
+    (app / "nested").mkdir()
+    (app / "nested/.env").write_text("tracked")
+
+    parsed = json.loads(module.build_manifest(
+        app, lock, "sha256:" + "a" * 64, app / "release_manifest.json"
+    ))
+
+    assert "nested/.env" in [entry["path"] for entry in parsed["app_files"]]
+
+
 def test_release_id_changes_with_app_lock_or_image_digest(tmp_path):
     module = load_module()
     app, lock = make_tree(tmp_path)

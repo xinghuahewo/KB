@@ -55,9 +55,9 @@ def build_manifest(app_dir, model_lock, image_digest, output_path):
     for path in app_dir.rglob("*"):
         if not path.is_file():
             continue
-        if path.resolve() in {model_lock, output_path} or path.name == ".env" or path.name == "model_manifest.lock.json":
-            continue
         relative = path.relative_to(app_dir).as_posix()
+        if path.resolve() in {model_lock, output_path} or relative in {".env", "model_manifest.lock.json"}:
+            continue
         files.append({"path": relative, "sha256": sha256_file(path)})
     files.sort(key=lambda entry: entry["path"])
     app_tree_sha256 = hashlib.sha256(canonical_json(files)).hexdigest()

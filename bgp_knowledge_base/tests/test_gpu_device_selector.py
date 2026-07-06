@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import sys
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "deploy/retrieval-models/select_gpu_devices.py"
@@ -117,3 +118,23 @@ def test_nvidia_smi_failure_returns_two_and_keeps_old_env(tmp_path, capsys):
     assert code == 2
     assert env_path.read_bytes() == b"OLD\n"
     assert "nvidia-smi" in capsys.readouterr().err
+
+
+def test_cli_supports_public_output_argument(tmp_path, monkeypatch):
+    module = load_module()
+    policy = tmp_path / "policy.json"
+    output = tmp_path / ".env"
+    policy.write_text(json.dumps({
+        "allowed_indices": [2, 3],
+        "embedding": {"min_free_mib": 8192},
+        "reranker": {"min_free_mib": 8192},
+    }))
+    monkeypatch.setattr(module.subprocess, "check_output", lambda command, text: "2,11264,1000\n3,11264,1000\n")
+    monkeypatch.setattr(sys, "argv", ["select_gpu_devices.py", "--policy", str(policy), "--output", str(output)])
+
+    try:
+        module.main()
+    except SystemExit as exc:
+        assert exc.code == 0
+
+    assert output.exists()

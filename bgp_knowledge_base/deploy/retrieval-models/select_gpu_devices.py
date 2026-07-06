@@ -104,9 +104,9 @@ def run(policy_path, env_path, command_runner=None):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", type=Path, default=Path(__file__).with_name("gpu_policy.json"))
-    parser.add_argument("--env", type=Path, default=Path(__file__).with_name(".env"))
+    parser.add_argument("--output", "--env", dest="output", type=Path, default=Path(__file__).with_name(".env"))
     args = parser.parse_args()
-    raise SystemExit(run(args.policy, args.env))
+    raise SystemExit(run(args.policy, args.output))
 
 
 if __name__ == "__main__":

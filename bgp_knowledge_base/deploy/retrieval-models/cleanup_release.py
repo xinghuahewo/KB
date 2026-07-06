@@ -30,7 +30,7 @@ def cleanup_release(
     for link in (live_app, live_models):
         if os.path.lexists(link):
             live_targets.append(Path(link).resolve())
-    if any(candidate == target or candidate == target.parent for target in live_targets):
+    if any(candidate == target or candidate in target.parents for target in live_targets):
         return 2
     shutil.rmtree(candidate)
     return 0

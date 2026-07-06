@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import urllib.request
@@ -69,7 +70,8 @@ def verify_prestart(models_root, lock_path, env_path, policy_path, command_runne
 
 
 def _fetch_health(port):
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=10) as response:
+    address = os.environ.get("RETRIEVAL_BIND_ADDRESS", "10.99.8.28")
+    with urllib.request.urlopen(f"http://{address}:{port}/health", timeout=10) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

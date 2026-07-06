@@ -11,7 +11,7 @@ services:
       MODEL_DEVICE: cuda:0
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
-    ports: ["127.0.0.1:8011:8011"]
+    ports: ["${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8011:8011"]
     devices: ["${EMBEDDING_GPU_CDI}"]
     volumes: ["/srv/bgpkb/retrieval-models-models:/models:ro"]
   reranker:
@@ -25,6 +25,6 @@ services:
       MODEL_DEVICE: cuda:0
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
-    ports: ["127.0.0.1:8012:8012"]
+    ports: ["${RETRIEVAL_BIND_ADDRESS:-10.99.8.28}:8012:8012"]
     devices: ["${RERANKER_GPU_CDI}"]
     volumes: ["/srv/bgpkb/retrieval-models-models:/models:ro"]
