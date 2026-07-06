@@ -105,6 +105,41 @@ def _compose_up(runner, app, env, force=False):
     runner(command, cwd=app, env=env)
 
 
+def _project_container_ids(runner, app, env):
+    output = runner([
+        "docker", "ps", "-aq", "--filter",
+        f"label=com.docker.compose.project={PROJECT_NAME}",
+    ], cwd=app, env=env)
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _cleanup_first_deploy(runner, app, env):
+    errors = []
+    try:
+        runner(["docker", "compose", "down"], cwd=app, env=env)
+    except Exception as exc:
+        errors.append(f"compose down: {exc}")
+    try:
+        container_ids = _project_container_ids(runner, app, env)
+    except Exception as exc:
+        container_ids = []
+        errors.append(f"枚举容器: {exc}")
+    if container_ids:
+        try:
+            runner(["docker", "rm", "-f", *container_ids], cwd=app, env=env)
+        except Exception as exc:
+            errors.append(f"强制删除容器: {exc}")
+    try:
+        remaining = _project_container_ids(runner, app, env)
+        if remaining:
+            errors.append(f"仍有容器残留: {','.join(remaining)}")
+    except Exception as exc:
+        errors.append(f"验证容器残留: {exc}")
+    # down 失败本身可由后续强制清理与零残留验证弥补。
+    blocking = [error for error in errors if not error.startswith("compose down:")]
+    return blocking, errors
+
+
 def deploy_release(
     release_id,
     releases_root=Path("/srv/bgpkb/retrieval-releases"),
@@ -188,14 +223,22 @@ def deploy_release(
             raise RuntimeError("新 release health 检查失败")
         return 0
     except Exception:
+        if old_app is None or old_models is None:
+            _remove_link(live_app)
+            _remove_link(live_models)
+            blocking, errors = _cleanup_first_deploy(runner, app, runtime_env)
+            if blocking:
+                print(json.dumps({
+                    "诊断码": "first_deploy_cleanup_failed",
+                    "阶段": "首次部署运行态清理",
+                    "原因": errors,
+                }, ensure_ascii=False), file=sys.stderr)
+                return 4
+            return 2
         try:
             runner(["docker", "compose", "down"], cwd=app, env=runtime_env)
         except Exception:
             pass
-        if old_app is None or old_models is None:
-            _remove_link(live_app)
-            _remove_link(live_models)
-            return 2
         try:
             _replace_link(live_app, old_app)
             _replace_link(live_models, old_models)

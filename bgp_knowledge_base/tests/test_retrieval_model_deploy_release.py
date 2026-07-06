@@ -63,6 +63,8 @@ class Recorder:
             if tag not in self.images:
                 raise RuntimeError("image missing")
             return json.dumps([{"Id": self.images[tag], "RepoDigests": []}])
+        if command[:3] == ["docker", "ps", "-aq"]:
+            return ""
 
 
 def image_map(release_id, digest="sha256:" + "a" * 64):
@@ -296,3 +298,68 @@ def test_default_health_uses_private_bind_address(monkeypatch):
 
     assert module._default_health(8011) is True
     assert captured["url"] == "http://10.99.8.28:8011/health"
+
+
+class FirstDeployCleanupRunner(Recorder):
+    def __init__(self, release_id, failure=None):
+        super().__init__(image_map(release_id))
+        self.failure = failure
+        self.removed = False
+
+    def __call__(self, command, cwd=None, env=None):
+        if command[:3] == ["docker", "compose", "down"]:
+            self.calls.append((tuple(command), Path(cwd), dict(env or {})))
+            raise RuntimeError("compose down exploded")
+        if command[:3] == ["docker", "ps", "-aq"]:
+            self.calls.append((tuple(command), Path(cwd) if cwd else None, dict(env or {})))
+            if self.failure == "verify":
+                return "container-1\n"
+            return "" if self.removed else "container-1\n"
+        if command[:3] == ["docker", "rm", "-f"]:
+            self.calls.append((tuple(command), Path(cwd) if cwd else None, dict(env or {})))
+            if self.failure == "remove":
+                raise RuntimeError("force rm exploded")
+            self.removed = True
+            return ""
+        return super().__call__(command, cwd, env)
+
+
+def test_first_deploy_down_failure_forces_project_cleanup_and_returns_two(tmp_path):
+    module = load_module()
+    releases = tmp_path / "releases"
+    release_id, _ = stage_release(releases)
+    runner = FirstDeployCleanupRunner(release_id)
+    live_app, live_models = tmp_path / "live-app", tmp_path / "live-models"
+
+    code = module.deploy_release(
+        release_id, releases, live_app, live_models,
+        runner, lambda port: False, lambda app, models, env: None,
+    )
+
+    assert code == 2
+    assert not os.path.lexists(live_app) and not os.path.lexists(live_models)
+    assert any(call[0][:3] == ("docker", "rm", "-f") for call in runner.calls)
+    ps_calls = [call for call in runner.calls if call[0][:3] == ("docker", "ps", "-aq")]
+    assert len(ps_calls) == 2
+    assert all("label=com.docker.compose.project=bgpkb-retrieval-models" in call[0] for call in ps_calls)
+
+
+def test_first_deploy_force_cleanup_or_verification_failure_returns_four(tmp_path, capsys):
+    module = load_module()
+    for failure in ("remove", "verify"):
+        releases = tmp_path / failure / "releases"
+        release_id, _ = stage_release(releases)
+        runner = FirstDeployCleanupRunner(release_id, failure)
+        live_app = tmp_path / failure / "live-app"
+        live_models = tmp_path / failure / "live-models"
+
+        code = module.deploy_release(
+            release_id, releases, live_app, live_models,
+            runner, lambda port: False, lambda app, models, env: None,
+        )
+
+        assert code == 4
+        assert not os.path.lexists(live_app) and not os.path.lexists(live_models)
+        diagnostic = json.loads(capsys.readouterr().err.splitlines()[-1])
+        assert diagnostic["诊断码"] == "first_deploy_cleanup_failed"
+        assert "原因" in diagnostic and diagnostic["原因"]
