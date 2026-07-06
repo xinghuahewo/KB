@@ -1,5 +1,8 @@
 import json
 
+import pytest
+
+from bgpkb.cleaning_v2.derivation import build_derivatives
 from bgpkb.pipeline import build_cleaning_v2_migration as migration
 
 
@@ -156,3 +159,22 @@ def test_migration_writes_stable_cross_document_section_catalog(tmp_path):
     for section in sections:
         for chunk_id in section["child_chunk_ids"]:
             assert chunk_ids[chunk_id]["parent_section_id"] == section["section_id"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda sections, chunk: sections[0]["child_chunk_ids"].clear(), "未收录"),
+        (lambda sections, chunk: chunk.update(parent_section_id=None), "parent_section_id"),
+        (lambda sections, chunk: chunk.update(doc_id="other-doc"), "跨文档"),
+        (lambda sections, chunk: chunk.update(parent_section_id="missing-section"), "不存在"),
+    ],
+)
+def test_migration_rejects_chunks_not_bidirectionally_linked_to_sections(mutation, message):
+    derivatives = build_derivatives(_document())
+    sections = derivatives["sections"]
+    chunks = derivatives["chunks"]
+    mutation(sections, chunks[0])
+
+    with pytest.raises(ValueError, match=message):
+        migration._validate_hierarchy(sections, chunks)

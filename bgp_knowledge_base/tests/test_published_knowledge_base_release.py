@@ -96,6 +96,31 @@ def test_v2_catalog_isolates_unresolved_chunks_and_reports_diagnostics(tmp_path)
     }
 
 
+@pytest.mark.parametrize(
+    ("chunk", "message"),
+    [
+        (_resolved_chunk(source_block_ids=None), "source_block_ids"),
+        (_resolved_chunk(hierarchy_status="unknown"), "hierarchy_status"),
+    ],
+)
+def test_v2_catalog_rejects_invalid_chunks_instead_of_isolating_them(tmp_path, chunk, message):
+    chunks = tmp_path / "chunks"
+    chunks.mkdir()
+    (chunks / "doc-a.jsonl").write_text(json.dumps(chunk) + "\n", encoding="utf-8")
+    diagnostics = {}
+
+    with pytest.raises(ValueError, match=message):
+        published.build_chunk_catalog(
+            chunks,
+            project_root=tmp_path,
+            corpus_version="v2",
+            section_records=[_section()],
+            diagnostics=diagnostics,
+        )
+
+    assert diagnostics.get("hierarchy_integrity") != "pass"
+
+
 def test_unresolved_chunk_reusing_resolved_id_is_not_reintroduced(tmp_path):
     chunks = tmp_path / "chunks"
     chunks.mkdir()
@@ -141,6 +166,26 @@ def test_v1_catalog_keeps_legacy_chunks_without_hierarchy(tmp_path):
 
     assert [row["chunk_id"] for row in catalog] == ["legacy"]
     assert "parent_section_id" not in catalog[0]
+
+
+def test_chunk_catalog_rejects_unknown_corpus_version(tmp_path):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+
+    with pytest.raises(ValueError, match="corpus_version"):
+        published.build_chunk_catalog(chunk_dir, project_root=tmp_path, corpus_version="v3")
+
+
+def test_resolved_v2_chunk_with_wrong_schema_version_is_broken(tmp_path):
+    chunk_dir = tmp_path / "chunks"
+    chunk_dir.mkdir()
+    chunk = _resolved_chunk(schema_version="chunk_v1")
+    (chunk_dir / "doc-a.jsonl").write_text(json.dumps(chunk) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="schema_version"):
+        published.build_chunk_catalog(
+            chunk_dir, project_root=tmp_path, corpus_version="v2", section_records=[_section()],
+        )
 
 
 def test_publish_report_records_hierarchy_integrity_and_isolation(monkeypatch, tmp_path):

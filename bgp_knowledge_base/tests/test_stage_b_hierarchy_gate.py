@@ -1,3 +1,5 @@
+import pytest
+
 from bgpkb.pipeline import quality_check
 
 
@@ -54,6 +56,30 @@ def test_generated_resolution_below_99_percent_is_blocked():
     assert result["passed"] is False
     assert result["resolution_rate"] == 0.98
     assert any("99%" in error for error in result["errors"])
+
+
+@pytest.mark.parametrize(
+    ("wrong_link_count", "expected_accuracy", "expected_passed"),
+    [(1, 0.99, True), (3, 0.97, False)],
+)
+def test_generated_adjacency_uses_98_percent_accuracy_gate(
+    wrong_link_count, expected_accuracy, expected_passed,
+):
+    generated, sections = _fixture(count=50, unresolved=0)
+    for index in range(1, wrong_link_count + 1):
+        generated[index]["previous_chunk_id"] = "wrong-neighbor"
+
+    result = quality_check.validate_stage_b_hierarchy(
+        corpus_version="v2",
+        generated_chunks=generated,
+        published_chunks=[],
+        sections=sections,
+    )
+
+    assert result["adjacent_context_eligible_count"] == 100
+    assert result["adjacent_context_correct_count"] == 100 - wrong_link_count
+    assert result["adjacent_context_accuracy"] == expected_accuracy
+    assert result["passed"] is expected_passed
 
 
 def test_published_requires_100_percent_and_v1_skips_gate():

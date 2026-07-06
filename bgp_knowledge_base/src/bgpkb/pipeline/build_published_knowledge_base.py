@@ -182,6 +182,10 @@ def _validate_resolved_v2_chunks(chunks, sections):
         if not chunk_id or chunk_id in chunk_ids:
             raise ValueError(f"重复 chunk_id: {chunk_id}")
         chunk_ids.add(chunk_id)
+        if chunk.get("schema_version") != "chunk_v2_hierarchical":
+            raise ValueError(
+                f"resolved chunk schema_version 必须为 chunk_v2_hierarchical: {chunk_id}"
+            )
         required = (
             "schema_version", "parent_section_id", "chunk_order", "previous_chunk_id",
             "next_chunk_id", "hierarchy_status", "source_block_ids", "section_path",
@@ -190,7 +194,7 @@ def _validate_resolved_v2_chunks(chunks, sections):
         if missing:
             raise ValueError(f"resolved chunk 缺少层级字段 {missing}: {chunk_id}")
         if not chunk.get("source_ref") or not chunk.get("source_block_ids"):
-            raise ValueError(f"resolved chunk 来源追溯为空: {chunk_id}")
+            raise ValueError(f"resolved chunk source_ref/source_block_ids 来源追溯为空: {chunk_id}")
         section = section_by_id.get(chunk["parent_section_id"])
         if section is None:
             raise ValueError(f"parent section 不存在: {chunk_id}")
@@ -215,6 +219,8 @@ def build_chunk_catalog(
     chunk_dir, *, corpus_version, section_records=None, section_catalog_path=None,
     diagnostics=None, project_root=ROOT, sources_by_doc=None,
 ):
+    if corpus_version not in {"v1", "v2"}:
+        raise ValueError(f"未知 corpus_version: {corpus_version}")
     raw_records = []
     sources_by_doc = sources_by_doc or {}
     project_root = Path(project_root).resolve()
@@ -228,14 +234,15 @@ def build_chunk_catalog(
         resolved = []
         resolved_records = []
         for chunk, chunk_file in raw_records:
-            hierarchy_fields = (
-                "schema_version", "parent_section_id", "chunk_order", "previous_chunk_id",
-                "next_chunk_id", "hierarchy_status", "source_block_ids", "section_path",
-            )
-            if chunk.get("hierarchy_status") != "resolved" or any(field not in chunk for field in hierarchy_fields):
-                reason = "hierarchy_status_unresolved" if chunk.get("hierarchy_status") == "unresolved" else "missing_hierarchy_fields"
-                isolated_reasons[reason] += 1
+            hierarchy_status = chunk.get("hierarchy_status")
+            if hierarchy_status == "unresolved":
+                isolated_reasons["hierarchy_status_unresolved"] += 1
                 continue
+            if hierarchy_status != "resolved":
+                raise ValueError(
+                    f"v2 chunk hierarchy_status 必须为 resolved 或 unresolved: "
+                    f"{chunk.get('chunk_id', '<missing>')} -> {hierarchy_status!r}"
+                )
             resolved.append(chunk)
             resolved_records.append((chunk, chunk_file))
         if section_records is None:

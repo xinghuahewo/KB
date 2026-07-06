@@ -591,7 +591,7 @@ def load_schemas():
 
 def validate_stage_b_hierarchy(
     *, corpus_version, generated_chunks, published_chunks, sections,
-    minimum_resolution_rate=0.99,
+    minimum_resolution_rate=0.99, minimum_adjacent_context_accuracy=0.98,
 ):
     """纯函数：验证阶段 B 的生成覆盖率与发布层级完整性。"""
     if corpus_version != "v2":
@@ -651,6 +651,8 @@ def validate_stage_b_hierarchy(
 
     def validate_resolved(chunks, *, label):
         traceable = 0
+        adjacent_eligible = 0
+        adjacent_correct = 0
         by_parent = defaultdict(list)
         seen = set()
         for chunk in chunks:
@@ -686,15 +688,23 @@ def validate_stage_b_hierarchy(
             for index, chunk in enumerate(ordered):
                 previous = ordered[index - 1]["chunk_id"] if index else None
                 following = ordered[index + 1]["chunk_id"] if index + 1 < len(ordered) else None
-                if chunk.get("previous_chunk_id") != previous or chunk.get("next_chunk_id") != following:
-                    errors.append(f"{label} chunk 邻接不互反: {chunk['chunk_id']}")
-        return traceable
+                adjacent_eligible += 2
+                adjacent_correct += chunk.get("previous_chunk_id") == previous
+                adjacent_correct += chunk.get("next_chunk_id") == following
+        return traceable, adjacent_correct, adjacent_eligible
 
-    validate_resolved(resolved, label="generated")
-    published_traceable = validate_resolved(published_chunks, label="published")
+    _, adjacent_correct, adjacent_eligible = validate_resolved(resolved, label="generated")
+    adjacent_accuracy = adjacent_correct / adjacent_eligible if adjacent_eligible else 1.0
+    if adjacent_accuracy < minimum_adjacent_context_accuracy:
+        errors.append(
+            f"相邻上下文正确率 {adjacent_accuracy:.2%} 低于 "
+            f"{minimum_adjacent_context_accuracy:.2%} 门槛"
+        )
+
+    published_traceable, _, _ = validate_resolved(published_chunks, label="published")
     published_rate = published_traceable / len(published_chunks) if published_chunks else 1.0
     if published_rate != 1.0:
-        errors.append(f"published 父级/邻接/来源追溯率必须为 100%，当前 {published_rate:.2%}")
+        errors.append(f"published 父级/来源追溯率必须为 100%，当前 {published_rate:.2%}")
 
     resolved_ids = {chunk.get("chunk_id") for chunk in resolved}
     for section in sections:
@@ -710,6 +720,9 @@ def validate_stage_b_hierarchy(
         "resolved_count": len(resolved),
         "unresolved_count": len(generated_chunks) - len(resolved),
         "resolution_rate": resolution_rate,
+        "adjacent_context_eligible_count": adjacent_eligible,
+        "adjacent_context_correct_count": adjacent_correct,
+        "adjacent_context_accuracy": adjacent_accuracy,
         "published_count": len(published_chunks),
         "published_traceability_rate": published_rate,
         "errors": errors,

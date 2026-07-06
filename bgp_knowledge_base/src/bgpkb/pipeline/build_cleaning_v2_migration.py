@@ -95,14 +95,28 @@ def _validate_hierarchy(sections, chunks):
             raise ValueError(f"重复 chunk_id: {chunk_id}")
         chunk_by_id[chunk_id] = chunk
     by_doc = {}
+    section_by_id = {}
     for section in sections:
         jsonschema.validate(section, schema)
+        section_id = section["section_id"]
+        if section_id in section_by_id:
+            raise ValueError(f"重复 section_id: {section_id}")
+        section_by_id[section_id] = section
         by_doc.setdefault(section["doc_id"], []).append(section)
+    for chunk_id, chunk in chunk_by_id.items():
+        parent_id = chunk.get("parent_section_id")
+        if not parent_id:
+            raise ValueError(f"chunk 缺少 parent_section_id: {chunk_id}")
+        parent = section_by_id.get(parent_id)
+        if parent is None:
+            raise ValueError(f"chunk parent section 不存在: {chunk_id} -> {parent_id}")
+        if parent["doc_id"] != chunk.get("doc_id"):
+            raise ValueError(f"chunk 与 parent section 跨文档: {chunk_id} -> {parent_id}")
+        if chunk_id not in parent["child_chunk_ids"]:
+            raise ValueError(f"parent section 未收录 chunk: {parent_id} -> {chunk_id}")
     for doc_id, doc_sections in by_doc.items():
         ordered = sorted(doc_sections, key=lambda row: (row["section_order"], row["section_id"]))
         ids = {row["section_id"] for row in ordered}
-        if len(ids) != len(ordered):
-            raise ValueError(f"文档 {doc_id} 存在重复 section_id")
         for index, section in enumerate(ordered):
             expected_previous = ordered[index - 1]["section_id"] if index else None
             expected_next = ordered[index + 1]["section_id"] if index + 1 < len(ordered) else None
