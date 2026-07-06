@@ -122,14 +122,16 @@ def test_hybrid_api_returns_fused_search_and_context_pack():
     assert search.status_code == 200
     search_payload = search.json()
     assert search_payload["results"]
-    assert search_payload["vector_status"] in {"offline_mock", "complete"}
-    assert {
-        "lexical_score",
-        "vector_score",
-        "metadata_boost",
-        "fusion_score",
-        "match_reasons",
-    } <= set(search_payload["results"][0])
+    assert search_payload["vector_status"] in {"complete", "failed"}
+    if search_payload["vector_status"] == "failed":
+        assert search_payload["degraded"] is True
+        assert search_payload["channel_errors"]["vector"]["code"] in {
+            "embedding_unavailable", "index_unavailable"
+        }
+    assert {"rrf_score", "fusion_score", "match_channels"} <= set(search_payload["results"][0])
+    first = search_payload["results"][0]
+    for channel in first["match_channels"]:
+        assert {f"{channel}_raw_score", f"{channel}_raw_rank"} <= set(first)
 
     assert pack.status_code == 200
     pack_payload = pack.json()

@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
+import tempfile
 
 from bgpkb import paths
-from bgpkb.service.bge_m3_remote_client import BgeM3RemoteClient
+from bgpkb.service.retrieval_model_client import EmbeddingProviderChain
 
 
 CHUNKS_PATH = paths.PUBLISHED_DIR / "chunk_catalog.jsonl"
@@ -230,11 +232,44 @@ def render_report(manifest):
     for kind, count in manifest["source_counts"].items():
         lines.append(f"- {kind}：{count}")
     lines.extend(["", "## 运行说明", ""])
-    if status == "skipped":
+    if manifest.get("error_code") in {"missing_api_key", "missing_endpoint"}:
         lines.append("- 未配置远程 API key，已跳过真实 embedding 构建；离线测试仍可使用 fake client。")
+    elif status == "failed":
+        lines.append(f"- 构建失败：{manifest.get('error', manifest.get('error_code', '未知错误'))}。")
     else:
         lines.append("- 向量已进行 L2 归一化并写入文件化 JSONL 索引。")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _atomic_write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def _complete_artifacts(index_path, manifest_path, report_path):
+    if not all(path.exists() for path in (index_path, manifest_path, report_path)):
+        return False
+    try:
+        return json.loads(manifest_path.read_text(encoding="utf-8")).get("status") == "complete"
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
+def _provider_chain(result, fallback):
+    names = [item.get("provider") for item in result.get("attempts", []) if item.get("provider")]
+    provider = result.get("provider") or fallback
+    if provider and provider not in names:
+        names.append(provider)
+    return names
 
 
 def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST_PATH, report_path=REPORT_PATH, batch_size=32):
@@ -244,14 +279,18 @@ def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST
         "status": "complete",
         "generated_at": generated_at,
         "generated_by": "src/bgpkb/pipeline/build_bge_m3_index.py",
-        "provider": client.provider,
-        "model": client.model,
+        "provider": getattr(client, "provider", "provider_chain"),
+        "model": getattr(client, "model", "BAAI/bge-m3"),
+        "model_revision": "",
+        "model_hash": "",
+        "provider_chain": [],
+        "degraded_reason": None,
         "dimension": 0,
         "input_count": len(documents),
         "input_hash": input_hash(documents),
         "source_counts": counts,
         "real_model_execution": not bool(getattr(client, "is_fake", False)),
-        "local_model_enabled": False,
+        "local_model_enabled": True,
     }
     records = []
     for offset in range(0, len(documents), batch_size):
@@ -259,15 +298,60 @@ def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST
         result = client.embed_texts([item["text"] for item in batch])
         if not result.get("ok"):
             manifest.update({
-                "status": "skipped" if result.get("error_code") in {"missing_api_key", "missing_endpoint"} else "failed",
+                "status": "failed",
                 "error_code": result.get("error_code", "embedding_failed"),
+                "error": result.get("error", "Embedding provider 不可用"),
                 "real_model_execution": False,
+                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
             })
-            write_json(manifest_path, manifest)
-            report_path.parent.mkdir(parents=True, exist_ok=True)
-            report_path.write_text(render_report(manifest), encoding="utf-8")
+            if not manifest["preserved_previous_artifacts"]:
+                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                _atomic_write(report_path, render_report(manifest))
             return manifest
-        manifest["dimension"] = result["dimension"]
+        vectors = result.get("vectors")
+        if not isinstance(vectors, list) or len(vectors) != len(batch):
+            result = {"ok": False, "error_code": "invalid_embeddings", "error": "Embedding 数量与输入不一致"}
+            manifest.update({
+                "status": "failed", "error_code": result["error_code"], "error": result["error"],
+                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
+            })
+            if not manifest["preserved_previous_artifacts"]:
+                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                _atomic_write(report_path, render_report(manifest))
+            return manifest
+        dimension = result.get("dimension") or (len(vectors[0]) if vectors else 0)
+        if not dimension or any(
+            not isinstance(vector, list) or len(vector) != dimension
+            or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in vector)
+            or not any(float(value) != 0.0 for value in vector)
+            for vector in vectors
+        ):
+            manifest.update({
+                "status": "failed", "error_code": "invalid_embeddings", "error": "Embedding 向量维度、数值或范数无效",
+                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
+            })
+            if not manifest["preserved_previous_artifacts"]:
+                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                _atomic_write(report_path, render_report(manifest))
+            return manifest
+        if manifest["dimension"] and manifest["dimension"] != dimension:
+            manifest.update({
+                "status": "failed", "error_code": "dimension_mismatch", "error": "不同批次的向量维度不一致",
+                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
+            })
+            if not manifest["preserved_previous_artifacts"]:
+                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                _atomic_write(report_path, render_report(manifest))
+            return manifest
+        manifest.update({
+            "provider": result.get("provider", manifest["provider"]),
+            "model": result.get("model", manifest["model"]),
+            "model_revision": result.get("revision", manifest["model_revision"]),
+            "model_hash": result.get("model_hash", result.get("model_sha256", manifest["model_hash"])),
+            "provider_chain": _provider_chain(result, manifest["provider"]),
+            "degraded_reason": result.get("degraded_reason") or manifest["degraded_reason"],
+            "dimension": dimension,
+        })
         for document, vector in zip(batch, result["vectors"]):
             records.append({
                 "doc_id": document["doc_id"],
@@ -285,15 +369,15 @@ def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST
                 "vector": normalize_vector(vector),
                 "generated_by": "src/bgpkb/pipeline/build_bge_m3_index.py",
             })
-    write_jsonl(index_path, records)
-    write_json(manifest_path, manifest)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(render_report(manifest), encoding="utf-8")
+    index_content = "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records)
+    _atomic_write(index_path, index_content)
+    _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+    _atomic_write(report_path, render_report(manifest))
     return manifest
 
 
 def main():
-    parser = argparse.ArgumentParser(description="使用远程 BGE-M3 构建文件化向量索引。")
+    parser = argparse.ArgumentParser(description="使用本地优先 BGE-M3 provider chain 构建文件化向量索引。")
     parser.add_argument("--provider", choices=["siliconflow_bge_m3", "aliyun_eas_bge_m3"], default="siliconflow_bge_m3")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--limit", type=int, default=0)
@@ -304,7 +388,7 @@ def main():
         documents = documents[:args.limit]
     manifest = build_index(
         documents=documents,
-        client=BgeM3RemoteClient.from_env(args.provider),
+        client=EmbeddingProviderChain.from_env(),
         batch_size=args.batch_size,
     )
     print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))

@@ -5,6 +5,7 @@ import math
 from bgpkb import paths
 from . import retrieval_framework
 from .bge_m3_remote_client import BgeM3RemoteClient
+from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
 
 
 BGE_INDEX_PATH = paths.PUBLISHED_DIR / "bge_m3_vector_index.jsonl"
@@ -221,35 +222,113 @@ def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_id
     return [], "index_unavailable"
 
 
-def search(query, limit=20, lexical_top_k=50, vector_top_k=50, rrf_k=60, vector_enabled=True, client=None):
+class RetrievalUnavailable(RuntimeError):
+    """所有召回通道都发生技术故障。"""
+
+    def __init__(self, channel_errors):
+        super().__init__(f"混合召回不可用：{channel_errors}")
+        self.channel_errors = channel_errors
+
+
+def _best_channel_items(result):
+    best = {}
+    for position, item in enumerate(result.items[:50], start=1):
+        chunk_id = item.get("chunk_id")
+        if not chunk_id:
+            continue
+        rank = item.get("raw_rank", position)
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            rank = position
+        candidate = dict(item)
+        candidate["raw_rank"] = rank
+        previous = best.get(chunk_id)
+        if previous is None or (rank, chunk_id) < (previous["raw_rank"], chunk_id):
+            best[chunk_id] = candidate
+    return best
+
+
+def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
+    fused = {}
+    for result in (lexical_result, vector_result):
+        for chunk_id, item in _best_channel_items(result).items():
+            current = fused.setdefault(chunk_id, dict(item))
+            rank = item["raw_rank"]
+            raw_score = float(item.get("raw_score", item.get("score", 0.0)))
+            current[f"{result.channel}_raw_rank"] = rank
+            current[f"{result.channel}_raw_score"] = raw_score
+            current.setdefault("match_channels", []).append(result.channel)
+            current["rrf_score"] = current.get("rrf_score", 0.0) + 1.0 / (rrf_k + rank)
+            for key, value in item.items():
+                current.setdefault(key, value)
+    items = list(fused.values())
+    for item in items:
+        item["match_channels"] = sorted(set(item["match_channels"]))
+        item["score"] = item["rrf_score"]
+        item["fusion_score"] = item["rrf_score"]
+        item["retrieval_method"] = "hybrid_rrf"
+    items.sort(key=lambda item: (-item["rrf_score"], item["chunk_id"]))
+    return items[:limit]
+
+
+def search(
+    query,
+    limit=20,
+    lexical_top_k=50,
+    vector_top_k=50,
+    rrf_k=60,
+    vector_enabled=True,
+    client=None,
+    lexical_retriever=None,
+    dense_retriever=None,
+):
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+        raise ValueError("limit 必须是 1 到 20 的整数")
+    if (lexical_top_k, vector_top_k, rrf_k) != (50, 50, 60):
+        raise ValueError("v2 召回契约固定为 lexical=50、vector=50、rrf_k=60")
     normalized = retrieval_framework.normalize_query(query)
     trusted_chunk_ids = _trusted_chunk_ids()
     eligible_doc_ids = _retrieval_eligible_doc_ids()
-    lexical_results = _lexical_search(query, lexical_top_k, trusted_chunk_ids, eligible_doc_ids)
+    lexical = (lexical_retriever or Bm25Retriever()).search(normalized, 50)
+    for item in lexical.items:
+        item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
+        item["trusted"] = bool(item["trust_basis"])
+        item.setdefault("lifecycle_status", "approved_evidence" if item["trusted"] else "candidate")
     if vector_enabled:
-        vector_results, vector_status = _vector_results(
-            query,
-            normalized,
-            vector_top_k,
-            trusted_chunk_ids,
-            eligible_doc_ids,
-            client=client,
-        )
-        if vector_status == "offline_mock" and not lexical_results:
-            vector_results = []
+        vector = (dense_retriever or DenseRetriever(provider=client)).search(normalized, 50)
+        for item in vector.items:
+            item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
+            item["trusted"] = bool(item["trust_basis"])
     else:
-        vector_results, vector_status = [], "disabled"
+        vector = RetrievalChannelResult("vector", metadata={"disabled": True})
+    channel_results = {"lexical": lexical, "vector": vector}
+    channel_errors = {
+        channel: result.error for channel, result in channel_results.items() if result.error is not None
+    }
+    technical_channels = [result for result in channel_results.values() if not result.metadata.get("disabled")]
+    if technical_channels and all(result.error is not None for result in technical_channels):
+        raise RetrievalUnavailable(channel_errors)
+    results = _rrf_channel_results(lexical, vector, limit=limit, rrf_k=60)
+    channel_status = {
+        channel: (
+            "disabled" if result.metadata.get("disabled") else
+            "failed" if result.error else
+            "complete" if result.items else "empty"
+        )
+        for channel, result in channel_results.items()
+    }
     return {
         "query": query,
         "normalized_query": normalized,
-        "results": rrf_fuse(normalized, lexical_results, vector_results, limit=limit, rrf_k=rrf_k),
-        "lexical_count": len(lexical_results),
-        "vector_count": len(vector_results),
-        "vector_status": vector_status,
-        "vector_min_similarity": (
-            float(retrieval_framework.config().get("hybrid_retrieval", {}).get("min_vector_similarity", 0.5))
-            if vector_status == "complete" else None
-        ),
+        "results": results,
+        "lexical_count": len(lexical.items),
+        "vector_count": len(vector.items),
+        "vector_status": channel_status["vector"],
+        "vector_min_similarity": None,
+        "degraded": bool(channel_errors),
+        "channel_errors": channel_errors,
+        "channel_status": channel_status,
+        "channel_metadata": {channel: result.metadata for channel, result in channel_results.items()},
+        "retrieval_contract": {"lexical_top_k": 50, "vector_top_k": 50, "rrf_k": 60, "fused_top_k": 20},
         "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "src/bgpkb/service/hybrid_retrieval.py",
     }
