@@ -26,7 +26,7 @@ def test_smoke_script_builds_report_without_leaking_api_key(tmp_path):
     namespace = runpy.run_path(str(SCRIPT))
     results = namespace["run_smoke_tests"](
         client=FakeClient(),
-        queries=["route leak", "zzzzqqqxxxx"],
+        queries=["route leak", "xyxyxyxyxyxyxyxyxyxy"],
         limit=2,
     )
     report = namespace["render_report"](results, api_key_configured=True)

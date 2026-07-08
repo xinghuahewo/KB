@@ -40,7 +40,7 @@ def test_eval_script_scores_answers_and_renders_report_without_key_leak():
         },
         {
             "question_id": "eval_no_evidence",
-            "query": "zzzzqqqxxxx",
+            "query": "xyxyxyxyxyxyxyxyxyxy",
             "expected_status": "no_evidence",
             "must_have_terms": [],
             "forbidden_terms": [],

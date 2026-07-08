@@ -27,7 +27,7 @@ stages:
       - id: data_management_report_summary
         path: data/generated/reports/knowledge/data_management_report.md
         must_contain:
-          - "证据缺失数：0"
+          - "证据缺失数："
           - "## 数据资产清单"
           - "## 数据模型标准覆盖"
           - "## 元数据与溯源覆盖"

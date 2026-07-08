@@ -79,7 +79,16 @@ def test_answer_question_falls_back_to_evidence_when_llm_is_unavailable():
     assert payload["error_code"] == "missing_api_key"
 
 
-def test_answer_question_refuses_generation_without_evidence():
+def test_answer_question_refuses_generation_without_evidence(monkeypatch):
+    empty_pack = {
+        "query": "zzzzqqqxxxx",
+        "results": [],
+        "citations": [],
+        "context_units": [],
+        "generated_by": "src/bgpkb/service/hybrid_retrieval.py",
+        "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
+    }
+    monkeypatch.setattr(rag_answer.hybrid_retrieval, "context_pack", lambda query, limit=None, **kwargs: empty_pack)
     payload = rag_answer.answer_question("zzzzqqqxxxx", limit=3, client=SuccessfulClient())
 
     assert payload["answer_status"] == "no_evidence"

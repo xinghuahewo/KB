@@ -119,9 +119,11 @@ class DenseRetriever:
         self,
         index_path: Path = paths.PUBLISHED_DIR / "bge_m3_vector_index.jsonl",
         provider: Any | None = None,
+        min_similarity: float = 0.5,
     ):
         self.index_path = Path(index_path)
         self.provider = provider or EmbeddingProviderChain.from_env()
+        self.min_similarity = float(min_similarity)
 
     def _failure(self, code: str, message: str, metadata: dict[str, Any] | None = None):
         return RetrievalChannelResult("vector", error={"code": code, "message": message}, metadata=metadata or {})
@@ -171,6 +173,8 @@ class DenseRetriever:
                     ):
                         return self._failure("dimension_mismatch", f"索引第 {line_number} 行向量维度或数值无效", provider_metadata)
                     score = _cosine(query_vector, [float(value) for value in vector])
+                    if score < self.min_similarity:
+                        continue
                     metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
                     chunk_id = metadata.get("chunk_id") or record.get("chunk_id")
                     if not chunk_id and str(record.get("doc_id", "")).startswith("chunk:"):
