@@ -471,17 +471,17 @@ git commit -m "feat: 增加本地优先检索模型服务"
 - 修改：`tests/test_hybrid_retrieval.py`
 - 修改：`tests/test_build_bge_m3_index.py`
 
-- [ ] **步骤 1：写 BM25 与 dense adapter 失败测试**
+- [x] **步骤 1：写 BM25 与 dense adapter 失败测试**
 
 测试 `Bm25Retriever.search(query, top_k=50)` 真正执行 SQLite `bm25(chunk_fts)`，将 SQLite 越小越好的分数转换为稳定的“越大越好”展示分数，同时保留 `raw_score/raw_rank`。Dense 使用 cosine 并保留相似度。
 
-- [ ] **步骤 2：运行并确认模块缺失**
+- [x] **步骤 2：运行并确认模块缺失**
 
 ```bash
 python3 -m pytest tests/test_retrievers.py -v
 ```
 
-- [ ] **步骤 3：实现 Retriever 协议和两个 adapter**
+- [x] **步骤 3：实现 Retriever 协议和两个 adapter**
 
 ```python
 class Retriever(Protocol):
@@ -490,31 +490,31 @@ class Retriever(Protocol):
 
 BM25 查询失败和 dense provider/index 失败必须返回结构化 channel error，不能伪装成零结果。
 
-- [ ] **步骤 4：写 RRF 与通道故障失败测试**
+- [x] **步骤 4：写 RRF 与通道故障失败测试**
 
 断言每路输入最多 50、`rrf_k=60`、按 `chunk_id` 去重、输出固定最多 20；单路失败继续且 `degraded=true`，双路失败抛 `RetrievalUnavailable`。
 
-- [ ] **步骤 5：运行失败测试**
+- [x] **步骤 5：运行失败测试**
 
 ```bash
 python3 -m pytest tests/test_retrievers.py tests/test_hybrid_retrieval.py -v
 ```
 
-- [ ] **步骤 6：实现 RRF 编排并替换旧词法打分路径**
+- [x] **步骤 6：实现 RRF 编排并替换旧词法打分路径**
 
 保留旧 `retrieval_framework.search()` 供 v1；v2 `hybrid_retrieval.search()` 使用新 adapter。候选必须携带 lexical/vector 原分、原排名、RRF 分和 match channels。
 
-- [ ] **步骤 7：让索引构建使用本地优先 EmbeddingProviderChain**
+- [x] **步骤 7：让索引构建使用本地优先 EmbeddingProviderChain**
 
 manifest 新增模型 revision、hash、provider chain 和降级原因。离线缺模型时保留既有制品，不用空索引覆盖。
 
-- [ ] **步骤 8：运行测试**
+- [x] **步骤 8：运行测试**
 
 ```bash
 python3 -m pytest tests/test_retrievers.py tests/test_hybrid_retrieval.py tests/test_build_bge_m3_index.py -v
 ```
 
-- [ ] **步骤 9：提交**
+- [x] **步骤 9：提交**
 
 ```bash
 git add src/bgpkb/service/retrievers.py src/bgpkb/service/hybrid_retrieval.py src/bgpkb/pipeline/build_bge_m3_index.py tests
@@ -532,31 +532,31 @@ git commit -m "feat: 使用 BM25 和 BGE-M3 执行混合召回"
 - 新建：`tests/test_reranking_pipeline.py`
 - 修改：`tests/test_llm_client.py`
 
-- [ ] **步骤 1：写 top_n 验证和 rerank 失败测试**
+- [x] **步骤 1：写 top_n 验证和 rerank 失败测试**
 
 断言默认 5，合法范围 5–8，4/9/字符串直接报错；传给 reranker 的候选最多 20；返回顺序按 relevance score 降序，稳定 tie-break 使用原 RRF rank。
 
-- [ ] **步骤 2：运行并确认失败**
+- [x] **步骤 2：运行并确认失败**
 
 ```bash
 python3 -m pytest tests/test_reranking_pipeline.py -v
 ```
 
-- [ ] **步骤 3：接入 RerankerProviderChain**
+- [x] **步骤 3：接入 RerankerProviderChain**
 
 无模型时按配置调用 API；若两者失败且 `require_model=false`，使用 RRF 顺序作为显式降级，不伪造 rerank 分；`require_model=true` 直接报错。
 
-- [ ] **步骤 4：写 query type 失败测试**
+- [x] **步骤 4：写 query type 失败测试**
 
 请求值只接受五值枚举；显式类型不调用 DeepSeek。`auto` 的解析结果只允许 `fact/procedure/policy/global` 四值，DeepSeek 返回 `auto` 必须视为非法响应并走规则回退。DeepSeek JSON 非法/超时同样走可审计规则；规则最后兜底 `fact`。响应记录 requested/resolved type、理由、prompt version 和降级原因。
 
-- [ ] **步骤 5：运行失败测试**
+- [x] **步骤 5：运行失败测试**
 
 ```bash
 python3 -m pytest tests/test_query_type_resolver.py tests/test_llm_client.py -v
 ```
 
-- [ ] **步骤 6：实现 DeepSeek 结构化分类方法和规则回退**
+- [x] **步骤 6：实现 DeepSeek 结构化分类方法和规则回退**
 
 为 `llm_client.DeepSeekClient` 增加：
 
@@ -567,13 +567,13 @@ def summarize_context(self, query: str, context: str, max_tokens: int, prompt_ve
 
 两者使用独立版本化提示词，温度为 0；摘要不得新增引用，只返回文本。
 
-- [ ] **步骤 7：运行测试**
+- [x] **步骤 7：运行测试**
 
 ```bash
 python3 -m pytest tests/test_reranking_pipeline.py tests/test_query_type_resolver.py tests/test_llm_client.py -v
 ```
 
-- [ ] **步骤 8：提交**
+- [x] **步骤 8：提交**
 
 ```bash
 git add src/bgpkb/service/query_type_resolver.py src/bgpkb/service/llm_client.py src/bgpkb/service/hybrid_retrieval.py tests

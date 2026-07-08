@@ -68,3 +68,50 @@ def test_deepseek_client_builds_dedicated_structured_mapping_prompt():
     assert "candidate_id" not in user_payload["required_fields"]
     assert "input_fingerprint" not in user_payload["required_fields"]
     assert "status" not in user_payload["required_fields"]
+
+
+def test_deepseek_client_builds_query_type_classification_prompt():
+    client = llm_client.DeepSeekClient(api_key="test-key")
+
+    payload = client.build_query_type_classification_payload(
+        "如何排查 route leak？", "query_type_classification_v1",
+    )
+
+    assert payload["response_format"] == {"type": "json_object"}
+    assert payload["temperature"] == 0
+    assert "fact / procedure / policy / global" in payload["messages"][0]["content"]
+    assert "auto" in payload["messages"][0]["content"]
+    user_payload = json.loads(payload["messages"][1]["content"])
+    assert user_payload["prompt_version"] == "query_type_classification_v1"
+    assert user_payload["allowed_output_values"] == ["fact", "procedure", "policy", "global"]
+    assert user_payload["query"] == "如何排查 route leak？"
+
+
+def test_deepseek_client_builds_global_summary_prompt_without_adding_citations():
+    client = llm_client.DeepSeekClient(api_key="test-key")
+
+    payload = client.build_global_summary_payload(
+        query="总结 route leak 规范",
+        context="chunk-a: MUST NOT leak routes",
+        max_tokens=400,
+        prompt_version="global_section_summary_v1",
+    )
+
+    assert payload["temperature"] == 0
+    assert payload["response_format"] == {"type": "json_object"}
+    assert "不得新增引用" in payload["messages"][0]["content"]
+    user_payload = json.loads(payload["messages"][1]["content"])
+    assert user_payload["max_tokens"] == 400
+    assert user_payload["prompt_version"] == "global_section_summary_v1"
+
+
+def test_deepseek_classify_and_summarize_report_missing_key_without_network():
+    client = llm_client.DeepSeekClient(api_key="")
+
+    classified = client.classify_query_type("什么是 route leak?", "query_type_classification_v1")
+    summarized = client.summarize_context("总结", "证据", 400, "global_section_summary_v1")
+
+    assert classified["ok"] is False
+    assert classified["error_code"] == "missing_api_key"
+    assert summarized["ok"] is False
+    assert summarized["error_code"] == "missing_api_key"

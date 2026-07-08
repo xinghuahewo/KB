@@ -5,6 +5,7 @@ import math
 from bgpkb import paths
 from . import retrieval_framework
 from .bge_m3_remote_client import BgeM3RemoteClient
+from .retrieval_model_client import RerankerProviderChain
 from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
 
 
@@ -228,6 +229,106 @@ class RetrievalUnavailable(RuntimeError):
     def __init__(self, channel_errors):
         super().__init__(f"混合召回不可用：{channel_errors}")
         self.channel_errors = channel_errors
+
+
+class RerankUnavailable(RuntimeError):
+    """精排模型在 require_model=true 时不可用。"""
+
+    def __init__(self, error):
+        super().__init__(f"Reranker 不可用：{error}")
+        self.error = error
+
+
+def validate_top_n(top_n=None):
+    if top_n is None:
+        return 5
+    if isinstance(top_n, bool) or not isinstance(top_n, int) or not 5 <= top_n <= 8:
+        raise ValueError("top_n 必须是 5 到 8 的整数")
+    return top_n
+
+
+def _candidate_document(item):
+    return "\n".join([
+        str(item.get("title", "")),
+        str(item.get("content", item.get("content_preview", ""))),
+    ]).strip()
+
+
+def _rrf_ranked(candidates):
+    return sorted(
+        [dict(item) for item in candidates],
+        key=lambda item: (-float(item.get("rrf_score", item.get("fusion_score", item.get("score", 0.0)))), item.get("chunk_id", "")),
+    )
+
+
+def rerank_candidates(query, candidates, top_n=None, reranker=None, require_model=False):
+    requested_top_n = validate_top_n(top_n)
+    pool = _rrf_ranked(candidates)[:20]
+    if not pool:
+        return {
+            "results": [],
+            "rerank_status": "empty",
+            "requested_top_n": requested_top_n,
+            "candidate_count": 0,
+            "degraded": False,
+            "degraded_reason": None,
+        }
+    effective_top_n = min(requested_top_n, len(pool))
+    documents = [_candidate_document(item) for item in pool]
+    provider = reranker or RerankerProviderChain.from_env()
+    response = provider.rerank(query, documents, effective_top_n, require_model=require_model)
+    if not response.get("ok"):
+        if require_model:
+            raise RerankUnavailable(response)
+        fallback = pool[:requested_top_n]
+        for item in fallback:
+            item["rerank_score"] = None
+            item["rerank_rank"] = None
+        return {
+            "results": fallback,
+            "rerank_status": "degraded_to_rrf",
+            "requested_top_n": requested_top_n,
+            "candidate_count": len(pool),
+            "provider": response.get("provider", "provider_chain"),
+            "model": response.get("model", ""),
+            "revision": response.get("revision", ""),
+            "degraded": True,
+            "degraded_reason": response.get("degraded_reason") or response.get("error") or "reranker_unavailable",
+            "attempts": response.get("attempts", []),
+        }
+
+    indexed = []
+    for result in response.get("results", []):
+        index = result.get("index")
+        score = result.get("relevance_score")
+        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(pool):
+            if require_model:
+                raise RerankUnavailable({"error": "reranker 返回 index 越界"})
+            continue
+        item = dict(pool[index])
+        item["_original_rrf_rank"] = index + 1
+        item["rerank_score"] = float(score)
+        indexed.append(item)
+    indexed.sort(key=lambda item: (-item["rerank_score"], item["_original_rrf_rank"], item.get("chunk_id", "")))
+    results = []
+    for rank, item in enumerate(indexed[:requested_top_n], start=1):
+        item.pop("_original_rrf_rank", None)
+        item["rerank_rank"] = rank
+        item["score"] = item["rerank_score"]
+        results.append(item)
+    return {
+        "results": results,
+        "rerank_status": "complete",
+        "requested_top_n": requested_top_n,
+        "candidate_count": len(pool),
+        "provider": response.get("provider", ""),
+        "model": response.get("model", ""),
+        "revision": response.get("revision", ""),
+        "latency_ms": response.get("latency_ms"),
+        "degraded": bool(response.get("degraded", False)),
+        "degraded_reason": response.get("degraded_reason"),
+        "attempts": response.get("attempts", []),
+    }
 
 
 def _best_channel_items(result):

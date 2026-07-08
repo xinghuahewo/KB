@@ -118,6 +118,58 @@ class DeepSeekClient:
             ],
         }
 
+    def build_query_type_classification_payload(self, query, prompt_version):
+        """构建阶段 B query_type 结构化分类请求。"""
+        return {
+            "model": self.model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是 BGP 检索查询类型分类器。只输出 JSON 对象。"
+                        "query_type 只能是 fact / procedure / policy / global；"
+                        "auto 只是调用方输入值，禁止作为输出。必须给出 reason。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        "prompt_version": prompt_version,
+                        "allowed_output_values": ["fact", "procedure", "policy", "global"],
+                        "query": query,
+                    }, ensure_ascii=False, sort_keys=True),
+                },
+            ],
+        }
+
+    def build_global_summary_payload(self, query, context, max_tokens, prompt_version):
+        """构建 global 父片段摘要请求；摘要不得创造新来源。"""
+        return {
+            "model": self.model,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是 BGP 检索上下文压缩器。只输出 JSON 对象，字段为 summary。"
+                        "只能压缩输入 context 中已有信息，不得新增引用、不得新增来源、不得补充外部知识。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        "prompt_version": prompt_version,
+                        "query": query,
+                        "context": context,
+                        "max_tokens": max_tokens,
+                    }, ensure_ascii=False, sort_keys=True),
+                },
+            ],
+        }
+
     def _post_payload(self, payload):
         request = urllib.request.Request(
             self.base_url,
@@ -192,6 +244,76 @@ class DeepSeekClient:
             "provider": "deepseek",
             "model": self.model,
             "content": content,
+        }
+
+    def classify_query_type(self, query, prompt_version):
+        """请求 DeepSeek 对 query_type 做受限枚举分类。"""
+        if not self.api_key:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "missing_api_key",
+                "error": "DEEPSEEK_API_KEY is not configured.",
+            }
+        payload, error = self._post_payload(self.build_query_type_classification_payload(query, prompt_version))
+        if error:
+            return error
+        choices = payload.get("choices", [])
+        content = choices[0].get("message", {}).get("content", "") if choices else ""
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "invalid_json",
+                "error": "DeepSeek query_type 响应不是合法 JSON。",
+                "raw_content": content,
+            }
+        return {
+            "ok": True,
+            "provider": "deepseek",
+            "model": self.model,
+            "query_type": parsed.get("query_type"),
+            "reason": parsed.get("reason", ""),
+            "raw_usage": payload.get("usage", {}),
+        }
+
+    def summarize_context(self, query, context, max_tokens, prompt_version):
+        """请求 DeepSeek 对 global 超预算片段做来源内摘要。"""
+        if not self.api_key:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "missing_api_key",
+                "error": "DEEPSEEK_API_KEY is not configured.",
+            }
+        payload, error = self._post_payload(self.build_global_summary_payload(query, context, max_tokens, prompt_version))
+        if error:
+            return error
+        choices = payload.get("choices", [])
+        content = choices[0].get("message", {}).get("content", "") if choices else ""
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            return {
+                "ok": False,
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "invalid_json",
+                "error": "DeepSeek summary 响应不是合法 JSON。",
+                "raw_content": content,
+            }
+        summary = parsed.get("summary", "")
+        return {
+            "ok": bool(summary),
+            "provider": "deepseek",
+            "model": self.model,
+            "summary": summary,
+            "raw_usage": payload.get("usage", {}),
         }
 
     def generate_answer(self, query, context_items):
