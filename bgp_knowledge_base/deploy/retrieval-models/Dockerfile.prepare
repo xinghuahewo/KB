@@ -1,0 +1,6 @@
+FROM python:3.11.13-slim
+
+RUN python -m pip install --no-cache-dir huggingface-hub==0.36.0
+WORKDIR /prepare
+COPY prepare_models.py model_manifest.json /prepare/
+ENTRYPOINT ["python", "/prepare/prepare_models.py"]

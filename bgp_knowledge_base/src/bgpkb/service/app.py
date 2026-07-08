@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -128,8 +128,22 @@ def api_hybrid_search(q: str, limit: Limit = 20):
 
 
 @app.get("/api/v1/hybrid/context-pack")
-def api_hybrid_context_pack(q: str, limit: Limit = 8):
-    return repository.hybrid_context_pack(q, limit=limit)
+def api_hybrid_context_pack(
+    q: str,
+    limit: Optional[int] = Query(default=None, ge=1, le=100),
+    top_n: Optional[int] = Query(default=None, ge=5, le=8),
+    query_type: Literal["fact", "procedure", "policy", "global", "auto"] = "auto",
+    token_budget: int = Query(default=6000, ge=1, le=8000),
+    require_model: bool = False,
+):
+    return repository.hybrid_context_pack(
+        q,
+        limit=limit,
+        top_n=top_n,
+        query_type=query_type,
+        token_budget=token_budget,
+        require_model=require_model,
+    )
 
 
 @app.post("/api/v1/rag/answer")

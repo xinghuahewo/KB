@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 import csv
 import json
+import os
 import re
+import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
+
+import jsonschema
 
 from bgpkb import paths
 from bgpkb.cleaning_v2.release import resolve_release
@@ -45,14 +49,35 @@ def load_sources():
         return list(csv.DictReader(handle))
 
 
+def _atomic_text(path, content):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except Exception:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+        raise
+
+
 def write_jsonl(path, records):
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    _atomic_text(
+        path,
+        "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records),
+    )
 
 
 def write_json(path, payload):
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _atomic_text(path, json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
 
 
 def entity_file_for(path):
@@ -145,19 +170,150 @@ def resolve_active_release(pointer_path=None, *, project_root=ROOT):
     return {"manifest": manifest, "chunks_path": chunks_path}
 
 
-def build_chunk_catalog(chunk_dir, *, project_root=ROOT, sources_by_doc=None):
-    records = []
+def _validate_resolved_v2_chunks(chunks, sections):
+    section_schema = json.loads(
+        (paths.SCHEMAS_DIR / "section_catalog.schema.json").read_text(encoding="utf-8")
+    )
+    section_by_id = {}
+    sections_by_doc = defaultdict(list)
+    for section in sections:
+        try:
+            jsonschema.validate(section, section_schema)
+        except jsonschema.ValidationError as exc:
+            raise ValueError(f"section schema 错误 {exc.json_path}: {exc.message}") from exc
+        section_id = section.get("section_id")
+        if not section_id or section_id in section_by_id:
+            raise ValueError(f"重复或缺失 section_id: {section_id}")
+        section_by_id[section_id] = section
+        sections_by_doc[section["doc_id"]].append(section)
+    for section_id, section in section_by_id.items():
+        doc_id = section["doc_id"]
+        parent_id = section["parent_section_id"]
+        if parent_id:
+            parent = section_by_id.get(parent_id)
+            if parent is None:
+                raise ValueError(f"section parent 不存在: {section_id} -> {parent_id}")
+            if parent["doc_id"] != doc_id:
+                raise ValueError(f"section parent 跨文档: {section_id} -> {parent_id}")
+            if section_id not in parent["child_section_ids"]:
+                raise ValueError(f"section parent/child 不互反: {section_id} -> {parent_id}")
+        for child_id in section["child_section_ids"]:
+            child = section_by_id.get(child_id)
+            if child is None:
+                raise ValueError(f"section child 不存在: {section_id} -> {child_id}")
+            if child["doc_id"] != doc_id:
+                raise ValueError(f"section child 跨文档: {section_id} -> {child_id}")
+            if child["parent_section_id"] != section_id:
+                raise ValueError(f"section child/parent 不互反: {section_id} -> {child_id}")
+    for doc_id, doc_sections in sections_by_doc.items():
+        ordered = sorted(
+            doc_sections, key=lambda section: (section["section_order"], section["section_id"])
+        )
+        for index, section in enumerate(ordered):
+            expected_previous = ordered[index - 1]["section_id"] if index else None
+            expected_next = ordered[index + 1]["section_id"] if index + 1 < len(ordered) else None
+            if (
+                section["previous_section_id"] != expected_previous
+                or section["next_section_id"] != expected_next
+            ):
+                raise ValueError(f"section 邻接不连续或跨文档: {doc_id} -> {section['section_id']}")
+    chunk_ids = set()
+    by_parent = defaultdict(list)
+    for chunk in chunks:
+        chunk_id = chunk.get("chunk_id")
+        if not chunk_id or chunk_id in chunk_ids:
+            raise ValueError(f"重复 chunk_id: {chunk_id}")
+        chunk_ids.add(chunk_id)
+        if chunk.get("schema_version") != "chunk_v2_hierarchical":
+            raise ValueError(
+                f"resolved chunk schema_version 必须为 chunk_v2_hierarchical: {chunk_id}"
+            )
+        required = (
+            "schema_version", "parent_section_id", "chunk_order", "previous_chunk_id",
+            "next_chunk_id", "hierarchy_status", "source_block_ids", "section_path",
+        )
+        missing = [field for field in required if field not in chunk]
+        if missing:
+            raise ValueError(f"resolved chunk 缺少层级字段 {missing}: {chunk_id}")
+        if not chunk.get("source_ref") or not chunk.get("source_block_ids"):
+            raise ValueError(f"resolved chunk source_ref/source_block_ids 来源追溯为空: {chunk_id}")
+        section = section_by_id.get(chunk["parent_section_id"])
+        if section is None:
+            raise ValueError(f"parent section 不存在: {chunk_id}")
+        if section.get("doc_id") != chunk.get("doc_id"):
+            raise ValueError(f"chunk 与 parent section 跨文档: {chunk_id}")
+        by_parent[chunk["parent_section_id"]].append(chunk)
+    for section_id, section in section_by_id.items():
+        expected_child_ids = {chunk["chunk_id"] for chunk in by_parent.get(section_id, [])}
+        actual_child_ids = set(section["child_chunk_ids"])
+        if actual_child_ids != expected_child_ids:
+            raise ValueError(
+                f"section.child_chunk_ids 与 resolved chunks 不一致: {section_id}; "
+                f"缺失={sorted(expected_child_ids - actual_child_ids)}; "
+                f"多余={sorted(actual_child_ids - expected_child_ids)}"
+            )
+    for parent_id, siblings in by_parent.items():
+        orders = [chunk.get("chunk_order") for chunk in siblings]
+        if len(set(orders)) != len(orders) or sorted(orders) != list(range(len(siblings))):
+            raise ValueError(f"父 section {parent_id} 的 chunk_order 不连续或重复")
+        ordered = sorted(siblings, key=lambda chunk: chunk["chunk_order"])
+        for index, chunk in enumerate(ordered):
+            previous = ordered[index - 1]["chunk_id"] if index else None
+            following = ordered[index + 1]["chunk_id"] if index + 1 < len(ordered) else None
+            if chunk["previous_chunk_id"] != previous or chunk["next_chunk_id"] != following:
+                raise ValueError(f"chunk 邻接不互反或越过父级: {chunk['chunk_id']}")
+
+
+def build_chunk_catalog(
+    chunk_dir, *, corpus_version, section_records=None, section_catalog_path=None,
+    diagnostics=None, project_root=ROOT, sources_by_doc=None,
+):
+    if corpus_version not in {"v1", "v2"}:
+        raise ValueError(f"未知 corpus_version: {corpus_version}")
+    raw_records = []
     sources_by_doc = sources_by_doc or {}
     project_root = Path(project_root).resolve()
     for path in sorted(Path(chunk_dir).glob("*.jsonl")):
         chunk_file = path.resolve().relative_to(project_root).as_posix()
         for chunk in load_jsonl(path):
-            content = chunk.get("content", "")
-            source = sources_by_doc.get(chunk.get("doc_id", ""), {})
-            source_type = chunk.get("source_type", "")
-            if source_type in {"", "document"}:
-                source_type = source.get("source_type", source_type)
-            records.append({
+            raw_records.append((chunk, chunk_file))
+
+    isolated_reasons = Counter()
+    if corpus_version == "v2":
+        chunk_schema = json.loads(
+            (paths.SCHEMAS_DIR / "chunk.schema.json").read_text(encoding="utf-8")
+        )
+        resolved = []
+        resolved_records = []
+        for chunk, chunk_file in raw_records:
+            try:
+                jsonschema.validate(chunk, chunk_schema)
+            except jsonschema.ValidationError as exc:
+                raise ValueError(f"chunk schema 错误 {exc.json_path}: {exc.message}") from exc
+            hierarchy_status = chunk.get("hierarchy_status")
+            if hierarchy_status == "unresolved":
+                isolated_reasons["hierarchy_status_unresolved"] += 1
+                continue
+            if hierarchy_status != "resolved":
+                raise ValueError(
+                    f"v2 chunk hierarchy_status 必须为 resolved 或 unresolved: "
+                    f"{chunk.get('chunk_id', '<missing>')} -> {hierarchy_status!r}"
+                )
+            resolved.append(chunk)
+            resolved_records.append((chunk, chunk_file))
+        if section_records is None:
+            section_records = load_jsonl(Path(section_catalog_path)) if section_catalog_path else []
+        _validate_resolved_v2_chunks(resolved, section_records)
+        raw_records = resolved_records
+
+    records = []
+    for chunk, chunk_file in raw_records:
+        content = chunk.get("content", "")
+        source = sources_by_doc.get(chunk.get("doc_id", ""), {})
+        source_type = chunk.get("source_type", "")
+        if source_type in {"", "document"}:
+            source_type = source.get("source_type", source_type)
+        record = {
                 "chunk_id": chunk.get("chunk_id", ""),
                 "doc_id": chunk.get("doc_id", ""),
                 "title": chunk.get("title", "") or source.get("title", ""),
@@ -171,8 +327,22 @@ def build_chunk_catalog(chunk_dir, *, project_root=ROOT, sources_by_doc=None):
                 "content_chars": len(content),
                 "content_preview": " ".join(content.split())[:240],
                 "chunk_file": chunk_file,
-            })
+        }
+        if corpus_version == "v2":
+            for field in (
+                "schema_version", "parent_section_id", "chunk_order", "previous_chunk_id",
+                "next_chunk_id", "hierarchy_status", "source_block_ids",
+            ):
+                record[field] = chunk[field]
+        records.append(record)
     records.sort(key=lambda item: (item["doc_id"], item["chunk_id"]))
+    if diagnostics is not None:
+        diagnostics.update({
+            "published_resolved_count": len(records) if corpus_version == "v2" else 0,
+            "isolated_unresolved_count": sum(isolated_reasons.values()),
+            "isolated_reasons": dict(sorted(isolated_reasons.items())),
+            "hierarchy_integrity": "pass" if corpus_version == "v2" else "not_applicable",
+        })
     return records
 
 
@@ -327,7 +497,7 @@ def write_readme(manifest):
         "- 人工复核进度跟踪可通过 SQLite 查询 `human_review_session_status` 查看 session 完成率、状态计数和下一条实体。",
         "- 人工复核执行入口可通过 SQLite 查询 `human_review_task_board` 和 `human_review_handoff` 查看任务板与交接清单。",
     ]
-    README.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _atomic_text(README, "\n".join(lines) + "\n")
 
 
 def write_report(manifest):
@@ -354,6 +524,19 @@ def write_report(manifest):
         lines.append(f"- {key}：{value}")
     lines.extend([
         "",
+        "## 层级发布完整性",
+        "",
+        f"- 层级完整性：{manifest.get('hierarchy_integrity', 'not_applicable')}",
+        f"- 已发布 resolved chunk：{manifest['counts'].get('published_resolved_chunks', 0)}",
+        f"- 已隔离 unresolved chunk：{manifest['counts'].get('isolated_unresolved_chunks', 0)}",
+    ])
+    reasons = manifest.get("hierarchy_isolation_reasons", {})
+    if reasons:
+        lines.extend(f"- {reason}：{count}" for reason, count in sorted(reasons.items()))
+    else:
+        lines.append("- 隔离原因：无")
+    lines.extend([
+        "",
         "## 边界",
         "",
         "- 不联网、不下载资料。",
@@ -361,7 +544,31 @@ def write_report(manifest):
         "- 不把 pending 实体升级为 approved。",
         "- 不根据文本内容自动扩展 PaperMethod、Case 或语义关系。",
     ])
-    REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _atomic_text(REPORT, "\n".join(lines) + "\n")
+
+
+def build_manifest_inputs(release_manifest):
+    inputs = [
+        "data/sources/inventory/sources.csv",
+        f"{release_manifest['chunks']}/*.jsonl",
+        "data/knowledge/entities/*.jsonl",
+        "data/knowledge/relationships/relationships.jsonl",
+        "data/derived/datasets/entity_source_evidence.jsonl",
+        "data/derived/datasets/entity_review_packets.jsonl",
+        "data/derived/datasets/source_processing_status.jsonl",
+        "data/derived/datasets/next_action_queue.jsonl",
+        "data/derived/datasets/human_review_decision_audit.jsonl",
+        "data/derived/datasets/human_review_decision_apply_preview.jsonl",
+        "data/derived/datasets/human_review_input_validation.jsonl",
+        "data/derived/datasets/human_review_progress.jsonl",
+        "data/derived/datasets/human_review_field_checklist.jsonl",
+        "data/derived/datasets/human_review_source_matrix.jsonl",
+        "data/derived/datasets/human_review_task_board.jsonl",
+        "data/derived/datasets/human_review_handoff.jsonl",
+    ]
+    if release_manifest["version"] == "v2":
+        inputs.append("data/derived/datasets/section_catalog.jsonl")
+    return inputs
 
 
 def main():
@@ -371,8 +578,12 @@ def main():
     entity_catalog = build_entity_catalog()
     source_catalog = build_source_catalog()
     sources_by_doc = {row["source_id"]: row for row in source_catalog}
+    hierarchy_diagnostics = {}
     chunk_catalog = build_chunk_catalog(
         active_release["chunks_path"],
+        corpus_version=active_release["manifest"]["version"],
+        section_catalog_path=DATASET_DIR / "section_catalog.jsonl",
+        diagnostics=hierarchy_diagnostics,
         sources_by_doc=sources_by_doc,
     )
     relationship_adjacency = build_relationship_adjacency(entity_catalog)
@@ -392,24 +603,7 @@ def main():
         "corpus_input_snapshot": active_release["manifest"]["input_snapshot"],
         "corpus_authority": active_release["manifest"]["authority"],
         "historical_review_evidence_corpus_version": "v1",
-        "inputs": [
-            "data/sources/inventory/sources.csv",
-            f"{active_release['manifest']['chunks']}/*.jsonl",
-            "data/knowledge/entities/*.jsonl",
-            "data/knowledge/relationships/relationships.jsonl",
-            "data/derived/datasets/entity_source_evidence.jsonl",
-            "data/derived/datasets/entity_review_packets.jsonl",
-            "data/derived/datasets/source_processing_status.jsonl",
-            "data/derived/datasets/next_action_queue.jsonl",
-            "data/derived/datasets/human_review_decision_audit.jsonl",
-            "data/derived/datasets/human_review_decision_apply_preview.jsonl",
-            "data/derived/datasets/human_review_input_validation.jsonl",
-            "data/derived/datasets/human_review_progress.jsonl",
-            "data/derived/datasets/human_review_field_checklist.jsonl",
-            "data/derived/datasets/human_review_source_matrix.jsonl",
-            "data/derived/datasets/human_review_task_board.jsonl",
-            "data/derived/datasets/human_review_handoff.jsonl",
-        ],
+        "inputs": build_manifest_inputs(active_release["manifest"]),
         "outputs": [
             "data/published/README.md",
             "data/published/manifest.json",
@@ -423,6 +617,8 @@ def main():
             "sources": len(source_catalog),
             "entities": len(entity_catalog),
             "chunks": len(chunk_catalog),
+            "published_resolved_chunks": hierarchy_diagnostics["published_resolved_count"],
+            "isolated_unresolved_chunks": hierarchy_diagnostics["isolated_unresolved_count"],
             "relationships": relationship_adjacency["relationship_count"],
             "lexical_terms": len(lexical_index),
             "pending_entities": sum(1 for item in entity_catalog if item["review_status"] == "pending"),
@@ -439,6 +635,8 @@ def main():
         },
         "review_status_counts": dict(sorted(Counter(item["review_status"] for item in entity_catalog).items())),
         "entity_type_counts": dict(sorted(Counter(item["entity_type"] for item in entity_catalog).items())),
+        "hierarchy_integrity": hierarchy_diagnostics["hierarchy_integrity"],
+        "hierarchy_isolation_reasons": hierarchy_diagnostics["isolated_reasons"],
         "boundary": {
             "uses_llm": False,
             "downloads_sources": False,

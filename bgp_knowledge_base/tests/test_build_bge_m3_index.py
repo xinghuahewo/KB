@@ -23,6 +23,14 @@ class FakeEmbeddingClient:
             "vectors": vectors,
             "dimension": 3,
             "input_count": len(texts),
+            "revision": "rev-test",
+            "model_hash": "sha256:model-test",
+            "degraded": True,
+            "degraded_reason": "本地服务超时，已使用 API",
+            "attempts": [
+                {"provider": "local_http", "ok": False},
+                {"provider": self.provider, "ok": True},
+            ],
         }
 
 
@@ -124,11 +132,15 @@ def test_fake_client_builds_index_manifest_and_chinese_report(tmp_path):
         "glossary": 1,
     }
     assert manifest["real_model_execution"] is False
+    assert manifest["model_revision"] == "rev-test"
+    assert manifest["model_hash"] == "sha256:model-test"
+    assert manifest["provider_chain"] == ["local_http", "fake_bge_m3"]
+    assert manifest["degraded_reason"] == "本地服务超时，已使用 API"
     assert "# BGE-M3 Embedding 构建报告" in report
     assert "当前设备未运行本地模型" in report
 
 
-def test_missing_key_writes_skipped_manifest_without_vector_index(tmp_path):
+def test_missing_key_writes_failed_manifest_without_vector_index(tmp_path):
     namespace = runpy.run_path(str(SCRIPT))
     documents = namespace["build_embedding_documents"](**sample_inputs())
     index_path = tmp_path / "bge_m3_vector_index.jsonl"
@@ -145,11 +157,49 @@ def test_missing_key_writes_skipped_manifest_without_vector_index(tmp_path):
     )
 
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert result["status"] == "skipped"
-    assert manifest["status"] == "skipped"
+    assert result["status"] == "failed"
+    assert manifest["status"] == "failed"
     assert manifest["error_code"] == "missing_api_key"
     assert index_path.exists() is False
     assert "未配置远程 API key" in report_path.read_text(encoding="utf-8")
+
+
+def test_failed_rebuild_atomically_preserves_complete_artifacts(tmp_path):
+    namespace = runpy.run_path(str(SCRIPT))
+    documents = namespace["build_embedding_documents"](**sample_inputs())
+    index_path = tmp_path / "bge_m3_vector_index.jsonl"
+    manifest_path = tmp_path / "bge_m3_embedding_manifest.json"
+    report_path = tmp_path / "bge_m3_embedding_report.md"
+    old = {
+        index_path: b'{"old":"index"}\n',
+        manifest_path: b'{"status":"complete","old":true}\n',
+        report_path: "# 旧报告\n".encode(),
+    }
+    for path, content in old.items():
+        path.write_bytes(content)
+
+    class FailsSecondBatch(FakeEmbeddingClient):
+        def __init__(self):
+            self.calls = 0
+
+        def embed_texts(self, texts):
+            self.calls += 1
+            if self.calls == 2:
+                return {"ok": False, "error_code": "offline", "error": "模型不可用"}
+            return super().embed_texts(texts)
+
+    result = namespace["build_index"](
+        documents=documents,
+        client=FailsSecondBatch(),
+        index_path=index_path,
+        manifest_path=manifest_path,
+        report_path=report_path,
+        batch_size=2,
+    )
+
+    assert result["status"] == "failed"
+    assert result["preserved_previous_artifacts"] is True
+    assert {path: path.read_bytes() for path in old} == old
 
 
 def test_processed_source_chunk_is_marked_retrieval_eligible_without_approval():

@@ -90,6 +90,14 @@ CREATE TABLE chunks (
   content_chars INTEGER NOT NULL,
   content_preview TEXT NOT NULL,
   chunk_file TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  section_path_json TEXT NOT NULL,
+  parent_section_id TEXT,
+  chunk_order INTEGER,
+  previous_chunk_id TEXT,
+  next_chunk_id TEXT,
+  hierarchy_status TEXT NOT NULL,
+  source_block_ids_json TEXT NOT NULL,
   payload_json TEXT NOT NULL
 );
 
@@ -636,6 +644,14 @@ def insert_chunks(conn, chunks, fts_enabled):
             "content_chars": record["content_chars"],
             "content_preview": record["content_preview"],
             "chunk_file": record["chunk_file"],
+            "schema_version": record.get("schema_version", ""),
+            "section_path_json": dump_json(record.get("section_path", [])),
+            "parent_section_id": record.get("parent_section_id"),
+            "chunk_order": record.get("chunk_order"),
+            "previous_chunk_id": record.get("previous_chunk_id"),
+            "next_chunk_id": record.get("next_chunk_id"),
+            "hierarchy_status": record.get("hierarchy_status", ""),
+            "source_block_ids_json": dump_json(record.get("source_block_ids", [])),
             "payload_json": dump_json(record),
         })
         for topic in record.get("topics", []):
@@ -651,10 +667,18 @@ def insert_chunks(conn, chunks, fts_enabled):
 
     conn.executemany(
         """
-        INSERT INTO chunks VALUES (
+        INSERT INTO chunks (
+          chunk_id, doc_id, title, source_type, chunk_type, source_ref,
+          language, review_status, content_chars, content_preview, chunk_file,
+          schema_version, section_path_json, parent_section_id, chunk_order,
+          previous_chunk_id, next_chunk_id, hierarchy_status,
+          source_block_ids_json, payload_json
+        ) VALUES (
           :chunk_id, :doc_id, :title, :source_type, :chunk_type, :source_ref,
           :language, :review_status, :content_chars, :content_preview,
-          :chunk_file, :payload_json
+          :chunk_file, :schema_version, :section_path_json, :parent_section_id,
+          :chunk_order, :previous_chunk_id, :next_chunk_id, :hierarchy_status,
+          :source_block_ids_json, :payload_json
         )
         """,
         rows,

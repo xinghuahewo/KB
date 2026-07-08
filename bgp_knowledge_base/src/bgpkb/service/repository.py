@@ -361,8 +361,15 @@ def hybrid_search(query, limit=20):
     return hybrid_retrieval.search(query, limit=limit)
 
 
-def hybrid_context_pack(query, limit=8):
-    return hybrid_retrieval.context_pack(query, limit=limit)
+def hybrid_context_pack(query, limit=None, top_n=None, query_type="auto", token_budget=6000, require_model=False):
+    return hybrid_retrieval.context_pack(
+        query,
+        limit=limit,
+        top_n=top_n,
+        query_type=query_type,
+        token_budget=token_budget,
+        require_model=require_model,
+    )
 
 
 def rag_answer_payload(query, limit=8):

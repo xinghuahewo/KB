@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SectionCatalog",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "section_id",
+    "content_hash",
+    "doc_id",
+    "heading",
+    "section_path",
+    "section_order",
+    "parent_section_id",
+    "child_section_ids",
+    "previous_section_id",
+    "next_section_id",
+    "source_ref",
+    "child_chunk_ids",
+    "block_ids",
+    "content_chars",
+    "estimated_tokens"
+  ],
+  "properties": {
+    "schema_version": {"const": "section_catalog_v1"},
+    "section_id": {"type": "string", "minLength": 1},
+    "content_hash": {"type": "string", "minLength": 1},
+    "doc_id": {"type": "string", "minLength": 1},
+    "heading": {"type": "string"},
+    "section_path": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "section_order": {"type": "integer", "minimum": 0},
+    "parent_section_id": {"type": ["string", "null"], "minLength": 1},
+    "child_section_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "previous_section_id": {"type": ["string", "null"], "minLength": 1},
+    "next_section_id": {"type": ["string", "null"], "minLength": 1},
+    "source_ref": {"type": "string", "minLength": 1},
+    "child_chunk_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "block_ids": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "content_chars": {"type": "integer", "minimum": 0},
+    "estimated_tokens": {"type": "integer", "minimum": 0}
+  }
+}

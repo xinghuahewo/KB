@@ -86,7 +86,7 @@ def source_type_bonus(chunk, normalized_query):
     if intent == "case" and source_type == "case_report":
         bonus += 3.0
     if intent == "standard" and source_type == "standard":
-        bonus += 3.0
+        bonus += 8.0
     if intent == "paper" and source_type == "paper":
         bonus += 2.0
     if intent == "data" and source_type in {"data_doc", "tool_doc"}:

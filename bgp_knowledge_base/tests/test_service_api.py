@@ -122,20 +122,50 @@ def test_hybrid_api_returns_fused_search_and_context_pack():
     assert search.status_code == 200
     search_payload = search.json()
     assert search_payload["results"]
-    assert search_payload["vector_status"] in {"offline_mock", "complete"}
-    assert {
-        "lexical_score",
-        "vector_score",
-        "metadata_boost",
-        "fusion_score",
-        "match_reasons",
-    } <= set(search_payload["results"][0])
+    assert search_payload["vector_status"] in {"complete", "failed"}
+    if search_payload["vector_status"] == "failed":
+        assert search_payload["degraded"] is True
+        assert search_payload["channel_errors"]["vector"]["code"] in {
+            "embedding_unavailable", "index_unavailable"
+        }
+    assert {"rrf_score", "fusion_score", "match_channels"} <= set(search_payload["results"][0])
+    first = search_payload["results"][0]
+    for channel in first["match_channels"]:
+        assert {f"{channel}_raw_score", f"{channel}_raw_rank"} <= set(first)
 
     assert pack.status_code == 200
     pack_payload = pack.json()
     assert pack_payload["citations"]
     assert all(item["trusted"] is True for item in pack_payload["results"])
     assert pack_payload["trusted_chunk_policy"] == "approved_entity_evidence_or_processed_source_with_traceability"
+
+
+def test_hybrid_context_pack_accepts_stage_b_parameters_and_rejects_invalid_values():
+    ok = client.get("/api/v1/hybrid/context-pack", params={
+        "q": "路由泄露",
+        "top_n": 5,
+        "query_type": "fact",
+        "token_budget": 6000,
+        "require_model": "false",
+    })
+    old_limit = client.get("/api/v1/hybrid/context-pack", params={"q": "路由泄露", "limit": 3})
+    bad_top_n = client.get("/api/v1/hybrid/context-pack", params={"q": "路由泄露", "top_n": 4})
+    bad_query_type = client.get("/api/v1/hybrid/context-pack", params={"q": "路由泄露", "query_type": "other"})
+    bad_budget = client.get("/api/v1/hybrid/context-pack", params={"q": "路由泄露", "token_budget": 9000})
+
+    assert ok.status_code == 200
+    payload = ok.json()
+    assert payload["schema_version"] == "context_pack_v2"
+    assert payload["requested_query_type"] == "fact"
+    assert payload["resolved_query_type"] == "fact"
+    assert payload["token_budget"] == 6000
+    assert payload["reranked_chunk_count"] <= 5
+
+    assert old_limit.status_code == 200
+    assert old_limit.json()["deprecated_parameters"]["limit"] == "use top_n"
+    assert bad_top_n.status_code == 422
+    assert bad_query_type.status_code == 422
+    assert bad_budget.status_code == 422
 
 
 def test_rag_answer_api_returns_evidence_when_llm_key_is_missing(monkeypatch):

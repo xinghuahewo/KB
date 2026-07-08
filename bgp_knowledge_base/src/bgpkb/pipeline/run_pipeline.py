@@ -54,6 +54,7 @@ GENERATED_REPORT_IDS_TO_CLEAN = [
     "rag_answer_failure_analysis_report",
     "bge_m3_embedding_report",
     "hybrid_retrieval_eval_report",
+    "chunking_evaluation_report",
     "artifact_manifest_report",
 ]
 
@@ -114,6 +115,7 @@ STEPS = [
     ("构建 RAG 就绪框架报告", "build_rag_readiness_report.py"),
     ("运行 RAG 答案质量评测", "run_rag_answer_eval.py"),
     ("运行混合检索评测", "run_hybrid_retrieval_eval.py"),
+    ("运行阶段 B chunking 评测", "evaluate_chunking.py"),
     ("构建 RAG 答案失败样本分析", "build_rag_answer_failure_analysis.py"),
     ("构建制品清单", "build_artifact_manifest.py"),
     ("运行质量检查", "quality_check.py"),

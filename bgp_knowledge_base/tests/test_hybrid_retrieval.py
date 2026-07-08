@@ -9,6 +9,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from bgpkb.service import hybrid_retrieval  # noqa: E402
+from bgpkb.service import retrieval_framework  # noqa: E402
+from bgpkb.service.retrievers import RetrievalChannelResult  # noqa: E402
 
 
 QUERY_SCRIPT = ROOT / "src" / "bgpkb" / "pipeline" / "query_hybrid_rag.py"
@@ -119,7 +121,10 @@ def test_chinese_route_leak_query_expands_and_returns_trusted_results():
     assert "route leak" in payload["normalized_query"].lower()
     assert payload["results"]
     assert all(item["trusted"] is True for item in payload["results"])
-    assert any("route leak" in (item["title"] + " " + item["content_preview"]).lower() for item in payload["results"])
+    assert any(
+        "route leak" in (item["title"] + " " + item["content_preview"]).lower().replace("-", " ")
+        for item in payload["results"]
+    )
     assert payload["vector_status"] == "disabled"
 
 
@@ -161,3 +166,96 @@ def test_hybrid_query_cli_outputs_json(capsys):
     assert payload["query"] == "路由泄露"
     assert len(payload["results"]) <= 2
     assert payload["vector_status"] == "disabled"
+
+
+class FakeRetriever:
+    def __init__(self, result):
+        self.result = result
+        self.calls = []
+
+    def search(self, query, top_k):
+        self.calls.append((query, top_k))
+        return self.result
+
+
+def _channel_item(chunk_id, raw_rank, raw_score=1.0):
+    return {
+        "chunk_id": chunk_id,
+        "doc_id": f"doc-{chunk_id}",
+        "title": chunk_id,
+        "content_preview": chunk_id,
+        "raw_rank": raw_rank,
+        "raw_score": raw_score,
+        "score": raw_score,
+    }
+
+
+def test_v2_search_uses_fixed_channel_limits_and_rrf_contract():
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[
+        _channel_item("shared", 2, 8.0),
+        _channel_item("shared", 1, 9.0),
+        _channel_item("lexical-only", 2, 7.0),
+    ]))
+    vector = FakeRetriever(RetrievalChannelResult("vector", items=[
+        _channel_item("shared", 1, 0.9),
+        _channel_item("vector-only", 2, 0.8),
+    ], metadata={"provider": "local_http"}))
+
+    payload = hybrid_retrieval.search(
+        "route leak", lexical_retriever=lexical, dense_retriever=vector,
+    )
+
+    assert lexical.calls == [(payload["normalized_query"], 50)]
+    assert vector.calls == [(payload["normalized_query"], 50)]
+    assert len(payload["results"]) == 3
+    shared = payload["results"][0]
+    assert shared["chunk_id"] == "shared"
+    assert shared["rrf_score"] == 2 / 61
+    assert shared["lexical_raw_rank"] == 1
+    assert shared["lexical_raw_score"] == 9.0
+    assert shared["vector_raw_rank"] == 1
+    assert shared["vector_raw_score"] == 0.9
+    assert shared["match_channels"] == ["lexical", "vector"]
+    assert payload["degraded"] is False
+
+
+def test_rrf_is_capped_at_twenty_and_ties_are_stable():
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[
+        _channel_item(f"chunk-{index:02}", 1, 1.0) for index in range(25, -1, -1)
+    ]))
+    vector = FakeRetriever(RetrievalChannelResult("vector", items=[]))
+
+    payload = hybrid_retrieval.search("BGP", lexical_retriever=lexical, dense_retriever=vector)
+
+    assert len(payload["results"]) == 20
+    assert [item["chunk_id"] for item in payload["results"]] == [f"chunk-{index:02}" for index in range(20)]
+    assert payload["channel_status"]["vector"] == "empty"
+
+
+def test_single_failure_degrades_and_double_failure_raises():
+    failed_lexical = FakeRetriever(RetrievalChannelResult(
+        "lexical", error={"code": "bm25_unavailable", "message": "broken"},
+    ))
+    vector = FakeRetriever(RetrievalChannelResult("vector", items=[_channel_item("a", 1, 0.8)]))
+
+    payload = hybrid_retrieval.search(
+        "BGP", lexical_retriever=failed_lexical, dense_retriever=vector,
+    )
+
+    assert payload["degraded"] is True
+    assert payload["channel_errors"]["lexical"]["code"] == "bm25_unavailable"
+    assert payload["results"][0]["chunk_id"] == "a"
+
+    failed_vector = FakeRetriever(RetrievalChannelResult(
+        "vector", error={"code": "embedding_unavailable", "message": "broken"},
+    ))
+    with __import__("pytest").raises(hybrid_retrieval.RetrievalUnavailable):
+        hybrid_retrieval.search(
+            "BGP", lexical_retriever=failed_lexical, dense_retriever=failed_vector,
+        )
+
+
+def test_v1_retrieval_framework_search_remains_available():
+    payload = retrieval_framework.search("route leak", limit=1)
+    assert isinstance(payload, list)
+    assert payload and payload[0]["retrieval_method"] in {"sqlite_fts5", "mock_hybrid"}

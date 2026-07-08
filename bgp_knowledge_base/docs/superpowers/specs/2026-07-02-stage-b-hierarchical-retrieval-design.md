@@ -238,7 +238,7 @@ parent_budget:
 
 ## 8. 模型部署
 
-模型部署在 `nic@10.109.242.145` 的 TITAN RTX 24GB 主机上。使用两个独立 Docker 容器：
+模型部署在 `root@10.99.8.28` 的 4 × NVIDIA GeForce RTX 2080 Ti 主机上，每张 GPU 显存为 11264 MiB。Embedding 与 Reranker 使用两个独立 Docker 容器，每个容器只绑定单张 GPU：
 
 | 服务 | 模型 | 端口 | 主要接口 |
 | --- | --- | ---: | --- |
@@ -247,9 +247,11 @@ parent_budget:
 
 部署约束：
 
-- 两个容器均显式使用 `--gpus all`。
+- Docker 通过 CDI `nvidia.com/gpu=` 设备名暴露 GPU，不使用共享全部 GPU 的参数。
+- GPU 2、GPU 3 是检索模型候选池；每次运行前必须用 `nvidia-smi` 实时检查显存，再为两个容器选择两张不同且满足显存要求的卡，不得假定候选卡已空闲。
+- GPU 0、GPU 1 不得由检索部署自动使用；GPU 1 保留为 Docling 默认计算路由，GPU 0 曾被其他任务占用。候选池不足两张合格卡时停止本地部署并走配置的 API 降级路径。
 - 使用 `restart: unless-stopped`。
-- 模型存放到持久目录，不使用 `/tmp`。
+- 远端部署代码存放在 `/srv/bgpkb/retrieval-models`，模型存放在持久目录 `/srv/bgpkb/retrieval-models-models`，不使用 `/tmp`。
 - 服务只监听受控内网，不暴露公网。
 - `/health` 返回模型名、加载状态、设备和版本。
 - 仓库中不得记录密码、私钥、token 或其他凭据。

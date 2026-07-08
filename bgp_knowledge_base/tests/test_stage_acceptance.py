@@ -137,6 +137,18 @@ def test_stage_acceptance_config_registers_phase_a_corpus_profiling():
     assert len(stage["effect_review"]["downstream_dependencies"]) >= 3
 
 
+def test_stage_acceptance_config_registers_stage_b_hierarchical_retrieval():
+    data = load_config()
+    stages = {stage["id"]: stage for stage in data["stages"]}
+    stage = stages["stage_b_hierarchical_retrieval_v1"]
+
+    assert stage["name"] == "阶段 B 层级检索 v1"
+    assert "src/bgpkb/pipeline/evaluate_chunking.py" in stage["required_files"]
+    assert "data/generated/reports/rag/chunking_evaluation_report.md" in stage["required_files"]
+    assert any(command["id"] == "stage_b_chunking_eval" for command in stage["commands"])
+    assert len(stage["effect_review"]["new_capabilities"]) >= 3
+
+
 def test_stage_acceptance_agent_outputs_effect_oriented_report():
     result = subprocess.run(
         [sys.executable, "-m", "bgpkb.pipeline.run_stage_acceptance", "--stage", "phase_1_data_management_v1"],

@@ -737,3 +737,53 @@ stages:
     human_review_policy:
       allow_needs_human: false
       non_blocking_items: []
+  - id: stage_b_hierarchical_retrieval_v1
+    name: 阶段 B 层级检索 v1
+    acceptance_mode: deterministic_with_effect_review
+    required_files:
+      - docs/superpowers/specs/2026-07-02-stage-b-hierarchical-retrieval-design.md
+      - docs/superpowers/plans/2026-07-02-stage-b-hierarchical-retrieval-implementation.md
+      - metadata/config/rag_retrieval.yaml
+      - metadata/schemas/section_catalog.schema.json
+      - metadata/schemas/context_unit.schema.json
+      - src/bgpkb/service/retrievers.py
+      - src/bgpkb/service/query_type_resolver.py
+      - src/bgpkb/service/token_budget.py
+      - src/bgpkb/service/chunk_store.py
+      - src/bgpkb/service/context_assembler.py
+      - src/bgpkb/pipeline/evaluate_chunking.py
+      - data/generated/reports/rag/chunking_evaluation_report.md
+    commands:
+      - id: stage_b_chunking_eval
+        name: 运行阶段 B chunking / retrieval 评测
+        command: python3 -m bgpkb.pipeline.evaluate_chunking
+      - id: stage_b_retrieval_tests
+        name: 运行阶段 B 检索与组包测试
+        command: python3 -m pytest tests/test_retrievers.py tests/test_reranking_pipeline.py tests/test_query_type_resolver.py tests/test_token_budget.py tests/test_chunk_store.py tests/test_context_assembler.py tests/test_chunking_evaluation.py -v
+    report_checks:
+      - id: chunking_evaluation_summary
+        path: data/generated/reports/rag/chunking_evaluation_report.md
+        must_contain:
+          - "# 阶段 B Chunking / Retrieval 评测报告"
+          - "父 section 可追溯率"
+          - "引用完整率"
+          - "无成熟答案基线"
+    effect_review:
+      one_line: 当前 KB 已具备可追溯 section 层级、混合召回、精排契约、查询类型策略和预算受控 context pack。
+      new_capabilities:
+        - 可检索 v2 chunk 能追溯父 section，并保留前后相邻 chunk 关系。
+        - BM25 与 BGE-M3 dense 通过 RRF 融合，后续可替换为完整检索平台。
+        - reranker、query_type、token budget 与 context assembler 形成稳定在线边界。
+      user_can_now:
+        - 查询时显式指定 top_n、query_type 和 token budget。
+        - 在模型不可用时看到结构化降级原因，而不是静默空结果。
+        - 查看 chunking / retrieval 结构评测报告确认门禁指标。
+      downstream_dependencies:
+        - RAG answer 可直接消费 context unit 内容并保留 assembler 生成的精确引用。
+        - 阶段验收可复用 resolved、父追溯、邻接和引用完整性指标。
+        - 后续引入 Elasticsearch/OpenSearch/Milvus 时可沿用 Retriever/Reranker/Assembler 边界。
+    human_review_policy:
+      allow_needs_human: true
+      non_blocking_items:
+        - 真实远端 GPU 模型部署仍取决于 SSH 可用性。
+        - 无成熟答案质量基线时，本阶段只阻断结构完整性。

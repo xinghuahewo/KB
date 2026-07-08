@@ -17,11 +17,11 @@ def test_rag_and_llm_configs_lock_offline_defaults_and_real_provider_boundaries(
     rag = yaml.safe_load(RAG_CONFIG.read_text(encoding="utf-8"))
     llm = yaml.safe_load(LLM_CONFIG.read_text(encoding="utf-8"))
 
-    assert rag["version"] == "rag_retrieval_v1"
+    assert rag["version"] == "rag_retrieval_v2"
     assert rag["default_mode"] == "offline_framework"
     assert rag["trusted_collection"]["lifecycle_status"] == ["approved"]
     assert rag["trusted_collection"]["exclude_lifecycle_status"] == ["deprecated", "archived"]
-    assert rag["embedding"]["default_provider"] == "siliconflow_bge_m3"
+    assert rag["embedding"]["default_provider"] == "private_bge_m3_service"
     assert rag["embedding"]["offline_fallback_provider"] == "deterministic_mock"
     assert rag["embedding"]["providers"]["siliconflow_bge_m3"]["api_key_env"] == "SILICONFLOW_API_KEY"
     assert rag["embedding"]["providers"]["siliconflow_bge_m3"]["model"] == "BAAI/bge-m3"

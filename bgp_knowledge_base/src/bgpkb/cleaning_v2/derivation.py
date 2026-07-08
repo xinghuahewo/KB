@@ -13,32 +13,8 @@ import shutil
 import tempfile
 import unicodedata
 
+from .section_hierarchy import build_hierarchy, render_table_markdown
 from .transformations import publishable_blocks
-
-
-def _table_markdown(table):
-    rows = int(table.get("rows", 0))
-    columns = int(table.get("columns", 0))
-    if rows <= 0 or columns <= 0:
-        return ""
-    grid = [["" for _ in range(columns)] for _ in range(rows)]
-    for cell in table.get("cells", []):
-        row = int(cell.get("row", 0))
-        column = int(cell.get("column", 0))
-        if 0 <= row < rows and 0 <= column < columns:
-            grid[row][column] = str(cell.get("text", "")).replace("|", "\\|").replace("\n", " ")
-    lines = ["| " + " | ".join(row) + " |" for row in grid]
-    lines.insert(1, "| " + " | ".join("---" for _ in range(columns)) + " |")
-    return "\n".join(lines)
-
-
-def _source_ref(block):
-    provenance = block.get("provenance", {})
-    path = provenance.get("source_path", "")
-    anchor = provenance.get("source_anchor", "")
-    if not anchor:
-        return path
-    return path + (anchor if anchor.startswith("#") else "#" + anchor)
 
 
 def _render_block(block, assets_by_id):
@@ -56,7 +32,7 @@ def _render_block(block, assets_by_id):
     if block_type == "formula":
         return f"$$\n{text}\n$$", text
     if block_type == "table":
-        table_text = _table_markdown(block.get("table", {}))
+        table_text = render_table_markdown(block.get("table") or {})
         return table_text, table_text
     if block_type == "picture":
         asset = next((assets_by_id.get(item) for item in block.get("asset_refs", []) if assets_by_id.get(item)), None)
@@ -67,31 +43,11 @@ def _render_block(block, assets_by_id):
     return text, text
 
 
-def _split_text(text, maximum_chars):
-    if not text:
-        return []
-    parts = []
-    remaining = text.strip()
-    while len(remaining) > maximum_chars:
-        boundary = remaining.rfind(" ", 0, maximum_chars + 1)
-        if boundary <= 0:
-            boundary = maximum_chars
-        parts.append(remaining[:boundary].strip())
-        remaining = remaining[boundary:].strip()
-    if remaining:
-        parts.append(remaining)
-    return parts
-
-
-def _chunk_id(doc_id, block_id, part_index, content):
-    payload = f"{doc_id}|{block_id}|{part_index}|{content}".encode("utf-8")
-    return "chunk_v2_" + hashlib.sha256(payload).hexdigest()
-
-
 def build_derivatives(document, *, maximum_chunk_chars=1200):
     """在内存中构建派生物；不改变权威文档。"""
     document = copy.deepcopy(document)
     approved = publishable_blocks(document.get("blocks", []))
+    hierarchy = build_hierarchy(document, maximum_chunk_chars=maximum_chunk_chars)
     approved_ids = {row["block_id"] for row in approved}
     assets_by_id = {row["asset_id"]: row for row in document.get("assets", [])}
     referenced_asset_ids = {
@@ -99,47 +55,29 @@ def build_derivatives(document, *, maximum_chunk_chars=1200):
     }
     assets = [copy.deepcopy(assets_by_id[item]) for item in sorted(referenced_asset_ids)]
     markdown_parts = []
-    chunks = []
-    section_path = []
-    title = ""
-    source_type = document.get("source", {}).get("source_type", "document")
 
     for block in approved:
-        rendered, chunk_content = _render_block(block, assets_by_id)
+        rendered, _ = _render_block(block, assets_by_id)
         if rendered:
             markdown_parts.append(rendered)
-        if block.get("block_type") in {"title", "heading"} and block.get("cleaned_text", "").strip():
-            level = int(block.get("heading_level") or 1)
-            section_path = section_path[: max(0, level - 1)] + [block.get("cleaned_text", "").strip()]
-            if not title:
-                title = block.get("cleaned_text", "").strip()
-        for part_index, content in enumerate(_split_text(chunk_content, maximum_chunk_chars), start=1):
-            chunks.append(
-                {
-                    "chunk_id": _chunk_id(document["doc_id"], block["block_id"], part_index, content),
-                    "doc_id": document["doc_id"],
-                    "source_type": source_type,
-                    "title": title,
-                    "section_path": list(section_path),
-                    "chunk_type": f"canonical_{block.get('block_type', 'text')}",
-                    "topics": [],
-                    "content": content,
-                    "source_ref": _source_ref(block),
-                    "source_block_ids": [block["block_id"]],
-                    "language": block.get("language") or "und",
-                    "review_status": "approved",
-                }
-            )
     markdown = "\n\n".join(part for part in markdown_parts if part).rstrip() + "\n"
     digest_payload = json.dumps(
-        {"markdown": markdown, "assets": assets, "chunks": chunks},
+        {
+            "markdown": markdown,
+            "assets": assets,
+            "sections": hierarchy.sections,
+            "chunks": hierarchy.chunks,
+            "retrieval_excluded_blocks": hierarchy.excluded_blocks,
+        },
         ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return {
         "doc_id": document["doc_id"],
         "markdown": markdown,
         "assets": assets,
-        "chunks": chunks,
+        "sections": hierarchy.sections,
+        "chunks": hierarchy.chunks,
+        "retrieval_excluded_blocks": hierarchy.excluded_blocks,
         "approved_block_count": len(approved),
         "excluded_block_count": len(document.get("blocks", [])) - len(approved_ids),
         "content_digest": "sha256:" + hashlib.sha256(digest_payload).hexdigest(),
@@ -207,7 +145,7 @@ def derive_document(document, output_root, *, maximum_chunk_chars=1200):
         _write_jsonl(temporary / "chunks.jsonl", result["chunks"])
         (temporary / "derivation_manifest.json").write_text(
             json.dumps(
-                {key: value for key, value in result.items() if key not in {"markdown", "assets", "chunks"}},
+                {key: value for key, value in result.items() if key not in {"markdown", "assets", "sections", "chunks"}},
                 ensure_ascii=False, sort_keys=True, separators=(",", ":"),
             ) + "\n",
             encoding="utf-8",

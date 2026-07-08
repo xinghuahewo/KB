@@ -9,6 +9,7 @@
     "excluded_by_policy"
   ],
   "properties": {
+    "schema_version": {"enum": ["context_pack_v1", "context_pack_v2"]},
     "query": {"type": "string"},
     "normalized_query": {"type": "string"},
     "results": {
@@ -17,6 +18,71 @@
     },
     "citations": {"type": "array", "items": {"type": "object"}},
     "excluded_by_policy": {"type": "array", "items": {"type": "object"}},
-    "generated_by": {"type": "string"}
-  }
+    "generated_by": {"type": "string"},
+    "requested_query_type": {"enum": ["fact", "procedure", "policy", "global", "auto"]},
+    "resolved_query_type": {"enum": ["fact", "procedure", "policy", "global"]},
+    "token_budget": {"type": "integer", "minimum": 1, "maximum": 8000},
+    "context_units": {
+      "type": "array",
+      "items": {"$ref": "context_unit.schema.json"}
+    },
+    "provider": {"type": ["string", "null"]},
+    "model": {"type": ["string", "null"]},
+    "degraded": {"type": "boolean"},
+    "degraded_reason": {"type": ["string", "null"]},
+    "trim_events": {"type": "array", "items": {"type": "object"}}
+  },
+  "$defs": {
+    "requires_v2": {
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": {"const": "context_pack_v2"}
+      }
+    }
+  },
+  "dependentSchemas": {
+    "requested_query_type": {"$ref": "#/$defs/requires_v2"},
+    "resolved_query_type": {"$ref": "#/$defs/requires_v2"},
+    "token_budget": {"$ref": "#/$defs/requires_v2"},
+    "context_units": {"$ref": "#/$defs/requires_v2"},
+    "provider": {"$ref": "#/$defs/requires_v2"},
+    "model": {"$ref": "#/$defs/requires_v2"},
+    "degraded": {"$ref": "#/$defs/requires_v2"},
+    "degraded_reason": {"$ref": "#/$defs/requires_v2"},
+    "trim_events": {"$ref": "#/$defs/requires_v2"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["schema_version"],
+        "properties": {"schema_version": {"const": "context_pack_v2"}}
+      },
+      "then": {
+        "required": [
+          "requested_query_type",
+          "resolved_query_type",
+          "token_budget",
+          "context_units",
+          "provider",
+          "model",
+          "degraded",
+          "trim_events"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": ["degraded"],
+        "properties": {"degraded": {"const": true}}
+      },
+      "then": {
+        "required": ["provider", "model", "degraded_reason"],
+        "properties": {
+          "provider": {"type": "string", "minLength": 1},
+          "model": {"type": "string", "minLength": 1},
+          "degraded_reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  ]
 }

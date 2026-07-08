@@ -62,7 +62,15 @@ def citation_source_refs(payload):
 
 
 def context_chunk_ids(payload):
-    return {item.get("chunk_id", "") for item in payload.get("context_pack", {}).get("results", [])}
+    pack = payload.get("context_pack", {})
+    unit_chunk_ids = {
+        chunk_id
+        for unit in pack.get("context_units", [])
+        for chunk_id in unit.get("included_chunk_ids", [])
+    }
+    if unit_chunk_ids:
+        return unit_chunk_ids
+    return {item.get("chunk_id", "") for item in pack.get("results", [])}
 
 
 def score_payload(question, payload):
