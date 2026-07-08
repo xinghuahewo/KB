@@ -181,7 +181,7 @@ def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
     current_chunks_v2_record = json.loads(
         current_chunks_v2_path.read_text(encoding="utf-8").splitlines()[0]
     )
-    assert "schema_version" not in current_chunks_v2_record
+    assert current_chunks_v2_record["schema_version"] == "chunk_v2_hierarchical"
     assert current_chunks_v2_record["source_block_ids"]
     schema.validate(current_chunks_v2_record)
 

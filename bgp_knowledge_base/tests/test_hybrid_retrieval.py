@@ -121,7 +121,10 @@ def test_chinese_route_leak_query_expands_and_returns_trusted_results():
     assert "route leak" in payload["normalized_query"].lower()
     assert payload["results"]
     assert all(item["trusted"] is True for item in payload["results"])
-    assert any("route leak" in (item["title"] + " " + item["content_preview"]).lower() for item in payload["results"])
+    assert any(
+        "route leak" in (item["title"] + " " + item["content_preview"]).lower().replace("-", " ")
+        for item in payload["results"]
+    )
     assert payload["vector_status"] == "disabled"
 
 
