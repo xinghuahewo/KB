@@ -589,7 +589,7 @@ git commit -m "feat: 增加模型精排与查询类型解析"
 - 新建：`tests/test_token_budget.py`
 - 新建：`tests/test_chunk_store.py`
 
-- [ ] **步骤 1：写预算公式失败测试**
+- [x] **步骤 1：写预算公式失败测试**
 
 默认 6000、硬上限 8000。测试必须覆盖动态公式，而不只检查默认常数：
 
@@ -607,13 +607,13 @@ assert parent_budget("global", 6000).max_full_parent_sections == 2
 
 预算超过 8000 或非正数直接报错。
 
-- [ ] **步骤 2：运行并确认模块缺失**
+- [x] **步骤 2：运行并确认模块缺失**
 
 ```bash
 python3 -m pytest tests/test_token_budget.py -v
 ```
 
-- [ ] **步骤 3：实现 TokenCounter 与 ParentBudget**
+- [x] **步骤 3：实现 TokenCounter 与 ParentBudget**
 
 ```python
 class TokenCounter:
@@ -624,23 +624,23 @@ def parent_budget(query_type: str, context_budget: int) -> dict: ...
 
 注入真实 tokenizer 时使用真实值；不可用时使用保守字符估算并标记 `estimated=true`。
 
-- [ ] **步骤 4：写 chunk/section store 失败测试**
+- [x] **步骤 4：写 chunk/section store 失败测试**
 
 验证按 `chunk_file` 懒加载完整 content、缓存文件、拒绝路径逃逸、按 section tree 取得直属 chunk 或整个子树、找不到 chunk 时结构化报错。
 
-- [ ] **步骤 5：运行失败测试并实现 store**
+- [x] **步骤 5：运行失败测试并实现 store**
 
 ```bash
 python3 -m pytest tests/test_chunk_store.py -v
 ```
 
-- [ ] **步骤 6：运行两组测试**
+- [x] **步骤 6：运行两组测试**
 
 ```bash
 python3 -m pytest tests/test_token_budget.py tests/test_chunk_store.py -v
 ```
 
-- [ ] **步骤 7：提交**
+- [x] **步骤 7：提交**
 
 ```bash
 git add src/bgpkb/service/token_budget.py src/bgpkb/service/chunk_store.py tests/test_token_budget.py tests/test_chunk_store.py
