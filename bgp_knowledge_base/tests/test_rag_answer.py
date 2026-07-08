@@ -37,6 +37,23 @@ class UnavailableClient:
         }
 
 
+class CapturingClient:
+    model = "deepseek-chat"
+
+    def __init__(self):
+        self.context_items = None
+
+    def generate_answer(self, query, context_items):
+        self.context_items = context_items
+        return {
+            "ok": True,
+            "provider": "deepseek",
+            "model": self.model,
+            "content": "ok",
+            "raw_usage": {},
+        }
+
+
 def test_answer_question_generates_traceable_answer_when_evidence_exists():
     payload = rag_answer.answer_question("route leak", limit=3, client=SuccessfulClient())
 
@@ -70,3 +87,28 @@ def test_answer_question_refuses_generation_without_evidence():
     assert payload["answer"] == ""
     assert payload["citations"] == []
     assert payload["guardrails"]["blocked_reason"] == "no_citations"
+
+
+def test_answer_question_sends_context_unit_content_to_llm(monkeypatch):
+    fake_pack = {
+        "results": [{"chunk_id": "raw", "content_preview": "raw retrieval"}],
+        "context_units": [{
+            "context_id": "u1",
+            "content": "assembled context",
+            "included_chunk_ids": ["c1"],
+            "citations": [{"chunk_id": "c1", "source_ref": "s1"}],
+        }],
+        "citations": [{"chunk_id": "c1", "source_ref": "s1"}],
+    }
+    monkeypatch.setattr(rag_answer.hybrid_retrieval, "context_pack", lambda *args, **kwargs: fake_pack)
+    client = CapturingClient()
+
+    payload = rag_answer.answer_question("q", limit=5, client=client)
+
+    assert payload["answer_status"] == "answered"
+    assert client.context_items == [{
+        "chunk_id": "c1",
+        "title": "u1",
+        "source_ref": "s1",
+        "content_preview": "assembled context",
+    }]

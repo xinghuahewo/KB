@@ -730,31 +730,31 @@ git commit -m "feat: 按查询类型组装层级上下文"
 - 修改：`tests/test_rag_answer.py`
 - 修改：`tests/test_stage_acceptance.py`
 
-- [ ] **步骤 1：写 API 失败测试**
+- [x] **步骤 1：写 API 失败测试**
 
 `/api/v1/hybrid/context-pack` 接受 `top_n=5..8`、`query_type`、`token_budget<=8000`、`require_model`。非法 top_n/query type/budget 返回 422。旧 `limit` 仅作为兼容别名映射到合法 top_n，并在响应标记 deprecated；v1 retrieval endpoint 不变。
 
-- [ ] **步骤 2：运行并确认参数尚未实现**
+- [x] **步骤 2：运行并确认参数尚未实现**
 
 ```bash
 python3 -m pytest tests/test_service_api.py tests/test_rag_answer.py -v
 ```
 
-- [ ] **步骤 3：接通完整在线数据流**
+- [x] **步骤 3：接通完整在线数据流**
 
 `hybrid_retrieval.context_pack()` 执行：召回20→rerank 5–8→resolve query type→assemble。RAG answer 只把 context unit content 传给 DeepSeek，引用仍由 assembler 生成。
 
-- [ ] **步骤 4：写评测指标失败测试**
+- [x] **步骤 4：写评测指标失败测试**
 
 构造 fixture 精确验证：resolved 覆盖率、发布父级追溯率、父 section 覆盖率、前后链接正确率、included chunk 引用完整率、来源覆盖率、总体 pass rate、`is_critical=true` 子集 pass rate和百分点退化。逐题结果必须断言 `candidate_chunk_count` 为融合后候选数、`reranked_chunk_count` 为精排后命中数。
 
-- [ ] **步骤 5：运行并确认评测模块缺失**
+- [x] **步骤 5：运行并确认评测模块缺失**
 
 ```bash
 python3 -m pytest tests/test_chunking_evaluation.py -v
 ```
 
-- [ ] **步骤 6：实现 `evaluate_chunking.py`**
+- [x] **步骤 6：实现 `evaluate_chunking.py`**
 
 输出：
 
@@ -763,11 +763,11 @@ python3 -m pytest tests/test_chunking_evaluation.py -v
 
 每题记录候选 chunk 数、rerank 后 chunk 数、命中父 section 数、预期来源覆盖和引用状态；汇总报告包含父 section 覆盖率。无成熟基线时写 baseline，不执行答案退化阻断；有兼容 prompt/model 版本的基线时执行 3/5 个百分点门禁。
 
-- [ ] **步骤 7：登记报告、阶段验收和流水线**
+- [x] **步骤 7：登记报告、阶段验收和流水线**
 
 `run_pipeline.py` 在 v2 迁移后构建 section catalog，在发布和检索索引后运行 chunking 评测。`quality_check.py` 对发布记录执行 100% 父级/邻接/引用不变量，对全量生成数据执行 99% resolved KPI。
 
-- [ ] **步骤 8：写完整 fake-provider 链路集成测试**
+- [x] **步骤 8：写完整 fake-provider 链路集成测试**
 
 新建 `tests/test_stage_b_retrieval_integration.py`，使用临时 SQLite FTS5、内存 dense 索引、fake embedding、fake reranker、fake query type 和临时 section/chunk 文件，一次调用断言：
 
@@ -778,13 +778,13 @@ BM25+dense → RRF(top 20) → rerank(top_n) → resolve query type
 
 测试同时覆盖单一模型 provider 降级标记，禁止 patch 掉任一核心编排阶段。
 
-- [ ] **步骤 9：运行服务、集成与评测测试**
+- [x] **步骤 9：运行服务、集成与评测测试**
 
 ```bash
 python3 -m pytest tests/test_service_api.py tests/test_rag_answer.py tests/test_stage_b_retrieval_integration.py tests/test_chunking_evaluation.py tests/test_stage_acceptance.py -v
 ```
 
-- [ ] **步骤 10：提交**
+- [x] **步骤 10：提交**
 
 ```bash
 git add src/bgpkb/service src/bgpkb/pipeline metadata/config data/derived/datasets/rag_answer_eval_questions.jsonl tests

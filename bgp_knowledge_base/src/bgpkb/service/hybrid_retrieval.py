@@ -1,10 +1,14 @@
 """BGE-M3、关键词和元数据融合检索。"""
 
 import math
+from pathlib import Path
 
 from bgpkb import paths
 from . import retrieval_framework
 from .bge_m3_remote_client import BgeM3RemoteClient
+from .chunk_store import ChunkStore
+from .context_assembler import ContextAssembler
+from .query_type_resolver import resolve_query_type
 from .retrieval_model_client import RerankerProviderChain
 from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
 
@@ -435,8 +439,113 @@ def search(
     }
 
 
-def context_pack(query, limit=8, client=None, vector_enabled=True):
-    payload = search(query, limit=limit, client=client, vector_enabled=vector_enabled)
-    payload["citations"] = retrieval_framework.citations_for(payload["results"])
-    payload["excluded_by_policy"] = retrieval_framework.excluded_by_policy()
+class _OfflineRerankerFallback:
+    def rerank(self, query, documents, top_n, require_model=False):
+        return {
+            "ok": False,
+            "provider": "offline_fallback",
+            "model": "BAAI/bge-reranker-v2-m3",
+            "error": "离线默认路径不调用真实 reranker；保留 RRF 顺序",
+            "degraded_reason": "reranker_offline_fallback",
+        }
+
+
+def _legacy_limit_to_top_n(limit):
+    if limit is None:
+        return None, {}
+    return min(8, max(5, int(limit))), {"limit": "use top_n"}
+
+
+def _default_section_catalog_path():
+    candidates = [
+        paths.DATASETS_DIR / "section_catalog.jsonl",
+        paths.PUBLISHED_DIR / "section_catalog.jsonl",
+    ]
+    return next((path for path in candidates if path.exists()), candidates[0])
+
+
+def _build_context_units(query, results, resolved_query_type, token_budget, store=None):
+    section_path = _default_section_catalog_path()
+    if store is None:
+        if not section_path.exists():
+            return [], [{"event": "context_assembly_skipped", "reason": "section_catalog_missing"}]
+        store = ChunkStore(paths.PROJECT_ROOT, paths.PUBLISHED_DIR / "chunk_catalog.jsonl", section_path)
+    assembler = ContextAssembler(store)
+    try:
+        pack = assembler.build(query, results, resolved_query_type, token_budget)
+    except Exception as exc:
+        return [], [{"event": "context_assembly_failed", "reason": str(exc)}]
+    return pack["context_units"], pack["trim_events"]
+
+
+def _citations_from_units(context_units):
+    citations = []
+    seen = set()
+    for unit in context_units:
+        for citation in unit.get("citations", []):
+            key = (citation.get("chunk_id"), citation.get("source_ref"))
+            if key not in seen:
+                seen.add(key)
+                citations.append(citation)
+    return citations
+
+
+def context_pack(
+    query,
+    limit=None,
+    client=None,
+    vector_enabled=True,
+    top_n=None,
+    query_type="auto",
+    token_budget=6000,
+    require_model=False,
+    reranker=None,
+    query_type_client=None,
+    store=None,
+    lexical_retriever=None,
+    dense_retriever=None,
+):
+    alias_top_n, deprecated = _legacy_limit_to_top_n(limit)
+    effective_top_n = validate_top_n(top_n if top_n is not None else alias_top_n)
+    recall = search(
+        query,
+        limit=20,
+        client=client,
+        vector_enabled=vector_enabled,
+        lexical_retriever=lexical_retriever,
+        dense_retriever=dense_retriever,
+    )
+    reranked = rerank_candidates(
+        query,
+        recall["results"],
+        top_n=effective_top_n,
+        reranker=reranker or (_OfflineRerankerFallback() if not require_model else None),
+        require_model=require_model,
+    )
+    query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
+    context_units, trim_events = _build_context_units(
+        query, reranked["results"], query_type_payload["resolved_query_type"], token_budget, store=store,
+    )
+    citations = _citations_from_units(context_units) or retrieval_framework.citations_for(reranked["results"])
+    payload = {
+        **recall,
+        "schema_version": "context_pack_v2",
+        "results": reranked["results"],
+        "citations": citations,
+        "excluded_by_policy": retrieval_framework.excluded_by_policy(),
+        "requested_query_type": query_type_payload["requested_query_type"],
+        "resolved_query_type": query_type_payload["resolved_query_type"],
+        "query_type_resolution": query_type_payload,
+        "token_budget": token_budget,
+        "context_units": context_units,
+        "trim_events": trim_events,
+        "provider": reranked.get("provider"),
+        "model": reranked.get("model"),
+        "degraded": bool(recall.get("degraded") or reranked.get("degraded") or query_type_payload.get("degraded")),
+        "degraded_reason": reranked.get("degraded_reason") or query_type_payload.get("degraded_reason"),
+        "rerank_status": reranked["rerank_status"],
+        "reranked_chunk_count": len(reranked["results"]),
+        "candidate_chunk_count": len(recall["results"]),
+        "deprecated_parameters": deprecated,
+    }
     return payload

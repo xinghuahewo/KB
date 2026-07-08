@@ -30,7 +30,7 @@ def answer_question(query, limit=8, client=None):
         }
 
     active_client = client or llm_client.DeepSeekClient.from_env()
-    result = active_client.generate_answer(query, pack.get("results", []))
+    result = active_client.generate_answer(query, _llm_context_items(pack))
     if not result.get("ok"):
         return {
             "query": query,
@@ -58,3 +58,19 @@ def answer_question(query, limit=8, client=None):
         "context_pack": pack,
         "guardrails": _guardrails(),
     }
+
+
+def _llm_context_items(pack):
+    units = pack.get("context_units") or []
+    if not units:
+        return pack.get("results", [])
+    items = []
+    for unit in units:
+        first_citation = (unit.get("citations") or [{}])[0]
+        items.append({
+            "chunk_id": ",".join(unit.get("included_chunk_ids", [])),
+            "title": unit.get("context_id", ""),
+            "source_ref": first_citation.get("source_ref", ""),
+            "content_preview": unit.get("content", ""),
+        })
+    return items
