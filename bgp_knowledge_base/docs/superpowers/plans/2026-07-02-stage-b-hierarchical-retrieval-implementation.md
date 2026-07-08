@@ -655,35 +655,35 @@ git commit -m "feat: 增加层级上下文 token 预算与内容存储"
 - 新建：`tests/test_context_assembler.py`
 - 修改：`metadata/schemas/context_unit.schema.json`
 
-- [ ] **步骤 1：写 fact/procedure/policy 行为失败测试**
+- [x] **步骤 1：写 fact/procedure/policy 行为失败测试**
 
 覆盖：fact 前后各 1 且不提升；procedure 前后各 2、同父两个命中后提升、只填 1 个 gap；policy 连续区间在预算内取连续片段、小 section 子树可全文。
 
-- [ ] **步骤 2：运行并确认模块缺失**
+- [x] **步骤 2：运行并确认模块缺失**
 
 ```bash
 python3 -m pytest tests/test_context_assembler.py -v
 ```
 
-- [ ] **步骤 3：实现窗口、提升、排序与去重**
+- [x] **步骤 3：实现窗口、提升、排序与去重**
 
 先按 chunk_id 去重，再按相同 `source_block_ids` 集合去重；section 组按最高 rerank 分降序、组内按 chunk order。
 
-- [ ] **步骤 4：写 global 决策树失败测试**
+- [x] **步骤 4：写 global 决策树失败测试**
 
 覆盖：同父至少 2 命中且子树在专用预算内才全文；否则片段；合计超预算才调用 DeepSeek 摘要；摘要最多 400 tokens；API 失败裁高分原文；最多 2 个全文。global 候选选择必须先为每个 `doc_id` 选最高 rerank 分 section，再按分数补充同 doc 的其他 section；测试用交错分数 fixture 证明这一顺序。
 
-- [ ] **步骤 5：运行失败测试并实现 global 策略**
+- [x] **步骤 5：运行失败测试并实现 global 策略**
 
 ```bash
 python3 -m pytest tests/test_context_assembler.py -v
 ```
 
-- [ ] **步骤 6：写裁剪顺序与不可截断 Block 失败测试**
+- [x] **步骤 6：写裁剪顺序与不可截断 Block 失败测试**
 
 用 `trim_events` 断言顺序：去重→裁相邻→全文降级→低分命中→内部裁剪。table/code/formula 只能整体保留或整体移除。
 
-- [ ] **步骤 7：实现引用不变量**
+- [x] **步骤 7：实现引用不变量**
 
 每个 context unit 输出：
 
@@ -696,13 +696,13 @@ max_rerank_score, trim_events, citations
 
 缺少精确 `(chunk_id, source_ref)` 的 unit 不得返回。
 
-- [ ] **步骤 8：运行测试**
+- [x] **步骤 8：运行测试**
 
 ```bash
 python3 -m pytest tests/test_context_assembler.py tests/test_token_budget.py tests/test_chunk_store.py -v
 ```
 
-- [ ] **步骤 9：提交**
+- [x] **步骤 9：提交**
 
 ```bash
 git add src/bgpkb/service/context_assembler.py metadata/schemas/context_unit.schema.json tests/test_context_assembler.py

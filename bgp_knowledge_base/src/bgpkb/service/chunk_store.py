@@ -61,7 +61,7 @@ class ChunkStore:
         return {**catalog_row, **full_row, "chunk_file": chunk_file}
 
     def get_section_direct_chunks(self, section_id: str) -> list[dict[str, Any]]:
-        section = self._section(section_id)
+        section = self.get_section(section_id)
         return self._chunks_for_ids(section.get("child_chunk_ids", []))
 
     def get_section_subtree_chunks(self, section_id: str) -> list[dict[str, Any]]:
@@ -69,17 +69,17 @@ class ChunkStore:
         self._collect_section_chunks(section_id, chunks, seen_sections=set())
         return chunks
 
-    def _section(self, section_id: str) -> dict[str, Any]:
+    def get_section(self, section_id: str) -> dict[str, Any]:
         section = self._sections.get(section_id)
         if not section:
             raise ChunkStoreError("section_not_found", f"找不到 section：{section_id}")
-        return section
+        return dict(section)
 
     def _collect_section_chunks(self, section_id: str, chunks: list[dict[str, Any]], seen_sections: set[str]) -> None:
         if section_id in seen_sections:
             raise ChunkStoreError("section_cycle", f"section 子树存在环：{section_id}")
         seen_sections.add(section_id)
-        section = self._section(section_id)
+        section = self.get_section(section_id)
         chunks.extend(self._chunks_for_ids(section.get("child_chunk_ids", [])))
         for child_section_id in section.get("child_section_ids", []):
             self._collect_section_chunks(child_section_id, chunks, seen_sections)
