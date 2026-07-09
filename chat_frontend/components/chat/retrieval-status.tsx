@@ -9,10 +9,10 @@ type Props = {
 };
 
 const STATUS_LABEL: Record<AnswerStatus, string> = {
-  answered: "answered",
-  no_evidence: "no_evidence",
-  llm_unavailable: "llm_unavailable",
-  error: "error",
+  answered: "已回答",
+  no_evidence: "证据不足",
+  llm_unavailable: "仅显示证据",
+  error: "服务异常",
 };
 
 export function RetrievalStatus({ status, retrieval, citationCount = 0 }: Props) {
@@ -24,14 +24,14 @@ export function RetrievalStatus({ status, retrieval, citationCount = 0 }: Props)
         <Icon className="h-3.5 w-3.5" aria-hidden="true" />
         {STATUS_LABEL[status]}
       </span>
-      <span className="border border-[var(--line)] bg-white px-2 py-1 text-[var(--muted)]">引用 {citationCount}</span>
+      <span className="border border-[var(--line)] bg-white px-2 py-1 text-[var(--muted)]">证据 {citationCount}</span>
       {retrieval ? (
         <>
           <span className="border border-[var(--line)] bg-white px-2 py-1 text-[var(--muted)]">
-            结果 {retrieval.resultCount}
+            来源 {retrieval.sourceCount ?? retrieval.sourceTypes.length}
           </span>
           <span className="border border-[var(--line)] bg-white px-2 py-1 text-[var(--muted)]">
-            {retrieval.method}
+            {retrieval.hasSectionContext ? "已结合章节上下文" : retrieval.methodLabel || "证据检索"}
           </span>
         </>
       ) : null}

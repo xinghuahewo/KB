@@ -504,6 +504,7 @@ def context_pack(
     store=None,
     lexical_retriever=None,
     dense_retriever=None,
+    progress=None,
 ):
     alias_top_n, deprecated = _legacy_limit_to_top_n(limit)
     effective_top_n = validate_top_n(top_n if top_n is not None else alias_top_n)
@@ -515,6 +516,17 @@ def context_pack(
         lexical_retriever=lexical_retriever,
         dense_retriever=dense_retriever,
     )
+    if progress is not None:
+        progress({
+            "stage": "retrieval",
+            "status": "complete",
+            "message": "候选证据召回完成",
+            "candidate_count": len(recall.get("results", [])),
+            "lexical_count": recall.get("lexical_count", 0),
+            "vector_count": recall.get("vector_count", 0),
+            "vector_status": recall.get("vector_status", "unknown"),
+            "degraded": bool(recall.get("degraded", False)),
+        })
     reranked = rerank_candidates(
         query,
         recall["results"],
@@ -522,6 +534,16 @@ def context_pack(
         reranker=reranker or (_OfflineRerankerFallback() if not require_model else None),
         require_model=require_model,
     )
+    if progress is not None:
+        progress({
+            "stage": "rerank",
+            "status": reranked["rerank_status"],
+            "message": "证据精排完成" if reranked["rerank_status"] == "complete" else "证据精排已降级",
+            "candidate_count": reranked.get("candidate_count", 0),
+            "result_count": len(reranked.get("results", [])),
+            "provider": reranked.get("provider", ""),
+            "degraded": bool(reranked.get("degraded", False)),
+        })
     query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
     context_units, trim_events = _build_context_units(
         query, reranked["results"], query_type_payload["resolved_query_type"], token_budget, store=store,

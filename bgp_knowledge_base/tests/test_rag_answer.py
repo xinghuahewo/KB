@@ -121,3 +121,55 @@ def test_answer_question_sends_context_unit_content_to_llm(monkeypatch):
         "source_ref": "s1",
         "content_preview": "assembled context",
     }]
+
+
+def test_answer_question_can_require_real_reranker_with_env(monkeypatch):
+    captured = {}
+    fake_pack = {
+        "results": [{"chunk_id": "raw", "content_preview": "raw retrieval"}],
+        "context_units": [],
+        "citations": [{"chunk_id": "raw", "source_ref": "s1"}],
+    }
+
+    def fake_context_pack(*args, **kwargs):
+        captured.update(kwargs)
+        return fake_pack
+
+    monkeypatch.setenv("BGP_RAG_REQUIRE_RERANKER", "1")
+    monkeypatch.setattr(rag_answer.hybrid_retrieval, "context_pack", fake_context_pack)
+
+    payload = rag_answer.answer_question("q", limit=8, client=SuccessfulClient())
+
+    assert payload["answer_status"] == "answered"
+    assert captured["require_model"] is True
+
+
+def test_answer_question_reports_progress_stages(monkeypatch):
+    fake_pack = {
+        "results": [{"chunk_id": "raw", "content_preview": "raw retrieval"}],
+        "context_units": [],
+        "citations": [{"chunk_id": "raw", "source_ref": "s1"}],
+    }
+    events = []
+
+    def fake_context_pack(*args, **kwargs):
+        kwargs["progress"]({
+            "stage": "rerank",
+            "status": "complete",
+            "message": "精排完成",
+        })
+        return fake_pack
+
+    monkeypatch.setattr(rag_answer.hybrid_retrieval, "context_pack", fake_context_pack)
+
+    payload = rag_answer.answer_question("q", limit=8, client=SuccessfulClient(), progress=events.append)
+
+    assert payload["answer_status"] == "answered"
+    assert [event["stage"] for event in events] == [
+        "retrieval",
+        "rerank",
+        "context_pack",
+        "generation",
+        "done",
+    ]
+    assert events[-1]["answer_status"] == "answered"

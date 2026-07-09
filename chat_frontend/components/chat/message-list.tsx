@@ -15,9 +15,9 @@ export function MessageList({ messages, answerStatus, retrieval, citationCount }
     return (
       <div className="flex min-h-[420px] items-center justify-center border border-dashed border-[var(--line-strong)] bg-[var(--panel)] p-8 text-center">
         <div>
-          <p className="text-2xl font-semibold tracking-normal">BGP RAG Chat</p>
+          <p className="text-2xl font-semibold tracking-normal">向 BGP 知识库提问</p>
           <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--muted)]">
-            输入一个 BGP、路由安全或互联网事件问题，答案会带着引用和检索状态返回。
+            输入一个 BGP、路由安全或互联网事件问题。系统会先查找资料、整理相关章节，再给出带引用的答案。
           </p>
         </div>
       </div>

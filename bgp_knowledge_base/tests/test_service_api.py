@@ -183,6 +183,41 @@ def test_rag_answer_api_returns_evidence_when_llm_key_is_missing(monkeypatch):
     assert payload["guardrails"]["local_model_enabled"] is False
 
 
+def test_rag_answer_stream_api_returns_progress_and_done_events(monkeypatch):
+    def fake_payload(query, limit=8, progress=None):
+        progress({
+            "stage": "retrieval",
+            "status": "complete",
+            "message": "检索完成",
+        })
+        return {
+            "query": query,
+            "answer": "ok",
+            "answer_status": "answered",
+            "generated": True,
+            "citations": [{"chunk_id": "chunk-1", "source_ref": "s1"}],
+            "context_pack": {"results": [{"chunk_id": "chunk-1"}], "citations": []},
+            "guardrails": {},
+        }
+
+    monkeypatch.setattr("bgpkb.service.app.repository.rag_answer_payload", fake_payload)
+
+    response = client.post("/api/v1/rag/answer/stream", json={"query": "route leak", "limit": 3})
+
+    assert response.status_code == 200
+    assert "text/event-stream" in response.headers["content-type"]
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[0]["type"] == "stage"
+    assert events[0]["stage"] == "accepted"
+    assert any(event.get("stage") == "retrieval" for event in events)
+    assert events[-1]["type"] == "done"
+    assert events[-1]["payload"]["answer_status"] == "answered"
+
+
 def test_html_pages_render_search_and_entity_detail():
     home = client.get("/")
     search = client.get("/search", params={"q": "route leak"})

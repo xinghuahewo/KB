@@ -1,4 +1,8 @@
-const EXAMPLES = ["什么是路由泄露？", "route leak 和 hijack 有什么区别？", "BGP 能预测明天股票价格吗？"];
+const EXAMPLES = [
+  "什么是 BGP 路由泄露？",
+  "route leak 和 hijack 有什么区别？",
+  "RPKI 如何帮助防止错误路由发布？",
+];
 
 export function ExamplePrompts({ onPick }: { onPick: (prompt: string) => void }) {
   return (

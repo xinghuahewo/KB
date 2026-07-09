@@ -1,3 +1,5 @@
+import os
+
 from . import hybrid_retrieval, llm_client
 
 
@@ -13,10 +15,39 @@ def _guardrails(blocked_reason=""):
     return payload
 
 
-def answer_question(query, limit=8, client=None):
-    pack = hybrid_retrieval.context_pack(query, limit=limit)
+def _emit(progress, stage, status, message, **metadata):
+    if progress is None:
+        return
+    progress({
+        "stage": stage,
+        "status": status,
+        "message": message,
+        **metadata,
+    })
+
+
+def answer_question(query, limit=8, client=None, progress=None):
+    require_reranker_model = os.environ.get("BGP_RAG_REQUIRE_RERANKER", "").lower() in {"1", "true", "yes"}
+    _emit(progress, "retrieval", "started", "正在进行混合检索")
+    pack = hybrid_retrieval.context_pack(
+        query,
+        limit=limit,
+        require_model=require_reranker_model,
+        progress=progress,
+    )
     citations = pack.get("citations", [])
+    _emit(
+        progress,
+        "context_pack",
+        "complete",
+        "证据上下文已组装",
+        citation_count=len(citations),
+        result_count=len(pack.get("results", [])),
+        context_unit_count=len(pack.get("context_units", [])),
+        degraded=bool(pack.get("degraded", False)),
+    )
     if not citations:
+        _emit(progress, "done", "no_evidence", "没有找到足够证据", answer_status="no_evidence")
         return {
             "query": query,
             "answer": "",
@@ -30,8 +61,17 @@ def answer_question(query, limit=8, client=None):
         }
 
     active_client = client or llm_client.DeepSeekClient.from_env()
+    _emit(progress, "generation", "started", "正在生成回答", model=getattr(active_client, "model", ""))
     result = active_client.generate_answer(query, _llm_context_items(pack))
     if not result.get("ok"):
+        _emit(
+            progress,
+            "done",
+            "llm_unavailable",
+            "模型暂时不可用",
+            answer_status="llm_unavailable",
+            error_code=result.get("error_code", "llm_error"),
+        )
         return {
             "query": query,
             "answer": "",
@@ -46,6 +86,7 @@ def answer_question(query, limit=8, client=None):
             "guardrails": _guardrails(),
         }
 
+    _emit(progress, "done", "answered", "回答生成完成", answer_status="answered")
     return {
         "query": query,
         "answer": result.get("content", ""),

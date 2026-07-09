@@ -31,6 +31,17 @@ export function AppSidebar({ onClear, onExample, messageCount }: Props) {
         <ExamplePrompts onPick={onExample} />
       </div>
 
+      <div className="mb-6 border border-[var(--line)] bg-[var(--panel)] p-3">
+        <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Knowledge base</p>
+        <p className="mt-2 text-sm font-semibold">已启用章节级证据检索</p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+          <Fact label="片段" value="58,560" />
+          <Fact label="章节" value="447" />
+          <Fact label="追溯" value="100%" />
+          <Fact label="向量" value="BGE-M3" />
+        </div>
+      </div>
+
       <button
         className="inline-flex w-full items-center justify-center gap-2 border border-[var(--line-strong)] bg-[var(--panel)] px-3 py-2 text-sm hover:bg-white"
         onClick={onClear}
@@ -40,5 +51,14 @@ export function AppSidebar({ onClear, onExample, messageCount }: Props) {
         清空会话
       </button>
     </aside>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[var(--line)] bg-white p-2">
+      <div className="text-[var(--muted)]">{label}</div>
+      <div className="mt-1 font-semibold">{value}</div>
+    </div>
   );
 }

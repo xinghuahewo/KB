@@ -372,5 +372,5 @@ def hybrid_context_pack(query, limit=None, top_n=None, query_type="auto", token_
     )
 
 
-def rag_answer_payload(query, limit=8):
-    return rag_answer.answer_question(query, limit=limit)
+def rag_answer_payload(query, limit=8, progress=None):
+    return rag_answer.answer_question(query, limit=limit, progress=progress)

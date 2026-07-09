@@ -114,6 +114,7 @@ function normalizeAnswerStatus(status: string): AnswerStatus {
 
 function summarizeRetrieval(payload: RagAnswerPayload) {
   const results = payload.context_pack?.results || [];
+  const contextUnits = contextUnitsFrom(payload.context_pack);
   const method = firstString(results, "retrieval_method") || "unknown";
   const sourceTypes = Array.from(
     new Set(
@@ -123,13 +124,58 @@ function summarizeRetrieval(payload: RagAnswerPayload) {
       ].filter((value): value is string => typeof value === "string" && value.length > 0),
     ),
   );
+  const sourceCount = Array.from(
+    new Set(
+      [
+        ...payload.citations.map((citation) => citation.source_id || citation.sourceId || citation.source_ref),
+        ...results.map((result) => result.source_id || result.source_ref || result.doc_id),
+      ].filter((value): value is string => typeof value === "string" && value.length > 0),
+    ),
+  ).length;
+  const hasSectionContext = contextUnits.some((unit) => {
+    const mode = String(unit.mode || "");
+    return Boolean(unit.parent_section_heading || unit.parent_section_id || mode === "parent_span" || mode === "full_section");
+  });
 
   return {
     vectorStatus: results.length > 0 ? ("complete" as const) : ("unknown" as const),
     resultCount: results.length,
     method,
+    methodLabel: userFacingMethod(payload.context_pack, method),
     sourceTypes,
+    sourceCount,
+    contextUnitCount: contextUnits.length,
+    hasSectionContext,
+    evidenceLabel: evidenceLabel(results.length, sourceCount, hasSectionContext),
   };
+}
+
+function contextUnitsFrom(contextPack: RagAnswerPayload["context_pack"]) {
+  const units = contextPack?.context_units || contextPack?.contextUnits || [];
+  return Array.isArray(units) ? units.filter((unit): unit is Record<string, unknown> => Boolean(unit && typeof unit === "object")) : [];
+}
+
+function userFacingMethod(contextPack: RagAnswerPayload["context_pack"], method: string) {
+  if (contextPack?.degraded) {
+    return "已降级检索";
+  }
+  if (method.includes("hybrid") || contextPack?.schema_version === "context_pack_v2") {
+    return "混合证据检索";
+  }
+  if (method === "none") {
+    return "未检索";
+  }
+  return "证据检索";
+}
+
+function evidenceLabel(resultCount: number, sourceCount: number, hasSectionContext: boolean) {
+  if (resultCount === 0) {
+    return "暂未找到证据";
+  }
+  if (hasSectionContext) {
+    return `已结合章节上下文 · ${sourceCount || 1} 个来源`;
+  }
+  return `已找到 ${resultCount} 条证据`;
 }
 
 function firstString(records: Array<Record<string, unknown>>, key: string) {

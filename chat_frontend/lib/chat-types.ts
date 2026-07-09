@@ -29,7 +29,13 @@ export type ContextPack = {
   query?: string;
   normalized_query?: string;
   results?: Array<Record<string, unknown>>;
+  context_units?: Array<Record<string, unknown>>;
+  contextUnits?: Array<Record<string, unknown>>;
   citations?: unknown[];
+  resolved_query_type?: string;
+  token_budget?: number;
+  degraded?: boolean;
+  degraded_reason?: string;
   [key: string]: unknown;
 };
 
@@ -52,7 +58,12 @@ export type RetrievalSummary = {
   vectorStatus: "complete" | "unavailable" | "unknown";
   resultCount: number;
   method: string;
+  methodLabel?: string;
   sourceTypes: string[];
+  sourceCount?: number;
+  contextUnitCount?: number;
+  hasSectionContext?: boolean;
+  evidenceLabel?: string;
 };
 
 export type ChatApiResponse = {

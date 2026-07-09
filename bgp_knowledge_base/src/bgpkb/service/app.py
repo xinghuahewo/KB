@@ -1,7 +1,11 @@
+import json
+import queue
+import threading
 from typing import Annotated, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -149,6 +153,54 @@ def api_hybrid_context_pack(
 @app.post("/api/v1/rag/answer")
 def api_rag_answer(request: RagAnswerRequest):
     return repository.rag_answer_payload(request.query, limit=request.limit)
+
+
+@app.post("/api/v1/rag/answer/stream")
+def api_rag_answer_stream(request: RagAnswerRequest):
+    return StreamingResponse(
+        _rag_answer_event_stream(request),
+        media_type="text/event-stream",
+        headers={"cache-control": "no-store"},
+    )
+
+
+def _rag_answer_event_stream(request: RagAnswerRequest):
+    events = queue.Queue()
+    sentinel = object()
+
+    def emit(payload):
+        events.put({"type": "stage", **payload})
+
+    def worker():
+        try:
+            emit({
+                "stage": "accepted",
+                "status": "started",
+                "message": "问题已提交，正在进入知识库检索",
+            })
+            payload = repository.rag_answer_payload(request.query, limit=request.limit, progress=emit)
+            events.put({"type": "done", "payload": payload})
+        except Exception as exc:  # pragma: no cover - defensive streaming boundary
+            events.put({
+                "type": "error",
+                "stage": "error",
+                "status": "failed",
+                "message": "RAG 服务暂时不可用",
+                "error": str(exc),
+            })
+        finally:
+            events.put(sentinel)
+
+    threading.Thread(target=worker, daemon=True).start()
+    while True:
+        event = events.get()
+        if event is sentinel:
+            break
+        yield _sse(event)
+
+
+def _sse(payload):
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
 @app.get("/", response_class=HTMLResponse)
