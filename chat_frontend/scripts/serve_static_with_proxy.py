@@ -63,12 +63,13 @@ class StaticProxyHandler(SimpleHTTPRequestHandler):
                         continue
                     self.send_header(key, value)
                 if "text/event-stream" in content_type:
+                    self.send_header("X-Accel-Buffering", "no")
                     self.end_headers()
                     while True:
-                        chunk = response.read(4096)
-                        if not chunk:
+                        line = response.readline()
+                        if not line:
                             break
-                        self.wfile.write(chunk)
+                        self.wfile.write(line)
                         self.wfile.flush()
                     return
                 payload = response.read()
