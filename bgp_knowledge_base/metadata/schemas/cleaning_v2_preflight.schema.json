@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/cleaning-v2-preflight.json",
+  "title": "CleaningV2Preflight",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["doc_id", "source_path", "source_sha256", "format", "size_bytes", "encrypted", "page_count", "pages", "recommended_route", "generated_by"],
+  "properties": {
+    "doc_id": {"type": "string", "minLength": 1},
+    "source_path": {"type": "string", "minLength": 1},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "format": {"enum": ["pdf", "html", "txt", "yaml", "yml"]},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "encrypted": {"type": "boolean"},
+    "page_count": {"type": ["integer", "null"], "minimum": 0},
+    "pages": {"type": "array", "items": {"type": "object"}},
+    "recommended_route": {"enum": ["native", "adaptive_ocr", "quarantine"]},
+    "issues": {"type": "array", "items": {"type": "string"}},
+    "generated_by": {"type": "string", "minLength": 1}
+  }
+}

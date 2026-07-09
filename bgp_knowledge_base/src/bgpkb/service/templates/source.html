@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ source.title }} · BGP 知识库服务{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">{{ source.source_type }}</p>
+  <h1>{{ source.title }}</h1>
+  <p class="lede"><code>{{ source.source_id }}</code> · {{ source.processing_status }}</p>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>元数据</h2>
+    <dl class="detail-list">
+      <dt>机构</dt><dd>{{ source.organization }}</dd>
+      <dt>可信度</dt><dd>{{ source.trust_level }}</dd>
+      <dt>发布日期</dt><dd>{{ source.publish_date }}</dd>
+      <dt>路径</dt><dd>{{ source.path }}</dd>
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>关联实体</h2>
+    <ul class="item-list">
+      {% for entity in source.entities %}
+      <li>
+        <a href="/entities/{{ entity.entity_id }}">{{ entity.name }}</a>
+        <span>{{ entity.entity_type }} · {{ entity.review_status }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Chunk 摘要</h2>
+  <ul class="chunk-list">
+    {% for chunk in source.chunks %}
+    <li>
+      <strong>{{ chunk.chunk_id }}</strong>
+      <span>{{ chunk.chunk_type }} · {{ chunk.content_chars }} chars</span>
+      <p>{{ chunk.content_preview }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

@@ -1,0 +1,63 @@
+version: docling_cleaning_v2
+runtime:
+  pipeline_revision: block_isolation_v2
+  default_parser: docling
+  python: "3.11"
+  docling: "2.107.0"
+  torch: "2.10.0+cu128"
+  cuda: "12.8"
+  device: cuda
+  offline_required: true
+  artifacts_path: /opt/docling/models
+  ocr_backend: torch
+formats:
+  supported: [pdf, html, txt, yaml, yml, md]
+  pdf_backend: docling_parse
+ocr:
+  enabled: true
+  adaptive: true
+  languages: [ch, en]
+  minimum_native_text_chars: 32
+  minimum_text_coverage: 0.15
+  maximum_native_replacement_characters: 0
+  image_area_ratio_trigger: 0.65
+  minimum_confidence: 0.85
+  preserve_native_and_ocr_evidence: true
+resource_budgets:
+  document_timeout_seconds: 900
+  maximum_pages: 2000
+  maximum_input_bytes: 536870912
+  gpu_memory_fraction: 0.85
+  page_batch_size: 4
+fallback:
+  enabled: true
+  explicit_only: true
+  parser: deterministic_v1
+  requires_review: true
+  publish_before_review: false
+retry:
+  maximum_attempts: 2
+  retryable_errors: [gpu_oom, timeout, transient_model_error]
+  quarantined_errors: [invalid_content, schema_error, governance_error]
+rules:
+  automatic_levels: [lossless]
+  review_required_levels: [structural, semantic]
+  lossless: [unicode_whitespace]
+  structural: [infer_heading_hierarchy]
+  preserve_raw_blocks: true
+  audit_every_change: true
+quality_gates:
+  empty_body: 0
+  replacement_characters: 0
+  duplicate_block_ids: 0
+  untraceable_blocks: 0
+  unreviewed_fallback_published: 0
+  minimum_text_coverage: 0.995
+paths:
+  parsed: data/corpus/parsed_v2
+  cleaned_blocks: data/corpus/cleaned_blocks_v2
+  assets: data/corpus/assets_v2
+  markdown: data/corpus/markdown_v2
+  chunks: data/corpus/chunks_v2
+  runs: data/derived/datasets/cleaning_runs_v2
+  review_queue: data/review_inputs/cleaning_review_queue_v2

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BGPConcept",
+  "type": "object",
+  "required": ["id", "entity_type", "name", "definition", "source_refs", "review_status"],
+  "properties": {
+    "id": {"type": "string"},
+    "entity_type": {"const": "BGPConcept"},
+    "name": {"type": "string"},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "definition": {"type": "string"},
+    "category": {"type": "string"},
+    "related_terms": {"type": "array", "items": {"type": "string"}},
+    "common_misunderstandings": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}
+

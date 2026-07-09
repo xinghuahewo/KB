@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EntitySourceEvidence",
+  "type": "object",
+  "required": [
+    "evidence_id",
+    "entity_id",
+    "entity_type",
+    "entity_review_status",
+    "source_id",
+    "source_type",
+    "source_status",
+    "chunk_count",
+    "chunk_sample_ids",
+    "case_observation_count",
+    "generated_by"
+  ],
+  "properties": {
+    "evidence_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "entity_review_status": {"enum": ["pending", "approved", "rejected"]},
+    "source_id": {"type": "string"},
+    "source_type": {"type": "string"},
+    "source_status": {"type": "string"},
+    "source_path": {"type": "string"},
+    "parsed_path": {"type": "string"},
+    "cleaned_path": {"type": "string"},
+    "chunk_count": {"type": "integer"},
+    "chunk_sample_ids": {"type": "array", "items": {"type": "string"}},
+    "case_observation_count": {"type": "integer"},
+    "generated_by": {"type": "string"}
+  }
+}

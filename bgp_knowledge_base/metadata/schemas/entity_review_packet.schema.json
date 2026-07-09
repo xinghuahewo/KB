@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EntityReviewPacket",
+  "type": "object",
+  "required": [
+    "packet_id",
+    "review_order",
+    "entity_id",
+    "entity_type",
+    "display_name",
+    "review_status",
+    "review_bucket",
+    "source_refs",
+    "source_ref_count",
+    "non_manual_source_count",
+    "manual_note_source_count",
+    "evidence_record_count",
+    "total_chunk_count",
+    "case_observation_count",
+    "source_paths",
+    "chunk_sample_ids",
+    "entity_payload",
+    "review_checklist",
+    "suggested_action",
+    "generated_by"
+  ],
+  "properties": {
+    "packet_id": {"type": "string"},
+    "review_order": {"type": "integer"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "review_status": {"enum": ["pending", "approved", "rejected"]},
+    "review_bucket": {
+      "enum": [
+        "ready_without_manual_note",
+        "ready_with_manual_note",
+        "context_only_needs_authoritative_source"
+      ]
+    },
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "source_ref_count": {"type": "integer"},
+    "non_manual_source_count": {"type": "integer"},
+    "manual_note_source_count": {"type": "integer"},
+    "evidence_record_count": {"type": "integer"},
+    "total_chunk_count": {"type": "integer"},
+    "case_observation_count": {"type": "integer"},
+    "source_paths": {"type": "array", "items": {"type": "string"}},
+    "parsed_paths": {"type": "array", "items": {"type": "string"}},
+    "cleaned_paths": {"type": "array", "items": {"type": "string"}},
+    "chunk_sample_ids": {"type": "array", "items": {"type": "string"}},
+    "entity_payload": {"type": "object"},
+    "review_checklist": {"type": "array", "items": {"type": "string"}},
+    "suggested_action": {"type": "string"},
+    "generated_by": {"type": "string"}
+  }
+}

@@ -1,0 +1,29 @@
+version: 1
+description: 阶段 A 语料质量画像、异常分级与可选 OCR 模型评估配置。
+
+exclude_globs:
+  - "**/README.md"
+
+cleaned_doc_id_overrides:
+  notes/context_summary.md: context_2026
+
+thresholds:
+  short_document_chars: 200
+  long_document_chars: 50000
+  short_paragraph_chars: 20
+  abnormal_symbol_ratio: 0.02
+
+table_detection:
+  minimum_pipe_count: 2
+  minimum_table_rows: 2
+
+ocr_assessment:
+  enabled_by_default: false
+  allowed_providers:
+    - mock
+    - deepseek
+  prompt_version: corpus-ocr-quality-v1
+  max_documents: 100
+  max_chars_per_document: 6000
+  max_total_input_chars: 300000
+  max_concurrency: 1

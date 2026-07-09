@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CaseObservation",
+  "type": "object",
+  "required": ["source_id", "title", "observation_type", "value", "context", "source_ref", "review_status"],
+  "properties": {
+    "source_id": {"type": "string"},
+    "title": {"type": "string"},
+    "observation_type": {"enum": ["asn", "bgp4mp_timestamp", "day_month_date", "ipv4_prefix", "iso_date", "month_date", "utc_time"]},
+    "value": {"type": "string"},
+    "context": {"type": "string"},
+    "source_ref": {"type": "string"},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}

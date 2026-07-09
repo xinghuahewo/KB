@@ -1,0 +1,19 @@
+BGPConcept:
+  description: "Basic BGP term or object"
+RoutingMechanism:
+  description: "Routing behavior, policy, or mechanism"
+AnomalyType:
+  description: "BGP anomaly class and boundary definition"
+DataSource:
+  description: "External data source or data collection platform"
+DataField:
+  description: "Field-level semantics for BGP records, APIs, or datasets"
+EvidenceTemplate:
+  description: "Evidence needed to assess an anomaly type"
+FalsePositivePattern:
+  description: "Benign or ambiguous pattern that can cause over-interpretation"
+PaperMethod:
+  description: "Structured method extracted from a paper"
+Case:
+  description: "Historical BGP incident case"
+

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ entity.name }} · BGP 知识库服务{% endblock %}
+{% block content %}
+<section class="page-head">
+  <p class="eyebrow">{{ entity.entity_type }}</p>
+  <h1>{{ entity.name }}</h1>
+  <p class="lede"><code>{{ entity.entity_id }}</code> · review_status: <strong>{{ entity.review_status }}</strong></p>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>来源</h2>
+    <ul class="item-list">
+      {% for source in entity.sources %}
+      <li>
+        <a href="/sources/{{ source.source_id }}">{{ source.title }}</a>
+        <span>{{ source.source_type }} · {{ source.processing_status }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="panel">
+    <h2>证据</h2>
+    <ul class="item-list">
+      {% for record in entity.evidence %}
+      <li>
+        <strong>{{ record.source_id }}</strong>
+        <span>{{ record.source_type }} · chunks {{ record.chunk_count }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="split">
+  <div class="panel">
+    <h2>出边关系</h2>
+    <ul class="item-list">
+      {% for rel in entity.outgoing_relationships %}
+      <li><strong>{{ rel.relation }}</strong><span>{{ rel.dst_id }} · {{ rel.confidence }}</span></li>
+      {% else %}
+      <li><span>暂无出边关系</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="panel">
+    <h2>入边关系</h2>
+    <ul class="item-list">
+      {% for rel in entity.incoming_relationships %}
+      <li><strong>{{ rel.relation }}</strong><span>{{ rel.src_id }} · {{ rel.confidence }}</span></li>
+      {% else %}
+      <li><span>暂无入边关系</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>行动项</h2>
+  <ul class="chunk-list">
+    {% for action in entity.actions %}
+    <li>
+      <strong>{{ action.action_type }} · {{ action.status }}</strong>
+      <span>P{{ action.priority }} · needs_llm={{ action.needs_llm }}</span>
+      <p>{{ action.suggested_action }}</p>
+    </li>
+    {% else %}
+    <li><span>暂无行动项</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

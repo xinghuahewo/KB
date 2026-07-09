@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AuthoritativeSourceRequirement",
+  "type": "object",
+  "required": [
+    "requirement_id",
+    "entity_id",
+    "entity_type",
+    "display_name",
+    "review_bucket",
+    "current_source_refs",
+    "current_source_ref_count",
+    "requirement_type",
+    "required_source_categories",
+    "candidate_source_hints",
+    "suggested_action",
+    "llm_skip_note",
+    "download_scope_note",
+    "generated_by"
+  ],
+  "properties": {
+    "requirement_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "display_name": {"type": "string"},
+    "review_bucket": {"const": "context_only_needs_authoritative_source"},
+    "current_source_refs": {"type": "array", "items": {"type": "string"}},
+    "current_source_ref_count": {"type": "integer"},
+    "requirement_type": {
+      "enum": [
+        "external_authoritative_source_needed",
+        "internal_governance_source_needed"
+      ]
+    },
+    "required_source_categories": {"type": "array", "items": {"type": "string"}},
+    "candidate_source_hints": {"type": "array", "items": {"type": "string"}},
+    "search_query": {"type": "string"},
+    "suggested_action": {"type": "string"},
+    "llm_skip_note": {"type": "string"},
+    "download_scope_note": {"type": "string"},
+    "generated_by": {"type": "string"}
+  }
+}

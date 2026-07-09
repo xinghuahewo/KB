@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AnomalyType",
+  "type": "object",
+  "required": ["id", "entity_type", "name", "definition", "required_evidence", "possible_false_positives", "source_refs"],
+  "properties": {
+    "id": {"type": "string"},
+    "entity_type": {"const": "AnomalyType"},
+    "name": {"type": "string"},
+    "category": {"type": "string"},
+    "definition": {"type": "string"},
+    "typical_signals": {"type": "array", "items": {"type": "string"}},
+    "required_evidence": {"type": "array", "items": {"type": "string"}},
+    "optional_evidence": {"type": "array", "items": {"type": "string"}},
+    "possible_false_positives": {"type": "array", "items": {"type": "string"}},
+    "related_concepts": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}
+

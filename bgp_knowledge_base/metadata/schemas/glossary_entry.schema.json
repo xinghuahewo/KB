@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GlossaryEntry",
+  "type": "object",
+  "required": [
+    "term_id",
+    "entity_id",
+    "entity_type",
+    "term",
+    "definition",
+    "category",
+    "source_refs",
+    "review_status",
+    "generated_by"
+  ],
+  "properties": {
+    "term_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "entity_type": {"type": "string"},
+    "term": {"type": "string"},
+    "aliases": {"type": "array", "items": {"type": "string"}},
+    "definition": {"type": "string"},
+    "category": {"type": "string"},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["pending", "approved", "rejected"]},
+    "generated_by": {"type": "string"}
+  }
+}

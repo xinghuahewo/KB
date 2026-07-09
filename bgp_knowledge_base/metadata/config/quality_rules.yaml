@@ -1,0 +1,70 @@
+required_fields:
+  BGPConcept:
+    - id
+    - entity_type
+    - name
+    - definition
+    - source_refs
+    - review_status
+  RoutingMechanism:
+    - id
+    - entity_type
+    - name
+    - definition
+    - source_refs
+  AnomalyType:
+    - id
+    - entity_type
+    - name
+    - definition
+    - required_evidence
+    - possible_false_positives
+    - source_refs
+  DataSource:
+    - id
+    - entity_type
+    - name
+    - description
+    - suitable_for
+    - limitations
+    - source_refs
+  DataField:
+    - id
+    - entity_type
+    - name
+    - meaning
+    - source_refs
+  EvidenceTemplate:
+    - id
+    - entity_type
+    - applies_to
+    - required_evidence
+    - false_positive_checks
+  PaperMethod:
+    - id
+    - entity_type
+    - paper
+    - problem
+    - input
+    - process
+    - output
+    - source_refs
+  Case:
+    - id
+    - entity_type
+    - name
+    - event_type
+    - date
+    - source_refs
+
+quality_checks:
+  - no_empty_definition
+  - no_missing_source_ref
+  - no_duplicate_entity_id
+  - no_orphan_relationship
+  - anomaly_type_must_have_evidence_template
+  - data_source_must_have_limitations
+  - case_must_have_event_type
+  - case_must_have_time
+  - case_must_have_source
+

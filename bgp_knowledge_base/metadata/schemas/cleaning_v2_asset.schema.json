@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/cleaning-v2-asset.json",
+  "title": "CleaningV2Asset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["asset_id", "doc_id", "asset_type", "path", "sha256", "bbox", "provenance"],
+  "properties": {
+    "asset_id": {"type": "string", "minLength": 1},
+    "doc_id": {"type": "string", "minLength": 1},
+    "asset_type": {"enum": ["picture", "table_crop", "page_image"]},
+    "path": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "bbox": {"type": ["object", "null"]},
+    "caption": {"type": ["string", "null"]},
+    "provenance": {"type": "object"}
+  }
+}

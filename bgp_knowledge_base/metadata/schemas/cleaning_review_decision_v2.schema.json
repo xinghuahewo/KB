@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CleaningReviewDecisionV2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decision_id", "block_id", "decision", "reviewer", "reviewed_at", "input_fingerprint"],
+  "properties": {
+    "decision_id": {"type": "string"}, "block_id": {"type": "string"},
+    "decision": {"enum": ["approved", "rejected", "needs_evidence"]}, "reviewer": {"type": "string"},
+    "reviewed_at": {"type": "string", "format": "date-time"}, "input_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "note": {"type": "string"}
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvidenceTemplate",
+  "type": "object",
+  "required": ["id", "entity_type", "applies_to", "required_evidence", "false_positive_checks"],
+  "properties": {
+    "id": {"type": "string"},
+    "entity_type": {"const": "EvidenceTemplate"},
+    "applies_to": {"type": "string"},
+    "required_evidence": {"type": "array"},
+    "optional_evidence": {"type": "array", "items": {"type": "string"}},
+    "false_positive_checks": {"type": "array", "items": {"type": "string"}},
+    "source_refs": {"type": "array", "items": {"type": "string"}},
+    "review_status": {"enum": ["pending", "approved", "rejected"]}
+  }
+}
+

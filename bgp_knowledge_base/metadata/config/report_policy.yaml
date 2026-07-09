@@ -1,0 +1,320 @@
+version: 1
+description: >
+  报告目录策略。data/reports 只保留人工入口、门禁和长期参考报告；
+  可再生成的明细报告、指南和快照统一进入 data/generated/reports。
+reports:
+  pipeline_report:
+    path: data/reports/gates/pipeline_report.md
+    category: gates
+    retention: curated
+    human_entry: true
+  quality_report:
+    path: data/reports/gates/quality_report.md
+    category: gates
+    retention: curated
+    human_entry: true
+  stage_acceptance_report:
+    path: data/reports/gates/stage_acceptance_report.md
+    category: gates
+    retention: curated
+    human_entry: true
+  readiness_report:
+    path: data/reports/gates/readiness_report.md
+    category: gates
+    retention: curated
+    human_entry: true
+  published_integrity_report:
+    path: data/reports/gates/published_integrity_report.md
+    category: gates
+    retention: curated
+    human_entry: true
+  coverage_report:
+    path: data/reports/reference/coverage_report.md
+    category: reference
+    retention: curated
+    human_entry: true
+  data_dictionary_report:
+    path: data/reports/reference/data_dictionary_report.md
+    category: reference
+    retention: curated
+    human_entry: true
+  query_examples_report:
+    path: data/reports/reference/query_examples_report.md
+    category: reference
+    retention: curated
+    human_entry: true
+  next_action_queue_report:
+    path: data/reports/actions/next_action_queue_report.md
+    category: actions
+    retention: curated
+    human_entry: true
+  human_review_task_board_report:
+    path: data/reports/actions/human_review_task_board_report.md
+    category: actions
+    retention: curated
+    human_entry: true
+  human_review_progress_report:
+    path: data/reports/actions/human_review_progress_report.md
+    category: actions
+    retention: curated
+    human_entry: true
+  ingestion_report:
+    path: data/generated/reports/sources/ingestion_report.md
+    category: sources
+    retention: generated
+    human_entry: false
+  raw_collection_report:
+    path: data/generated/reports/sources/raw_collection_report.csv
+    category: sources
+    retention: generated
+    human_entry: false
+  raw_collection_summary:
+    path: data/generated/reports/sources/raw_collection_summary.md
+    category: sources
+    retention: generated
+    human_entry: false
+  parse_report:
+    path: data/generated/reports/corpus/parse_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
+  corpus_profile_report:
+    path: data/generated/reports/corpus/corpus_profile_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
+  cleaning_v2_migration_report:
+    path: data/generated/reports/corpus/cleaning_v2_migration_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
+  cleaning_v2_human_acceptance_report:
+    path: data/generated/reports/corpus/cleaning_v2_human_acceptance_report.md
+    category: corpus
+    retention: generated
+    human_entry: false
+  source_processing_status_report:
+    path: data/generated/reports/sources/source_processing_status_report.md
+    category: sources
+    retention: generated
+    human_entry: false
+  source_gap_queue_report:
+    path: data/generated/reports/sources/source_gap_queue_report.md
+    category: sources
+    retention: generated
+    human_entry: false
+  source_snapshots:
+    path: data/generated/reports/snapshots/source_snapshots
+    category: snapshots
+    retention: snapshot
+    human_entry: false
+  artifact_manifest_report:
+    path: data/generated/reports/publishing/artifact_manifest_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  published_knowledge_base_report:
+    path: data/generated/reports/publishing/published_knowledge_base_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  sqlite_knowledge_base_report:
+    path: data/generated/reports/publishing/sqlite_knowledge_base_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  semantic_identity_report:
+    path: data/generated/reports/publishing/semantic_identity_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  standardization_report:
+    path: data/generated/reports/publishing/standardization_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  standard_mapping_candidate_report:
+    path: data/generated/reports/review/standard_mapping_candidate_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  standard_mapping_decision_audit_report:
+    path: data/generated/reports/review/standard_mapping_decision_audit_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  standard_mapping_decision_apply_report:
+    path: data/generated/reports/review/standard_mapping_decision_apply_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  data_management_report:
+    path: data/generated/reports/knowledge/data_management_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  lifecycle_report:
+    path: data/generated/reports/knowledge/lifecycle_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  semantic_quality_report:
+    path: data/generated/reports/knowledge/semantic_quality_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  authoritative_source_requirements_report:
+    path: data/generated/reports/knowledge/authoritative_source_requirements_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  case_observation_report:
+    path: data/generated/reports/knowledge/case_observation_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  case_observation_guides:
+    path: data/generated/reports/review/case_observation_guides
+    category: review
+    retention: generated
+    human_entry: false
+  entity_review_packet_report:
+    path: data/generated/reports/knowledge/entity_review_packet_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  entity_review_queue_report:
+    path: data/generated/reports/knowledge/entity_review_queue_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  entity_source_evidence_report:
+    path: data/generated/reports/knowledge/entity_source_evidence_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  glossary_report:
+    path: data/generated/reports/knowledge/glossary_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  llm_processing_skip_report:
+    path: data/generated/reports/knowledge/llm_processing_skip_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  low_risk_internalization_report:
+    path: data/generated/reports/knowledge/low_risk_internalization_report.md
+    category: knowledge
+    retention: generated
+    human_entry: false
+  human_review_decision_apply_report:
+    path: data/generated/reports/review/human_review_decision_apply_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_decision_audit_report:
+    path: data/generated/reports/review/human_review_decision_audit_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_decision_template_report:
+    path: data/generated/reports/review/human_review_decision_template_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_evidence_extracts_report:
+    path: data/generated/reports/review/human_review_evidence_extracts_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_field_checklist_report:
+    path: data/generated/reports/review/human_review_field_checklist_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_guides:
+    path: data/generated/reports/review/human_review_guides
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_handoff_report:
+    path: data/generated/reports/review/human_review_handoff_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_input_validation_report:
+    path: data/generated/reports/review/human_review_input_validation_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_session_decision_templates_report:
+    path: data/generated/reports/review/human_review_session_decision_templates_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_session_guides:
+    path: data/generated/reports/review/human_review_session_guides
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_session_queue_report:
+    path: data/generated/reports/review/human_review_session_queue_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_session_status_report:
+    path: data/generated/reports/review/human_review_session_status_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_source_matrix_report:
+    path: data/generated/reports/review/human_review_source_matrix_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  human_review_workbook_report:
+    path: data/generated/reports/review/human_review_workbook_report.md
+    category: review
+    retention: generated
+    human_entry: false
+  rag_readiness_report:
+    path: data/generated/reports/rag/rag_readiness_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  rag_answer_eval_report:
+    path: data/generated/reports/rag/rag_answer_eval_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  rag_answer_failure_analysis_report:
+    path: data/generated/reports/rag/rag_answer_failure_analysis_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  bge_m3_embedding_report:
+    path: data/generated/reports/rag/bge_m3_embedding_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  hybrid_retrieval_eval_report:
+    path: data/generated/reports/rag/hybrid_retrieval_eval_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  chunking_evaluation_report:
+    path: data/generated/reports/rag/chunking_evaluation_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  rag_answer_smoke_test_report:
+    path: data/generated/reports/rag/rag_answer_smoke_test_report.md
+    category: rag
+    retention: generated
+    human_entry: false
+  deepseek_rag_answer_eval_report:
+    path: data/generated/reports/rag/deepseek_rag_answer_eval_report.md
+    category: rag
+    retention: generated
+    human_entry: false

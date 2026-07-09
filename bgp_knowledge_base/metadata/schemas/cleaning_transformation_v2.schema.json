@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CleaningTransformationV2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["transformation_id", "rule_id", "rule_version", "rule_level", "operation", "input_block_ids", "output_block_ids", "before", "after", "evidence", "confidence", "generated_by"],
+  "properties": {
+    "transformation_id": {"type": "string"}, "rule_id": {"type": "string"}, "rule_version": {"type": "string"},
+    "rule_level": {"enum": ["lossless", "structural", "semantic"]}, "operation": {"type": "string"},
+    "input_block_ids": {"type": "array", "items": {"type": "string"}}, "output_block_ids": {"type": "array", "items": {"type": "string"}},
+    "before": {}, "after": {}, "evidence": {"type": "object"}, "confidence": {"type": "number"}, "generated_by": {"type": "string"}
+  }
+}

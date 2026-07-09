@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EntityLinkCandidate",
+  "type": "object",
+  "required": [
+    "candidate_id",
+    "chunk_id",
+    "entity_id",
+    "confidence",
+    "source_ref",
+    "review_status",
+    "provider",
+    "generated_by"
+  ],
+  "properties": {
+    "candidate_id": {"type": "string"},
+    "chunk_id": {"type": "string"},
+    "entity_id": {"type": "string"},
+    "confidence": {"type": "number"},
+    "source_ref": {"type": "string"},
+    "review_status": {"type": "string"},
+    "provider": {"type": "string"},
+    "generated_by": {"type": "string"}
+  }
+}
