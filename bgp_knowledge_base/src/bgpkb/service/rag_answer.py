@@ -44,6 +44,8 @@ def answer_question(query, limit=8, client=None, progress=None):
         citation_count=len(citations),
         result_count=len(pack.get("results", [])),
         context_unit_count=len(pack.get("context_units", [])),
+        retrieval_latency_ms=pack.get("retrieval_latency_ms"),
+        context_assembly_latency_ms=pack.get("context_assembly_latency_ms"),
         degraded=bool(pack.get("degraded", False)),
     )
     if not citations:

@@ -8,9 +8,11 @@ import math
 from pathlib import Path
 import re
 import sqlite3
+import time
 from typing import Any, Protocol
 
 from bgpkb import paths
+from bgpkb.service.fast_vector_index import FastVectorIndexError, load_cached_fast_vector_index
 from bgpkb.service.retrieval_model_client import EmbeddingProviderChain
 
 
@@ -129,6 +131,7 @@ class DenseRetriever:
         return RetrievalChannelResult("vector", error={"code": code, "message": message}, metadata=metadata or {})
 
     def search(self, query: str, top_k: int) -> RetrievalChannelResult:
+        started = time.perf_counter()
         invalid = _top_k_error("vector", top_k)
         if invalid:
             return invalid
@@ -157,8 +160,32 @@ class DenseRetriever:
         ):
             return self._failure("invalid_embedding", "查询向量必须是非空 finite 数值数组", provider_metadata)
         query_vector = [float(value) for value in query_vector]
+        if math.sqrt(sum(value * value for value in query_vector)) == 0:
+            return self._failure("invalid_embedding", "查询向量范数不能为零", provider_metadata)
+
+        index_started = time.perf_counter()
+        try:
+            fast_index = load_cached_fast_vector_index(self.index_path)
+            if fast_index is not None:
+                items = fast_index.search(query_vector, top_k=top_k, min_similarity=self.min_similarity)
+                provider_metadata.update({
+                    "index_path": str(self.index_path),
+                    "index_mode": "fast_numpy",
+                    "score": "cosine",
+                    "vector_count": fast_index.record_count,
+                    "dimension": fast_index.dimension,
+                    "index_search_ms": round((time.perf_counter() - index_started) * 1000, 3),
+                    "latency_ms": round((time.perf_counter() - started) * 1000, 3),
+                })
+                return RetrievalChannelResult("vector", items=items, metadata=provider_metadata)
+        except ValueError as exc:
+            return self._failure("dimension_mismatch", f"快向量索引查询失败：{exc}", provider_metadata)
+        except FastVectorIndexError as exc:
+            return self._failure("index_unavailable", f"快向量索引不可用：{exc}", provider_metadata)
+
         try:
             records = []
+            scanned_count = 0
             with self.index_path.open(encoding="utf-8") as handle:
                 for line_number, line in enumerate(handle, start=1):
                     if not line.strip():
@@ -172,6 +199,7 @@ class DenseRetriever:
                         or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in vector)
                     ):
                         return self._failure("dimension_mismatch", f"索引第 {line_number} 行向量维度或数值无效", provider_metadata)
+                    scanned_count += 1
                     score = _cosine(query_vector, [float(value) for value in vector])
                     if score < self.min_similarity:
                         continue
@@ -190,5 +218,12 @@ class DenseRetriever:
         items = records[:top_k]
         for rank, item in enumerate(items, start=1):
             item["raw_rank"] = rank
-        provider_metadata.update({"index_path": str(self.index_path), "score": "cosine"})
+        provider_metadata.update({
+            "index_path": str(self.index_path),
+            "score": "cosine",
+            "index_mode": "jsonl_scan",
+            "vector_count": scanned_count,
+            "index_search_ms": round((time.perf_counter() - index_started) * 1000, 3),
+            "latency_ms": round((time.perf_counter() - started) * 1000, 3),
+        })
         return RetrievalChannelResult("vector", items=items, metadata=provider_metadata)
