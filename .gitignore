@@ -9,3 +9,6 @@ venv/
 bgp_knowledge_base/.env
 bgp_visual_output/
 bgp_knowledge_base/.env
+bgp_knowledge_base/data/published/bge_m3_vector_matrix.npy
+bgp_knowledge_base/data/published/bge_m3_vector_metadata.jsonl
+bgp_knowledge_base/data/published/bge_m3_vector_fast_manifest.json

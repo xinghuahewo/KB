@@ -123,6 +123,26 @@ reports:
     category: publishing
     retention: generated
     human_entry: false
+  incremental_run_plan_report:
+    path: data/generated/reports/publishing/incremental_run_plan_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  incremental_run_report:
+    path: data/generated/reports/publishing/incremental_run_report.md
+    category: publishing
+    retention: generated
+    human_entry: false
+  release_notes:
+    path: data/published/release_notes.md
+    category: publishing
+    retention: generated
+    human_entry: true
+  release_readiness_report:
+    path: data/reports/gates/release_readiness_report.md
+    category: gates
+    retention: curated
+    human_entry: true
   semantic_identity_report:
     path: data/generated/reports/publishing/semantic_identity_report.md
     category: publishing

@@ -14,6 +14,7 @@ type StreamOptions = {
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   onStage?: (event: RagStageEvent) => void;
+  signal?: AbortSignal;
 };
 
 const DEFAULT_ENDPOINT = "/api/v1/rag/answer/stream";
@@ -23,7 +24,17 @@ export async function fetchRagAnswerStream(query: string, options: StreamOptions
   const fetchImpl = options.fetchImpl || fetch;
   const endpoint = options.endpoint || DEFAULT_ENDPOINT;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  let timedOut = false;
+  const stopForTimeout = () => {
+    timedOut = true;
+    controller.abort();
+  };
+  const timeout = setTimeout(stopForTimeout, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const stopForUser = () => controller.abort();
+  options.signal?.addEventListener("abort", stopForUser, { once: true });
+  if (options.signal?.aborted) {
+    stopForUser();
+  }
 
   try {
     const response = await fetchImpl(endpoint, {
@@ -43,11 +54,12 @@ export async function fetchRagAnswerStream(query: string, options: StreamOptions
     return await readSsePayload(response.body, options.onStage);
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("RAG 请求超过 120 秒仍未完成，已停止等待。");
+      throw new Error(timedOut ? "RAG 请求超过 120 秒仍未完成，已停止等待。" : "已停止生成。");
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", stopForUser);
   }
 }
 

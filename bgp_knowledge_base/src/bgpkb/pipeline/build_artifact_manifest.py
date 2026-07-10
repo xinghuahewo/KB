@@ -143,6 +143,10 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_human_review_handoff.py"
     if rel.startswith("data/derived/datasets/lifecycle_inventory."):
         return "src/bgpkb/pipeline/build_lifecycle_report.py"
+    if rel.startswith("data/derived/datasets/lifecycle_action_queue."):
+        return "src/bgpkb/pipeline/build_lifecycle_report.py"
+    if rel == "data/derived/datasets/incremental_run_plan.json":
+        return "src/bgpkb/pipeline/plan_incremental_run.py"
     if rel.startswith("data/derived/datasets/semantic_quality_findings."):
         return "src/bgpkb/pipeline/build_semantic_quality_report.py"
     if rel.startswith("data/derived/datasets/chunk_enrichment_candidates."):
@@ -182,6 +186,8 @@ def producer_for(rel):
     if rel.startswith("data/derived/datasets/glossary."):
         return "src/bgpkb/pipeline/build_glossary.py"
     if rel.startswith("data/published/"):
+        if rel == "data/published/release_notes.md":
+            return "src/bgpkb/pipeline/build_release_notes.py"
         if rel in {
             "data/published/bge_m3_embedding_manifest.json",
             "data/published/bge_m3_vector_index.jsonl",
@@ -210,6 +216,12 @@ def producer_for(rel):
         return "src/bgpkb/pipeline/build_published_knowledge_base.py"
     if rel.startswith("data/generated/reports/publishing/sqlite_knowledge_base_report.md"):
         return "src/bgpkb/pipeline/build_sqlite_knowledge_base.py"
+    if rel.startswith("data/generated/reports/publishing/incremental_run_plan_report.md"):
+        return "src/bgpkb/pipeline/plan_incremental_run.py"
+    if rel.startswith("data/generated/reports/publishing/incremental_run_report.md"):
+        return "src/bgpkb/pipeline/run_incremental_pipeline.py"
+    if rel.startswith("data/reports/gates/release_readiness_report.md"):
+        return "src/bgpkb/pipeline/check_release_readiness.py"
     if rel.startswith("data/reports/reference/query_examples_report.md"):
         return "src/bgpkb/pipeline/build_query_examples.py"
     if rel.startswith("data/reports/gates/published_integrity_report.md"):

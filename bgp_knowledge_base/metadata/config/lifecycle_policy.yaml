@@ -2,6 +2,7 @@ version: lifecycle_metadata_v1
 generated_policy:
   report_path: data/generated/reports/knowledge/lifecycle_report.md
   inventory_path: data/derived/datasets/lifecycle_inventory.jsonl
+  action_queue_path: data/derived/datasets/lifecycle_action_queue.jsonl
 states:
   - id: draft
     name: 草稿

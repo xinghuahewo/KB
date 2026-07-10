@@ -1,64 +1,13 @@
-import { Plus, Trash2 } from "lucide-react";
+"use client";
 
+import { Plus, Trash2, X } from "lucide-react";
+import { useState } from "react";
 import { ExamplePrompts } from "@/components/chat/example-prompts";
 
-type Props = {
-  onClear: () => void;
-  onExample: (prompt: string) => void;
-  messageCount: number;
-};
+type Props = { onClear: () => void; onExample: (prompt: string) => void; messageCount: number; className?: string; onClose?: () => void };
 
-export function AppSidebar({ onClear, onExample, messageCount }: Props) {
-  return (
-    <aside className="border-r border-[var(--line)] bg-[var(--bg)] p-4 lg:h-screen">
-      <div className="mb-5 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Session</p>
-          <p className="mt-1 text-sm font-semibold">{messageCount} messages</p>
-        </div>
-        <button
-          className="inline-flex h-9 w-9 items-center justify-center border border-[var(--line-strong)] bg-[var(--panel)] hover:bg-white"
-          onClick={onClear}
-          title="新会话"
-          type="button"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-        </button>
-      </div>
-
-      <div className="mb-6">
-        <p className="mb-2 text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Prompts</p>
-        <ExamplePrompts onPick={onExample} />
-      </div>
-
-      <div className="mb-6 border border-[var(--line)] bg-[var(--panel)] p-3">
-        <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Knowledge base</p>
-        <p className="mt-2 text-sm font-semibold">已启用章节级证据检索</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-          <Fact label="片段" value="58,560" />
-          <Fact label="章节" value="447" />
-          <Fact label="追溯" value="100%" />
-          <Fact label="向量" value="BGE-M3" />
-        </div>
-      </div>
-
-      <button
-        className="inline-flex w-full items-center justify-center gap-2 border border-[var(--line-strong)] bg-[var(--panel)] px-3 py-2 text-sm hover:bg-white"
-        onClick={onClear}
-        type="button"
-      >
-        <Trash2 className="h-4 w-4" aria-hidden="true" />
-        清空会话
-      </button>
-    </aside>
-  );
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border border-[var(--line)] bg-white p-2">
-      <div className="text-[var(--muted)]">{label}</div>
-      <div className="mt-1 font-semibold">{value}</div>
-    </div>
-  );
+export function AppSidebar({ onClear, onExample, messageCount, className = "", onClose }: Props) {
+  const [confirming, setConfirming] = useState(false);
+  const clear = () => { if (!confirming) { setConfirming(true); window.setTimeout(() => setConfirming(false), 4000); return; } onClear(); setConfirming(false); };
+  return <aside aria-label="会话与示例" className={`bg-[var(--bg)] ${className}`}><div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4"><div><p className="eyebrow">本地会话</p><p className="mt-1 text-sm font-semibold">{messageCount} 条消息</p></div>{onClose ? <button aria-label="关闭会话抽屉" className="icon-button" onClick={onClose} type="button"><X className="h-4 w-4" aria-hidden="true" /></button> : <button aria-label="新会话" className="icon-button" onClick={clear} type="button"><Plus className="h-4 w-4" aria-hidden="true" /></button>}</div><div className="p-5"><p className="eyebrow mb-3">可从这些问题开始</p><ExamplePrompts onPick={onExample} /><button className="mt-8 inline-flex min-h-11 w-full items-center justify-center gap-2 border border-[var(--line-strong)] bg-[var(--panel)] px-3 py-2 text-sm hover:bg-white" onClick={clear} type="button"><Trash2 className="h-4 w-4" aria-hidden="true" />{confirming ? "再次点击确认清空" : "清空本地会话"}</button></div></aside>;
 }

@@ -2,6 +2,7 @@
 
 import math
 from pathlib import Path
+import time
 
 from bgpkb import paths
 from . import retrieval_framework
@@ -386,6 +387,7 @@ def search(
     lexical_retriever=None,
     dense_retriever=None,
 ):
+    started = time.perf_counter()
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
         raise ValueError("limit 必须是 1 到 20 的整数")
     if (lexical_top_k, vector_top_k, rrf_k) != (50, 50, 60):
@@ -393,13 +395,17 @@ def search(
     normalized = retrieval_framework.normalize_query(query)
     trusted_chunk_ids = _trusted_chunk_ids()
     eligible_doc_ids = _retrieval_eligible_doc_ids()
+    lexical_started = time.perf_counter()
     lexical = (lexical_retriever or Bm25Retriever()).search(normalized, 50)
+    lexical.metadata.setdefault("latency_ms", round((time.perf_counter() - lexical_started) * 1000, 3))
     for item in lexical.items:
         item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
         item["trusted"] = bool(item["trust_basis"])
         item.setdefault("lifecycle_status", "approved_evidence" if item["trusted"] else "candidate")
     if vector_enabled:
+        vector_started = time.perf_counter()
         vector = (dense_retriever or DenseRetriever(provider=client)).search(normalized, 50)
+        vector.metadata.setdefault("latency_ms", round((time.perf_counter() - vector_started) * 1000, 3))
         for item in vector.items:
             item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
             item["trusted"] = bool(item["trust_basis"])
@@ -433,6 +439,7 @@ def search(
         "channel_errors": channel_errors,
         "channel_status": channel_status,
         "channel_metadata": {channel: result.metadata for channel, result in channel_results.items()},
+        "retrieval_latency_ms": round((time.perf_counter() - started) * 1000, 3),
         "retrieval_contract": {"lexical_top_k": 50, "vector_top_k": 50, "rrf_k": 60, "fused_top_k": 20},
         "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "src/bgpkb/service/hybrid_retrieval.py",
@@ -464,12 +471,42 @@ def _default_section_catalog_path():
     return next((path for path in candidates if path.exists()), candidates[0])
 
 
+_CONTEXT_STORE_CACHE = {}
+
+
+def clear_context_store_cache():
+    _CONTEXT_STORE_CACHE.clear()
+
+
+def _catalog_signature(path):
+    resolved = Path(path).resolve()
+    if not resolved.exists():
+        return (str(resolved), -1, -1)
+    stat = resolved.stat()
+    return (str(resolved), stat.st_size, stat.st_mtime_ns)
+
+
+def _default_context_store(section_path):
+    chunk_catalog_path = paths.PUBLISHED_DIR / "chunk_catalog.jsonl"
+    key = (
+        str(Path(paths.PROJECT_ROOT).resolve()),
+        _catalog_signature(chunk_catalog_path),
+        _catalog_signature(section_path),
+    )
+    cached = _CONTEXT_STORE_CACHE.get(key)
+    if cached is None:
+        cached = ChunkStore(paths.PROJECT_ROOT, chunk_catalog_path, section_path)
+        _CONTEXT_STORE_CACHE.clear()
+        _CONTEXT_STORE_CACHE[key] = cached
+    return cached
+
+
 def _build_context_units(query, results, resolved_query_type, token_budget, store=None):
     section_path = _default_section_catalog_path()
     if store is None:
         if not section_path.exists():
             return [], [{"event": "context_assembly_skipped", "reason": "section_catalog_missing"}]
-        store = ChunkStore(paths.PROJECT_ROOT, paths.PUBLISHED_DIR / "chunk_catalog.jsonl", section_path)
+        store = _default_context_store(section_path)
     assembler = ContextAssembler(store)
     try:
         pack = assembler.build(query, results, resolved_query_type, token_budget)
@@ -517,6 +554,7 @@ def context_pack(
         dense_retriever=dense_retriever,
     )
     if progress is not None:
+        vector_metadata = recall.get("channel_metadata", {}).get("vector", {})
         progress({
             "stage": "retrieval",
             "status": "complete",
@@ -525,6 +563,9 @@ def context_pack(
             "lexical_count": recall.get("lexical_count", 0),
             "vector_count": recall.get("vector_count", 0),
             "vector_status": recall.get("vector_status", "unknown"),
+            "vector_index_mode": vector_metadata.get("index_mode"),
+            "retrieval_latency_ms": recall.get("retrieval_latency_ms"),
+            "vector_latency_ms": vector_metadata.get("latency_ms"),
             "degraded": bool(recall.get("degraded", False)),
         })
     reranked = rerank_candidates(
@@ -542,12 +583,15 @@ def context_pack(
             "candidate_count": reranked.get("candidate_count", 0),
             "result_count": len(reranked.get("results", [])),
             "provider": reranked.get("provider", ""),
+            "latency_ms": reranked.get("latency_ms"),
             "degraded": bool(reranked.get("degraded", False)),
         })
     query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
+    context_started = time.perf_counter()
     context_units, trim_events = _build_context_units(
         query, reranked["results"], query_type_payload["resolved_query_type"], token_budget, store=store,
     )
+    context_assembly_latency_ms = round((time.perf_counter() - context_started) * 1000, 3)
     citations = _citations_from_units(context_units) or retrieval_framework.citations_for(reranked["results"])
     payload = {
         **recall,
@@ -568,6 +612,7 @@ def context_pack(
         "rerank_status": reranked["rerank_status"],
         "reranked_chunk_count": len(reranked["results"]),
         "candidate_chunk_count": len(recall["results"]),
+        "context_assembly_latency_ms": context_assembly_latency_ms,
         "deprecated_parameters": deprecated,
     }
     return payload

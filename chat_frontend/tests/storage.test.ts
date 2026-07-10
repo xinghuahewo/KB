@@ -20,6 +20,7 @@ describe("conversation storage", () => {
   it("saves and loads a conversation snapshot", () => {
     const storage = createMemoryStorage();
     const conversation: StoredConversation = {
+      version: 2,
       id: "conversation-1",
       messages: [{ role: "user", content: "什么是路由泄露？" }],
       citations: [{ source_id: "src-1", chunk_id: "chunk-1" }],
@@ -42,6 +43,30 @@ describe("conversation storage", () => {
     storage.setItem("bgp-chat-conversation", "{bad json");
 
     expect(loadStoredConversation(storage)).toBeNull();
+  });
+
+  it("migrates legacy global evidence onto its assistant message and preserves the conversation id", () => {
+    const storage = createMemoryStorage();
+    storage.setItem(
+      "bgp-chat-conversation",
+      JSON.stringify({
+        id: "legacy-conversation",
+        messages: [
+          { id: "u1", role: "user", content: "问题" },
+          { id: "a1", role: "assistant", content: "回答" },
+        ],
+        citations: [{ source_ref: "rfc-7908#2", chunk_id: "chunk-1" }],
+        retrieval: { vectorStatus: "complete", resultCount: 1, method: "hybrid", sourceTypes: [] },
+        updatedAt: "2026-06-23T00:00:00.000Z",
+      }),
+    );
+
+    const conversation = loadStoredConversation(storage);
+
+    expect(conversation).toMatchObject({ version: 2, id: "legacy-conversation" });
+    expect(conversation?.messages[1]).toMatchObject({
+      evidence: { citations: [{ source_ref: "rfc-7908#2", chunk_id: "chunk-1" }] },
+    });
   });
 
   it("clears the stored conversation", () => {

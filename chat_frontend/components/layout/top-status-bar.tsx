@@ -1,24 +1,3 @@
-import { Activity, LibraryBig } from "lucide-react";
-
-type Props = {
-  busy: boolean;
-  statusText: string;
-};
-
-export function TopStatusBar({ busy, statusText }: Props) {
-  return (
-    <header className="flex min-h-14 items-center justify-between border-b border-[var(--line)] bg-[var(--panel)] px-4">
-      <div className="flex items-center gap-3">
-        <LibraryBig className="h-5 w-5 text-[var(--green)]" aria-hidden="true" />
-        <div>
-          <h1 className="text-sm font-semibold">BGP 证据问答</h1>
-          <p className="text-xs text-[var(--muted)]">先查资料，再组织答案</p>
-        </div>
-      </div>
-      <div className="inline-flex items-center gap-2 border border-[var(--line)] bg-white px-3 py-1 text-xs">
-        <Activity className={`h-3.5 w-3.5 ${busy ? "text-[var(--amber)]" : "text-[var(--green)]"}`} aria-hidden="true" />
-        {statusText}
-      </div>
-    </header>
-  );
-}
+import { Activity, LibraryBig, Menu, PanelRight } from "lucide-react";
+type Props = { busy: boolean; statusText: string; onOpenSidebar: () => void; onOpenEvidence: () => void; evidenceAvailable: boolean };
+export function TopStatusBar({ busy, statusText, onOpenSidebar, onOpenEvidence, evidenceAvailable }: Props) { return <header className="flex min-h-16 items-center justify-between border-b border-[var(--line)] bg-[var(--panel)] px-4"><div className="flex min-w-0 items-center gap-3"><button aria-label="打开会话抽屉" className="icon-button xl:hidden" onClick={onOpenSidebar} type="button"><Menu className="h-4 w-4" aria-hidden="true" /></button><LibraryBig className="hidden h-5 w-5 shrink-0 text-[var(--green)] sm:block" aria-hidden="true" /><div className="min-w-0"><h1 className="editorial-heading text-lg">BGP 证据问答</h1><p className="truncate text-xs text-[var(--muted)]">先查资料，再组织答案</p></div></div><div className="flex items-center gap-2"><div aria-live="polite" className="hidden items-center gap-2 border border-[var(--line)] bg-white px-3 py-1 text-xs sm:inline-flex"><Activity className={`h-3.5 w-3.5 ${busy ? "text-[var(--amber)]" : "text-[var(--green)]"}`} aria-hidden="true" />{statusText}</div><button aria-label="打开证据抽屉" className="icon-button xl:hidden" disabled={!evidenceAvailable} onClick={onOpenEvidence} type="button"><PanelRight className="h-4 w-4" aria-hidden="true" /></button></div></header>; }

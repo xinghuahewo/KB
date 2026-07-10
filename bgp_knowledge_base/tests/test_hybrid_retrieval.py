@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import runpy
 import sys
@@ -253,6 +254,67 @@ def test_single_failure_degrades_and_double_failure_raises():
         hybrid_retrieval.search(
             "BGP", lexical_retriever=failed_lexical, dense_retriever=failed_vector,
         )
+
+
+def test_default_context_store_is_reused_until_catalog_changes(tmp_path, monkeypatch):
+    chunk_catalog = tmp_path / "chunk_catalog.jsonl"
+    section_catalog = tmp_path / "section_catalog.jsonl"
+    chunk_catalog.write_text('{"chunk_id":"c1"}\n', encoding="utf-8")
+    section_catalog.write_text('{"section_id":"s"}\n', encoding="utf-8")
+
+    class CountingChunkStore:
+        calls = []
+
+        def __init__(self, project_root, chunk_catalog_path, section_catalog_path):
+            self.calls.append((Path(project_root), Path(chunk_catalog_path), Path(section_catalog_path)))
+
+        def get_chunk(self, chunk_id):
+            return {
+                "chunk_id": chunk_id,
+                "doc_id": "doc",
+                "parent_section_id": "s",
+                "section_path": ["Root"],
+                "chunk_order": 0,
+                "content": "alpha",
+                "source_ref": "doc#1",
+                "source_block_ids": ["b1"],
+            }
+
+        def get_section(self, section_id):
+            return {
+                "section_id": section_id,
+                "doc_id": "doc",
+                "heading": "Root",
+                "section_path": ["Root"],
+            }
+
+        def get_section_direct_chunks(self, section_id):
+            return [self.get_chunk("c1")]
+
+        def get_section_subtree_chunks(self, section_id):
+            return self.get_section_direct_chunks(section_id)
+
+    monkeypatch.setattr(hybrid_retrieval.paths, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(hybrid_retrieval.paths, "PUBLISHED_DIR", tmp_path)
+    monkeypatch.setattr(hybrid_retrieval, "_default_section_catalog_path", lambda: section_catalog)
+    monkeypatch.setattr(hybrid_retrieval, "ChunkStore", CountingChunkStore)
+    hybrid_retrieval.clear_context_store_cache()
+
+    results = [{"chunk_id": "c1", "rerank_score": 0.9}]
+    first_units, first_trim = hybrid_retrieval._build_context_units("q", results, "fact", 6000)
+    second_units, second_trim = hybrid_retrieval._build_context_units("q", results, "fact", 6000)
+
+    assert [unit["included_chunk_ids"] for unit in first_units] == [["c1"]]
+    assert [unit["included_chunk_ids"] for unit in second_units] == [["c1"]]
+    assert first_trim == []
+    assert second_trim == []
+    assert len(CountingChunkStore.calls) == 1
+
+    chunk_catalog.write_text('{"chunk_id":"c1"}\n{"chunk_id":"c2"}\n', encoding="utf-8")
+    os.utime(chunk_catalog, None)
+    hybrid_retrieval._build_context_units("q", results, "fact", 6000)
+
+    assert len(CountingChunkStore.calls) == 2
 
 
 def test_v1_retrieval_framework_search_remains_available():

@@ -56,4 +56,19 @@ describe("fetchRagAnswerStream", () => {
       "RAG stream ended before a final answer",
     );
   });
+
+  it("reports a user-stopped request instead of a timeout", async () => {
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    ) as unknown as typeof fetch;
+
+    const request = fetchRagAnswerStream("route leak", { fetchImpl, signal: controller.signal } as never);
+    controller.abort();
+
+    await expect(request).rejects.toThrow("已停止生成");
+  });
 });

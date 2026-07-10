@@ -1,189 +1,83 @@
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, X } from "lucide-react";
 
-import type { Citation, ContextPack, RetrievalSummary } from "@/lib/chat-types";
+import { groupCitationsByDocument } from "@/lib/evidence";
+import type { ChatMessage, Citation } from "@/lib/chat-types";
 
 type Props = {
-  citations: Citation[];
-  contextPack?: ContextPack | null;
-  retrieval?: RetrievalSummary | null;
+  message?: ChatMessage;
+  className?: string;
+  onClose?: () => void;
 };
 
-export function CitationPanel({ citations, contextPack, retrieval }: Props) {
+export function CitationPanel({ message, className = "", onClose }: Props) {
+  const evidence = message?.evidence;
+  const citations = evidence?.citations || [];
+  const groups = groupCitationsByDocument(citations);
+  const retrieval = evidence?.retrieval;
+
   return (
-    <aside className="border-l border-[var(--line)] bg-[var(--panel)] p-4 lg:h-screen lg:overflow-y-auto">
-      <div className="mb-4">
-        <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Evidence</p>
-        <h2 className="mt-1 text-lg font-semibold">本轮证据</h2>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          {retrieval?.evidenceLabel || "答案会优先依据可追溯资料生成。"}
-        </p>
+    <aside aria-label="本轮证据" className={`flex min-h-0 flex-col bg-[var(--panel)] ${className}`}>
+      <header className="flex items-start justify-between gap-3 border-b border-[var(--line)] px-5 py-4">
+        <div>
+          <p className="eyebrow">本轮证据</p>
+          <h2 className="editorial-heading mt-1 text-xl">可追溯资料</h2>
+          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">{retrieval?.evidenceLabel || "这轮回答尚未获得可展示的资料。"}</p>
+        </div>
+        {onClose ? (
+          <button aria-label="关闭证据抽屉" className="icon-button" onClick={onClose} type="button">
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        ) : null}
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+        <div className="grid grid-cols-2 gap-px bg-[var(--line)] text-xs">
+          <Metric label="文档" value={String(groups.length)} />
+          <Metric label="证据片段" value={String(citations.length)} />
+          <Metric label="相关章节" value={String(retrieval?.contextUnitCount ?? 0)} />
+          <Metric label="检索状态" value={retrieval?.methodLabel || "等待检索"} />
+        </div>
+        <section className="mt-6">
+          <h3 className="text-sm font-semibold">引用文档</h3>
+          {groups.length === 0 ? (
+            <p className="mt-3 border-l-2 border-[var(--line-strong)] pl-3 text-sm leading-6 text-[var(--muted)]">本轮还没有可展示引用。</p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {groups.map((group) => <CitationGroup key={group.key} group={group} />)}
+            </div>
+          )}
+        </section>
       </div>
-
-      <div className="mb-4 grid grid-cols-2 gap-2 text-xs">
-        <Metric label="证据" value={String(citations.length)} />
-        <Metric label="来源" value={String(retrieval?.sourceCount ?? retrieval?.sourceTypes.length ?? 0)} />
-        <Metric label="相关章节" value={String(retrieval?.contextUnitCount ?? contextUnits(contextPack).length)} />
-        <Metric label="状态" value={retrieval?.hasSectionContext ? "已结合上下文" : retrieval?.methodLabel || "待检索"} />
-      </div>
-
-      <ContextUnitList contextPack={contextPack} />
-
-      <div className="mt-5 space-y-3">
-        <h3 className="text-sm font-semibold">引用</h3>
-        {citations.length === 0 ? (
-          <p className="border border-dashed border-[var(--line-strong)] p-3 text-sm leading-6 text-[var(--muted)]">
-            本轮还没有可展示引用。
-          </p>
-        ) : (
-          citations.map((citation, index) => <CitationItem citation={citation} index={index} key={citationKey(citation, index)} />)
-        )}
-      </div>
-
-      {contextPack?.results?.length ? (
-        <details className="mt-5 border border-[var(--line)] bg-white p-3">
-          <summary className="cursor-pointer text-sm font-semibold">开发调试：原始检索记录</summary>
-          <pre className="mono mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-[var(--muted)]">
-            {JSON.stringify(
-              {
-                resolved_query_type: contextPack.resolved_query_type,
-                token_budget: contextPack.token_budget,
-                degraded: contextPack.degraded,
-                degraded_reason: contextPack.degraded_reason,
-                results: contextPack.results.slice(0, 4),
-              },
-              null,
-              2,
-            )}
-          </pre>
-        </details>
-      ) : null}
     </aside>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border border-[var(--line)] bg-white p-2">
-      <div className="text-[var(--muted)]">{label}</div>
-      <div className="mt-1 truncate font-semibold">{value}</div>
-    </div>
-  );
+  return <div className="min-w-0 bg-white p-3"><div className="text-[var(--muted)]">{label}</div><div className="mt-1 truncate font-semibold text-[var(--ink)]">{value}</div></div>;
 }
 
-function ContextUnitList({ contextPack }: { contextPack?: ContextPack | null }) {
-  const units = contextUnits(contextPack);
-  if (units.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="border border-[var(--line)] bg-white p-3">
-      <div className="mb-3">
-        <p className="text-xs uppercase tracking-[0.16em] text-[var(--muted)]">Context</p>
-        <h3 className="mt-1 text-sm font-semibold">相关章节</h3>
-      </div>
-      <div className="space-y-2">
-        {units.slice(0, 4).map((unit, index) => (
-          <article className="border border-[var(--line)] bg-[var(--panel)] p-3" key={contextUnitKey(unit, index)}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">{stringValue(unit.parent_section_heading) || `相关章节 ${index + 1}`}</p>
-                <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{sectionPath(unit.section_path)}</p>
-              </div>
-              <span className="shrink-0 border border-[var(--line)] bg-white px-2 py-1 text-xs text-[var(--muted)]">
-                {modeLabel(unit.mode)}
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-              <span className="border border-[var(--line)] bg-white px-2 py-1">片段 {arrayLength(unit.included_chunk_ids)}</span>
-              <span className="border border-[var(--line)] bg-white px-2 py-1">约 {numberValue(unit.estimated_tokens) || "?"} tokens</span>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CitationItem({ citation, index }: { citation: Citation; index: number }) {
-  const sourceId = stringValue(citation.source_id || citation.sourceId || citation.source_ref);
-  const sourceLinkId = stringValue(citation.source_id || citation.sourceId);
-  const chunkId = stringValue(citation.chunk_id || citation.chunkId);
-  const title = stringValue(citation.title) || `引用 ${index + 1}`;
-  const preview = stringValue(citation.content_preview || citation.contentPreview || citation.text);
-  const score = typeof citation.score === "number" ? citation.score.toFixed(3) : "";
+function CitationGroup({ group }: { group: ReturnType<typeof groupCitationsByDocument>[number] }) {
+  const first = group.citations[0];
+  const sourceId = stringValue(first.source_id || first.sourceId);
   const sourceBaseUrl = process.env.NEXT_PUBLIC_BGP_RAG_BASE_URL?.replace(/\/+$/, "") || "";
-
   return (
-    <article className="border border-[var(--line)] bg-white p-3">
+    <article className="border border-[var(--line)] bg-white p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="mono mt-1 break-all text-xs text-[var(--muted)]">{chunkId || "chunk unknown"}</p>
-        </div>
-        {sourceLinkId ? (
-          <a
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center border border-[var(--line)] hover:bg-[var(--bg)]"
-            href={`${sourceBaseUrl}/sources/${sourceLinkId}`}
-            rel="noreferrer"
-            target="_blank"
-            title="打开来源"
-          >
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
-          </a>
-        ) : null}
+        <div className="min-w-0"><h4 className="break-words text-sm font-semibold">{group.title}</h4><p className="mt-1 text-xs text-[var(--muted)]">{group.evidenceCount} 条证据片段</p></div>
+        {sourceId ? <a aria-label={`打开来源：${group.title}`} className="icon-button shrink-0" href={`${sourceBaseUrl}/sources/${sourceId}`} rel="noreferrer" target="_blank"><ExternalLink className="h-4 w-4" aria-hidden="true" /></a> : null}
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--muted)]">
-        {sourceId ? <span className="border border-[var(--line)] px-2 py-1">{sourceId}</span> : null}
-        {citation.source_type || citation.sourceType ? (
-          <span className="border border-[var(--line)] px-2 py-1">{stringValue(citation.source_type || citation.sourceType)}</span>
-        ) : null}
-        {score ? <span className="border border-[var(--line)] px-2 py-1">score {score}</span> : null}
+      <div className="mt-3 space-y-3">
+        {group.citations.map((citation, index) => <EvidenceExcerpt citation={citation} index={index} key={citationKey(citation, index)} />)}
       </div>
-      {preview ? <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{preview}</p> : null}
     </article>
   );
 }
 
-function citationKey(citation: Citation, index: number) {
-  return `${citation.chunk_id || citation.chunkId || citation.source_id || citation.sourceId || "citation"}-${index}`;
+function EvidenceExcerpt({ citation, index }: { citation: Citation; index: number }) {
+  const preview = stringValue(citation.content_preview || citation.contentPreview || citation.text);
+  const section = stringValue(citation.section || citation.section_heading || citation.source_ref).split("#")[1];
+  const chunkId = stringValue(citation.chunk_id || citation.chunkId);
+  return <div className="border-l-2 border-[var(--green)] pl-3"><p className="text-xs font-medium text-[var(--muted)]">{section || `证据 ${index + 1}`}</p>{preview ? <p className="mt-1 break-words text-sm leading-6">{preview}</p> : null}<details className="mt-2 text-xs text-[var(--muted)]"><summary>技术详情</summary><p className="mono mt-2 break-all">{chunkId || "未记录片段标识"}</p></details></div>;
 }
 
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function contextUnits(contextPack?: ContextPack | null) {
-  const units = contextPack?.context_units || contextPack?.contextUnits || [];
-  return Array.isArray(units) ? units.filter((unit): unit is Record<string, unknown> => Boolean(unit && typeof unit === "object")) : [];
-}
-
-function contextUnitKey(unit: Record<string, unknown>, index: number) {
-  return `${stringValue(unit.context_id) || stringValue(unit.parent_section_id) || "context"}-${index}`;
-}
-
-function sectionPath(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.filter((item): item is string => typeof item === "string" && item.length > 0).join(" / ") || "章节路径未记录";
-  }
-  if (typeof value === "string" && value) {
-    return value;
-  }
-  return "章节路径未记录";
-}
-
-function modeLabel(value: unknown) {
-  const mode = stringValue(value);
-  if (mode === "full_section") return "完整章节";
-  if (mode === "parent_span") return "章节片段";
-  if (mode === "summary") return "章节摘要";
-  return "精确片段";
-}
-
-function arrayLength(value: unknown) {
-  return Array.isArray(value) ? value.length : 0;
-}
-
-function numberValue(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
+function citationKey(citation: Citation, index: number) { return `${citation.chunk_id || citation.chunkId || citation.source_ref || "citation"}-${index}`; }
+function stringValue(value: unknown) { return typeof value === "string" ? value : ""; }
