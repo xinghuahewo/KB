@@ -11,6 +11,8 @@
 ### 连接
 
 - SSH 目标：`root@10.99.8.28`。
+- 本地已设置到 `10.99.8.28` 的路由，并已配置免密 SSH 登录；可通过 SSH 直接操控该服务器。
+- 在系统 VPN 或全局代理开启时，SSH 连接建议显式禁用 SSH 代理配置：`ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28 ...`。
 - 当前未登记必需的 SSH 源地址绑定；不得沿用旧服务器的 `10.29.98.116` 路由假设。
 - 不在仓库中记录密码、私钥、token 或其他凭据。
 
@@ -52,6 +54,43 @@
 
 - 构建文件：`/srv/bgpkb/docling-build`。
 - 模型文件：`/srv/bgpkb/docling-models`。
+
+## BGP 知识库远端交互式部署
+
+以下信息于 2026-07-09 验证，用于 BGP 知识库前端和 FastAPI 问答服务。
+
+### 部署路径与运行方式
+
+- 当前项目副本部署在 `root@10.99.8.28:/home/wbt/DB`。
+- 知识库后端目录：`/home/wbt/DB/bgp_knowledge_base`。
+- 对话前端目录：`/home/wbt/DB/chat_frontend`。
+- 当前使用 `screen` 常驻运行，不迁移到 systemd。
+- 远端 Python 环境使用 `uv` 管理，虚拟环境位于 `/home/wbt/DB/bgp_knowledge_base/.venv`。
+
+### 服务端口
+
+- 静态前端：`0.0.0.0:39280`，screen 会话名 `bgpkb_frontend_wbt`。
+- FastAPI 后端：`0.0.0.0:39281`，screen 会话名 `bgpkb_fastapi_wbt`。
+- nginx 裸 IP 入口：`http://10.99.8.28/` 反向代理到 `127.0.0.1:39280`。
+- embedding 服务：`10.99.8.28:8011`，模型 `BAAI/bge-m3`。
+- reranker 服务：`10.99.8.28:8012`，模型 `BAAI/bge-reranker-v2-m3`。
+- 旧前端端口 `3001` 已停止；远端当前 FastAPI 不使用 `8000`。
+
+### RAG 运行边界
+
+- FastAPI 启动时设置 `BGP_RAG_REQUIRE_RERANKER=1`，前端问答默认要求真实 reranker。
+- 当前端到端问答已验证：`answer_status=answered`、`vector_status=complete`、`rerank_status=complete`、`reranker_provider=local_http`、`degraded=False`。
+- DeepSeek API 仍由后端环境变量读取；不得在仓库中记录真实密钥。
+
+### 快速巡检命令
+
+```bash
+ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28 \
+  'screen -ls | grep -E "bgpkb_(frontend|fastapi)_wbt"; \
+   ss -ltnp | grep -E ":(39280|39281|8011|8012)"; \
+   curl -s http://127.0.0.1:39281/health; echo; \
+   curl -s http://127.0.0.1:39280/health; echo'
+```
 
 ### 快速验证命令
 

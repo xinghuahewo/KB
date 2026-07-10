@@ -239,6 +239,71 @@ def write_inventory(rows, path):
             handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def build_action_queue(rows, checks):
+    rows_by_id = {row["entity_id"]: row for row in rows}
+    actions = {}
+
+    def add_action(entity_id, action_type, severity, reason, suggested_action):
+        row = rows_by_id.get(entity_id, {})
+        key = (entity_id, action_type)
+        actions[key] = {
+            "action_id": f"lifecycle_action_{entity_id}_{action_type}",
+            "entity_id": entity_id,
+            "entity_type": row.get("entity_type", ""),
+            "display_name": row.get("display_name", entity_id),
+            "lifecycle_status": row.get("lifecycle_status", ""),
+            "review_status": row.get("review_status", ""),
+            "action_type": action_type,
+            "severity": severity,
+            "reason": reason,
+            "suggested_action": suggested_action,
+            "source_refs": row.get("source_refs", []),
+            "status": "open",
+            "generated_by": "src/bgpkb/pipeline/build_lifecycle_report.py",
+        }
+
+    for row in rows:
+        if row["lifecycle_status"] in {"draft", "candidate", "reviewed"}:
+            add_action(
+                row["entity_id"],
+                "lifecycle_review",
+                "medium",
+                row["lifecycle_reason"],
+                "补齐来源、证据或人工复核决策；满足条件后再进入 approved。",
+            )
+
+    for check in checks:
+        if check["rule_id"] == "expired_validity_requires_action":
+            for entity_id in check["items"]:
+                add_action(
+                    entity_id,
+                    "expired_validity_review",
+                    "high",
+                    "valid_until 已过期且没有打开行动项。",
+                    "补充复核行动项，或将实体降级为 deprecated/archived。",
+                )
+        elif check["rule_id"] == "deprecated_or_archived_reference_warning":
+            for entity_id in check["items"]:
+                add_action(
+                    entity_id,
+                    "inactive_reference_review",
+                    "medium",
+                    "deprecated 或 archived 实体仍被关系引用。",
+                    "检查替代实体关系，必要时更新引用或保留兼容说明。",
+                )
+        elif check["rule_id"] == "review_lifecycle_consistency":
+            for entity_id in check["items"]:
+                add_action(
+                    entity_id,
+                    "lifecycle_consistency_review",
+                    "high",
+                    "review_status 与 lifecycle_status 不一致。",
+                    "修正生命周期策略覆盖或复核状态，保持治理视图一致。",
+                )
+
+    return sorted(actions.values(), key=lambda row: (row["severity"], row["entity_type"], row["entity_id"], row["action_type"]))
+
+
 def status_label(status):
     return {
         "draft": "草稿",
@@ -317,6 +382,7 @@ def render_report(config, rows, checks):
         lines.append("- 优先处理 `candidate` 实体的人工复核与来源补充，使其进入 `approved`。")
         lines.append("- 对 `reviewed` 但缺少证据索引的实体补齐证据记录或降低生命周期状态。")
         lines.append("- 仅在明确替代或失效时，通过策略显式标记 `deprecated` 或 `archived`。")
+        lines.append("- 机器可读更新行动队列写入 `data/derived/datasets/lifecycle_action_queue.jsonl`。")
     else:
         lines.append("- 当前实体均已达到 approved 或更明确的非活跃状态。")
 
@@ -337,12 +403,16 @@ def main():
 
     rows = build_inventory(config)
     checks = check_quality_rules(rows, config)
+    actions = build_action_queue(rows, checks)
 
     write_inventory(rows, inventory_path)
+    action_queue_path = ROOT / config["generated_policy"]["action_queue_path"]
+    write_inventory(actions, action_queue_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_report(config, rows, checks), encoding="utf-8")
 
     print(f"Wrote {inventory_path.relative_to(ROOT)}")
+    print(f"Wrote {action_queue_path.relative_to(ROOT)}")
     print(f"Wrote {report_path.relative_to(ROOT)}")
 
 

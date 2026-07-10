@@ -1,0 +1,229 @@
+version: knowledge_update_v1
+default_mode: plan_only
+description: >
+  知识更新依赖图。该配置只用于定位受影响步骤和生成发布检查建议；
+  增量执行必须显式确认，全量流水线仍是最终发布门禁。
+safety:
+  never_auto_apply_human_review: true
+  never_download_sources_by_default: true
+  full_pipeline_remains_release_gate: true
+  default_network: disabled
+  default_llm: disabled
+release_gate:
+  required_final_step: quality_check
+  full_pipeline_command: python3 -m bgpkb.pipeline.run_pipeline
+steps:
+  - id: parse_documents
+    label: 解析原始文档
+    command: python3 -m bgpkb.pipeline.parse_documents
+    inputs:
+      - data/sources/raw/**
+      - data/sources/inventory/sources.csv
+    outputs:
+      - data/corpus/parsed/**
+      - data/corpus/cleaned/**
+      - data/generated/reports/corpus/parse_report.md
+    downstream:
+      - build_chunks
+      - build_source_processing_status
+    safety: &safe_derived
+      network: disabled
+      llm: disabled
+      writes_main_knowledge: false
+  - id: build_chunks
+    label: 构建知识片段
+    command: python3 -m bgpkb.pipeline.build_chunks
+    inputs:
+      - data/corpus/parsed/**
+      - data/corpus/chunks/seeds/**
+      - data/sources/inventory/sources.csv
+    outputs:
+      - data/corpus/chunks/**
+    downstream:
+      - build_published_knowledge_base
+      - build_source_processing_status
+    safety: *safe_derived
+  - id: build_source_processing_status
+    label: 构建来源处理状态
+    command: python3 -m bgpkb.pipeline.build_source_processing_status
+    inputs:
+      - data/sources/inventory/sources.csv
+      - data/sources/raw/**
+      - data/corpus/parsed/**
+      - data/corpus/cleaned/**
+      - data/corpus/chunks/**
+    outputs:
+      - data/derived/datasets/source_processing_status.jsonl
+      - data/generated/reports/sources/source_processing_status_report.md
+    downstream:
+      - build_published_knowledge_base
+      - build_readiness_report
+    safety: *safe_derived
+  - id: build_lifecycle_report
+    label: 构建生命周期治理与更新行动队列
+    command: python3 -m bgpkb.pipeline.build_lifecycle_report
+    inputs:
+      - metadata/config/lifecycle_policy.yaml
+      - data/knowledge/entities/**
+      - data/knowledge/relationships/**
+      - data/derived/datasets/entity_source_evidence.jsonl
+      - data/derived/datasets/entity_review_packets.jsonl
+      - data/derived/datasets/next_action_queue.jsonl
+      - data/derived/datasets/human_review_decision_audit.jsonl
+    outputs:
+      - data/derived/datasets/lifecycle_inventory.jsonl
+      - data/derived/datasets/lifecycle_action_queue.jsonl
+      - data/generated/reports/knowledge/lifecycle_report.md
+    downstream:
+      - build_semantic_quality_report
+      - build_release_notes
+    safety: *safe_derived
+  - id: build_semantic_quality_report
+    label: 构建语义质量治理报告
+    command: python3 -m bgpkb.pipeline.build_semantic_quality_report
+    inputs:
+      - metadata/config/semantic_quality_rules.yaml
+      - data/knowledge/entities/**
+      - data/knowledge/relationships/**
+      - data/derived/datasets/lifecycle_inventory.jsonl
+      - data/derived/datasets/next_action_queue.jsonl
+    outputs:
+      - data/derived/datasets/semantic_quality_findings.jsonl
+      - data/generated/reports/knowledge/semantic_quality_report.md
+    downstream:
+      - build_release_notes
+    safety: *safe_derived
+  - id: build_published_knowledge_base
+    label: 构建发布知识库
+    command: python3 -m bgpkb.pipeline.build_published_knowledge_base
+    inputs:
+      - data/sources/inventory/sources.csv
+      - data/corpus/chunks_v2/**
+      - data/corpus/chunks/**
+      - data/knowledge/entities/**
+      - data/knowledge/relationships/**
+      - data/derived/datasets/section_catalog.jsonl
+      - data/derived/datasets/source_processing_status.jsonl
+      - metadata/config/corpus_release_pointer.json
+    outputs:
+      - data/published/manifest.json
+      - data/published/source_catalog.jsonl
+      - data/published/entity_catalog.jsonl
+      - data/published/chunk_catalog.jsonl
+      - data/published/relationship_adjacency.json
+      - data/published/lexical_index.json
+      - data/generated/reports/publishing/published_knowledge_base_report.md
+    downstream:
+      - build_bge_m3_index
+      - build_sqlite_knowledge_base
+      - build_published_integrity_report
+      - build_readiness_report
+      - build_release_notes
+    safety: *safe_derived
+  - id: build_bge_m3_index
+    label: 构建 BGE-M3 向量索引
+    command: python3 -m bgpkb.pipeline.build_bge_m3_index
+    inputs:
+      - data/published/chunk_catalog.jsonl
+      - data/published/entity_catalog.jsonl
+      - data/published/source_catalog.jsonl
+      - data/derived/datasets/glossary.jsonl
+      - data/derived/datasets/entity_source_evidence.jsonl
+    outputs:
+      - data/published/bge_m3_vector_index.jsonl
+      - data/published/bge_m3_embedding_manifest.json
+      - data/generated/reports/rag/bge_m3_embedding_report.md
+    downstream:
+      - build_release_notes
+      - quality_check
+    safety: *safe_derived
+  - id: build_sqlite_knowledge_base
+    label: 构建 SQLite 知识库
+    command: python3 -m bgpkb.pipeline.build_sqlite_knowledge_base
+    inputs:
+      - data/published/manifest.json
+      - data/published/source_catalog.jsonl
+      - data/published/entity_catalog.jsonl
+      - data/published/chunk_catalog.jsonl
+      - data/published/relationship_adjacency.json
+      - data/derived/datasets/**
+    outputs:
+      - data/published/bgp_knowledge_base.sqlite
+      - data/published/sqlite_schema.sql
+      - data/generated/reports/publishing/sqlite_knowledge_base_report.md
+    downstream:
+      - build_release_notes
+      - quality_check
+    safety: *safe_derived
+  - id: build_published_integrity_report
+    label: 校验发布完整性
+    command: python3 -m bgpkb.pipeline.build_published_integrity_report
+    inputs:
+      - data/published/**
+    outputs:
+      - data/published/integrity_summary.json
+      - data/reports/gates/published_integrity_report.md
+    downstream:
+      - build_release_notes
+      - check_release_readiness
+    safety: *safe_derived
+  - id: build_readiness_report
+    label: 构建知识库就绪度报告
+    command: python3 -m bgpkb.pipeline.build_readiness_report
+    inputs:
+      - data/published/**
+      - data/derived/datasets/source_gap_queue.jsonl
+      - data/derived/datasets/next_action_queue.jsonl
+    outputs:
+      - data/published/readiness_summary.json
+      - data/reports/gates/readiness_report.md
+    downstream:
+      - build_release_notes
+      - check_release_readiness
+    safety: *safe_derived
+  - id: build_release_notes
+    label: 构建发布说明
+    command: python3 -m bgpkb.pipeline.build_release_notes
+    inputs:
+      - data/published/manifest.json
+      - data/published/source_catalog.jsonl
+      - data/published/entity_catalog.jsonl
+      - data/published/chunk_catalog.jsonl
+      - data/published/integrity_summary.json
+      - data/published/readiness_summary.json
+      - data/derived/datasets/lifecycle_action_queue.jsonl
+    outputs:
+      - data/published/release_notes.md
+    downstream:
+      - check_release_readiness
+      - quality_check
+    safety: *safe_derived
+  - id: check_release_readiness
+    label: 发布就绪检查
+    command: python3 -m bgpkb.pipeline.check_release_readiness
+    inputs:
+      - metadata/config/pipeline_dependencies.yaml
+      - metadata/config/report_policy.yaml
+      - data/published/manifest.json
+      - data/published/integrity_summary.json
+      - data/published/readiness_summary.json
+      - data/published/release_notes.md
+      - data/published/bge_m3_embedding_manifest.json
+    outputs:
+      - data/reports/gates/release_readiness_report.md
+    downstream:
+      - quality_check
+    safety: *safe_derived
+  - id: quality_check
+    label: 运行质量检查
+    command: python3 -m bgpkb.pipeline.quality_check
+    inputs:
+      - data/**
+      - metadata/**
+      - src/**
+      - tests/**
+      - docs/**
+    outputs:
+      - data/reports/gates/quality_report.md
+    downstream: []
+    safety: *safe_derived

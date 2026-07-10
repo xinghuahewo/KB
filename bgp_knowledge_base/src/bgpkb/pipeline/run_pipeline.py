@@ -49,6 +49,9 @@ GENERATED_REPORT_IDS_TO_CLEAN = [
     "data_management_report",
     "lifecycle_report",
     "semantic_quality_report",
+    "incremental_run_plan_report",
+    "incremental_run_report",
+    "release_readiness_report",
     "rag_readiness_report",
     "rag_answer_eval_report",
     "rag_answer_failure_analysis_report",
@@ -113,20 +116,26 @@ STEPS = [
     ("构建生命周期治理报告", "build_lifecycle_report.py"),
     ("构建语义质量治理报告", "build_semantic_quality_report.py"),
     ("构建 RAG 就绪框架报告", "build_rag_readiness_report.py"),
+    ("构建增量重跑基线计划", "plan_incremental_run.py --write"),
+    ("构建增量流水线 dry-run 报告", "run_incremental_pipeline.py"),
     ("运行 RAG 答案质量评测", "run_rag_answer_eval.py"),
     ("运行混合检索评测", "run_hybrid_retrieval_eval.py"),
     ("运行阶段 B chunking 评测", "evaluate_chunking.py"),
     ("构建 RAG 答案失败样本分析", "build_rag_answer_failure_analysis.py"),
+    ("构建发布说明", "build_release_notes.py"),
+    ("检查发布就绪状态", "check_release_readiness.py"),
     ("构建制品清单", "build_artifact_manifest.py"),
     ("运行质量检查", "quality_check.py"),
 ]
 
 
 def run_step(label, script_name):
-    module = paths.pipeline_module(script_name)
+    parts = script_name.split()
+    module = paths.pipeline_module(parts[0])
+    args = parts[1:]
     start = time.monotonic()
     result = subprocess.run(
-        [sys.executable, "-m", module],
+        [sys.executable, "-m", module, *args],
         cwd=ROOT,
         text=True,
         stdout=subprocess.PIPE,

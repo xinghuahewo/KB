@@ -1,5 +1,7 @@
 # Docling 私有 GPU 运行环境 v1
 
+日常 SSH、GPU 状态、端口和 screen 操作统一记录在 [远端服务器与前端部署操作手册 v1](remote_server_operations_v1.md)。本文只保留 Docling 私有运行时的版本、镜像、模型和离线批处理边界。
+
 ## 目标服务器事实
 
 当前生产基线于 2026-07-04 在 `root@10.99.8.28` 重建并验收：

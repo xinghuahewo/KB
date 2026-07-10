@@ -1,10 +1,10 @@
 ---
 title: "阶段 4.5 BGE-M3 混合检索 v1"
 document_type: "阶段说明"
-purpose: "定义阶段 4.5 的终极目标、技术选型、约束边界、交付物和验收标准。"
+purpose: "定义阶段 4.5 的终极目标、技术选型、约束边界、交付物、验收标准和阶段 B 后的现行 provider 口径。"
 scope: "阶段 4.5"
-status: "已完成并通过真实 BGE-M3 向量评测"
-last_reviewed: "2026-06-20"
+status: "已完成；阶段 B 后已升级为私有 local_http BGE-M3 服务"
+last_reviewed: "2026-07-08"
 ---
 # 阶段 4.5 BGE-M3 混合检索 v1
 
@@ -12,7 +12,7 @@ last_reviewed: "2026-06-20"
 
 阶段 4.5 的终极目标是：
 
-> 在当前设备不运行模型的前提下，使用 BGE-M3 远程 embedding 建立混合检索较优解 v1，让 BGP KB 同时具备向量召回、BM25/关键词召回、元数据过滤、融合排序、检索评测和可追溯 context pack。
+> 使用 BGE-M3 embedding 建立混合检索较优解 v1，让 BGP KB 同时具备向量召回、BM25/关键词召回、元数据过滤、融合排序、检索评测和可追溯 context pack。
 
 完成后，阶段四应从“能调用 DeepSeek 回答”升级为“能用可评测的混合检索稳定提供证据，再由 DeepSeek 基于证据回答”。
 
@@ -21,7 +21,7 @@ last_reviewed: "2026-06-20"
 | 模块 | 选型 | 说明 |
 | --- | --- | --- |
 | LLM 回答 | DeepSeek API | 复用阶段 4.1-4.4 已验证能力。 |
-| embedding | SiliconFlow `BAAI/bge-m3` 优先，阿里云 PAI/EAS BGE-M3 兼容 | 不在本机跑模型；先用 OpenAI-compatible 接口跑通，再兼容阿里云正式部署。 |
+| embedding | 私有 `local_http` `BAAI/bge-m3` 优先，SiliconFlow 与阿里云 PAI/EAS BGE-M3 兼容 | 现行默认指向 `10.99.8.28:8011`；外部 API 仅作为备用 provider。 |
 | 关键词检索 | 现有检索框架 + BM25/FTS/规则命中 | 适合 RFC、AS 编号、协议字段、专有名词和精确短语。 |
 | 向量检索 | 文件化 JSONL 向量索引 v1 | 数据量小，先做可复跑和可评测；Milvus 后置。 |
 | 元数据索引 | source_type、entity_type、review_status、lifecycle_status、topic | 用于过滤、加权和排序解释。 |
@@ -30,20 +30,21 @@ last_reviewed: "2026-06-20"
 
 ## Provider 策略
 
-阶段 4.5 不把混合检索绑定到单个厂商，默认抽象为 `bge_m3_remote`。
+阶段 4.5 不把混合检索绑定到单个厂商。阶段 B 后，默认 provider 已从外部 API 切换为私有 `local_http` 服务。
 
 | Provider | 用途 | 环境变量 | 接口形态 |
 | --- | --- | --- | --- |
-| `siliconflow_bge_m3` | 第一版快速验证 | `SILICONFLOW_API_KEY`、可选 `SILICONFLOW_BASE_URL` | OpenAI-compatible `/v1/embeddings`，模型 `BAAI/bge-m3` |
-| `aliyun_eas_bge_m3` | 后续正式部署 | `ALIYUN_BGE_M3_ENDPOINT`、`ALIYUN_BGE_M3_API_KEY` | 阿里云 PAI/EAS 自托管 endpoint |
+| `private_bge_m3_service` / `local_http` | 现行默认路径 | 无 API key；服务地址在 `metadata/config/rag_retrieval.yaml` 固定为内网 endpoint | OpenAI-compatible `/v1/embeddings`，模型 `BAAI/bge-m3`，端口 `8011` |
+| `siliconflow_bge_m3` | 外部 API 备用路径 | `SILICONFLOW_API_KEY`、可选 `SILICONFLOW_BASE_URL` | OpenAI-compatible `/v1/embeddings`，模型 `BAAI/bge-m3` |
+| `aliyun_eas_bge_m3` | 外部或自托管备用路径 | `ALIYUN_BGE_M3_ENDPOINT`、`ALIYUN_BGE_M3_API_KEY` | 阿里云 PAI/EAS endpoint |
 | `fake_bge_m3` | 无 key 测试 | 无 | 确定性 fake embedding，用于单元测试和 CI |
 
 Provider 通过命令行参数显式选择，不做静默自动切换：
 
 ```text
-默认使用 siliconflow_bge_m3
--> 需要阿里云时显式指定 aliyun_eas_bge_m3
--> 无 key 时生成 skipped manifest
+默认使用 private_bge_m3_service/local_http
+-> 私有服务不可用时按配置显式选择外部 API provider
+-> 离线 CI 使用 fake/mock provider
 -> 单元测试和 CI 使用 fake_bge_m3
 ```
 
@@ -74,10 +75,10 @@ Provider 通过命令行参数显式选择，不做静默自动切换：
 
 ## 约束与边界
 
-- 当前设备不运行本地模型。
-- 不下载 BGE-M3、Qwen 或其它模型权重。
+- 当前开发设备不常驻运行 BGE-M3；真实模型常驻在 `10.99.8.28` 的私有 GPU 服务上。
+- 开发设备和 CI 不下载 BGE-M3、Qwen 或其它模型权重；部署准备流程可在显式操作下下载模型并生成 lock。
 - API key、endpoint、token 只从环境变量读取。
-- 无 SiliconFlow key 或阿里云 key 时，测试和结构评测必须能用 fake client 运行。
+- 无外部 API key 或私有服务不可用时，测试和结构评测必须能用 fake/mock client 运行。
 - 阶段 4.5 不自动写回实体、关系、chunk、术语表或人工复核状态。
 - 阶段 4.5 不强制引入 Milvus、Qdrant 或其它常驻向量数据库。
 - pending 实体不作为已批准实体事实进入 context pack；pending chunk 仅在关联 approved entity evidence，或来源已完成确定性处理且保留溯源时进入检索，并保持原始 pending 标签。
@@ -123,15 +124,18 @@ Provider 通过命令行参数显式选择，不做静默自动切换：
 - RFC/标准类问题优先返回 standards 来源。
 - 事件类问题优先返回 cases 来源。
 - 检索评测报告列出通过、失败和需人工复核的问题。
-- 本地模型仍为禁用状态。
+- 当前默认真实 embedding provider 为私有 `local_http`；本机本地模型仍不作为默认路径。
 - 质量检查 JSON 错误数和 Schema 错误数均为 0。
 - 仓库中不包含真实 DeepSeek、SiliconFlow 或阿里云 API key。
 
 ## 当前实施结果
 
-- 远程 provider、文件化索引构建、混合检索、CLI、API、RAG Answer 接入和阶段评测框架均已实现。
-- embedding 输入共 2269 条：2037 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
-- SiliconFlow `BAAI/bge-m3` 已生成 2269 条、1024 维、L2 归一化的真实向量，manifest 状态为 `complete`。
+- 远程 provider、文件化索引构建、混合检索、CLI、API、RAG Answer 接入和阶段评测框架均已实现，并在阶段 B 中接入私有模型服务。
+- embedding 输入共 58,792 条：58,560 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
+- 私有 `local_http` `BAAI/bge-m3` 已生成 58,792 条、1024 维真实向量，manifest 状态为 `complete`。
+- 当前 embedding endpoint：`http://10.99.8.28:8011/v1/embeddings`，模型 revision 为 `5617a9f61b028005a4858fdac845db406aefb181`。
+- 阶段 B 另部署 reranker endpoint：`http://10.99.8.28:8012/v1/rerank`，模型 revision 为 `953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e`。
+- 当前模型服务 release：`d7f62ed1ccf6f7a0fa52142a0c39328b73ed76c92cc258dad78923f32804d8b0`。
 - 真实混合检索评测 20/20 通过，Recall@5 为 89.22%，Recall@8 为 89.22%，MRR 为 0.8971，无证据拒答率为 100%。
 - 初次真实评测发现无意义查询最高相似度为 0.4493，而有效查询最低最高相似度为 0.5892；据此将真实向量证据阈值设为 0.50。
 - 来源类型覆盖 `case_report`、`data_doc`、`paper`、`standard`、`tool_doc`。

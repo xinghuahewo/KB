@@ -3,19 +3,19 @@ title: "BGP 知识库工业界对齐改进方案 v1"
 document_type: "规划与治理文档"
 purpose: "基于当前知识清洗、拆分、分类、结构化、追溯和更新能力，给出贴近工业界成熟知识工程实践的本地改进路线。"
 scope: "BGP 知识库数据准备、治理、RAG 就绪和发布维护链路"
-status: "现行参考；阶段 A 和 Docling 私有清洗 v2 已交付"
-last_reviewed: "2026-07-02"
+status: "现行参考；阶段 A、Docling 私有清洗 v2 和阶段 B 层级检索已交付"
+last_reviewed: "2026-07-08"
 ---
 # BGP 知识库工业界对齐改进方案 v1
 
 ## 1. 结论
 
-当前项目已经具备确定性流水线、质量检查、人工复核、发布包和追溯索引，适合作为 BGP 知识库数据底座。阶段 A 已建立语料质量画像；Docling 私有清洗 v2 已进入主分支，完成 36/36 任务和发布回滚验收。
+当前项目已经具备确定性流水线、质量检查、人工复核、发布包、追溯索引和层级检索服务，适合作为 BGP 知识库数据底座。阶段 A 已建立语料质量画像；Docling 私有清洗 v2 已进入主分支，完成 36/36 任务和发布回滚验收；阶段 B 已交付 section catalog、层级 chunk、BM25+BGE-M3 混合召回、BGE reranker、query type 和预算受控 context pack。
 
 与工业界成熟知识工程相比，下一步差距主要在以下五点：
 
 1. 清洗 v2 已具备版面、标题、表格、阅读顺序、OCR 证据和可追溯 Block，但 31/54 文档仍使用已审核 legacy-preservation fallback，需逐步提高原生结构解析覆盖率。
-2. v2 chunk 已从 approved Block 派生，但需继续做多粒度层级、特殊块检索策略和检索效果驱动调参。
+2. v2 chunk 已从 approved Block 派生并完成阶段 B 层级检索验收；后续重点转为特殊块检索策略、主题分类增强和持续效果调参。
 3. 分类体系已经存在，但自动分类主要靠少量关键词规则，缺少同义词、置信度和人工校正闭环。
 4. 实体和关系结构化结果较完整，但自动候选抽取仍是占位能力，主要依赖人工 JSONL 种子。
 5. 追溯和更新机制稳健，但还没有形成标准化 lineage 事件、增量构建、CI 调度和过期知识监控。
@@ -28,7 +28,7 @@ last_reviewed: "2026-07-02"
 | --- | --- | --- | --- |
 | 阶段 A：语料质量画像 | 已交付：让清洗质量可量化 | 已新增语料 profiling、独立 OCR 评估、报告和指标数据集 | 已能看到长度分布、异常文档、表格/替换字符/OCR 风险 |
 | 阶段 A2：Docling 私有清洗 v2 | 已交付：建立结构保真、可审核、可回滚的清洗权威层 | Canonical Block v2、离线 GPU Docling、自适应 OCR、transformation 审计、全量迁移和版本指针 | 54/54 通过；标题 F1 98.65%；阅读顺序/表格 100%；OCR CER 0%；v2→v1→v2 回滚演练通过 |
-| 阶段 B：层级 chunk | 让检索可在段落和章节之间回扩 | 扩展 chunk schema，新增父子 chunk 或 section catalog | 查询命中子 chunk 时可定位父 section |
+| 阶段 B：层级 chunk | 已交付：让检索可在段落和章节之间回扩 | 已扩展 chunk schema，新增 section catalog、父 section、前后邻接、BM25+BGE-M3 混合召回、BGE reranker 和 context pack | 58,560/58,560 resolved；父 section、邻接和引用完整率 100%；远端 8011/8012 常驻健康 |
 | 阶段 C：分类增强 | 让主题标签有置信度和人工闭环 | 新增同义词配置、分类候选数据集和低置信复核队列 | chunk topic 覆盖率、置信度分布和复核队列可报告 |
 | 阶段 D：结构化候选层 | 从人工实体种子升级为“自动候选 + 人工批准” | 新增实体候选、关系候选、字段候选抽取脚本 | 候选不会直接写入主实体，必须经审计和人工复核 |
 | 阶段 E：追溯标准化 | 把内部追溯升级为可交换 lineage | 新增 run manifest、输入输出依赖和 PROV/JSON-LD 样例出口 | 每次流水线运行可追到输入、输出、脚本和 hash |
@@ -98,12 +98,14 @@ last_reviewed: "2026-07-02"
 - RAG 检索常用多粒度策略：先召回小 chunk，再回扩父 section 或相邻上下文。
 - chunk 参数通过评测集调参，而不是只凭经验固定。
 
-本地改进：
+已完成：
 
-- 新增 `data/derived/datasets/section_catalog.jsonl`，由 `data/corpus/parsed/*.json` 生成 section 级父节点，字段包含 `section_id`、`doc_id`、`heading`、`source_ref`、`child_chunk_ids`、`content_chars`。
-- 扩展 chunk 记录或发布目录，增加 `parent_section_id`、`chunk_order`、`previous_chunk_id`、`next_chunk_id`。
-- 修改 `src/bgpkb/service/retrieval_framework.py` 的 context pack 逻辑：召回 chunk 后，可按配置附带父 section 标题、前后 chunk 或父 section 摘要。
-- 新增 `src/bgpkb/pipeline/evaluate_chunking.py`，用 `data/derived/datasets/rag_answer_eval_questions.jsonl` 统计每个问题命中的 chunk 数、来源覆盖、父 section 覆盖和引用完整度。
+- 新增 `data/derived/datasets/section_catalog.jsonl`，由 v2 Canonical Block 确定性生成 447 个 section，采用“轻 catalog + 按 child/block 组装”，不重复保存完整 section 正文。
+- v2 chunk 已增加 `parent_section_id`、`chunk_order`、`previous_chunk_id`、`next_chunk_id`、`hierarchy_status` 等层级字段；58,560 个可发布 chunk 全部 `resolved`。
+- 已接通 SQLite FTS5 BM25 与 BGE-M3 dense 混合召回：BM25 与 dense 各取 50，RRF(k=60) 融合后保留 20 个候选。
+- 已部署私有模型服务：`10.99.8.28:8011` 提供 `BAAI/bge-m3` embedding，`10.99.8.28:8012` 提供 `BAAI/bge-reranker-v2-m3` rerank；当前 release 为 `d7f62ed1ccf6f7a0fa52142a0c39328b73ed76c92cc258dad78923f32804d8b0`。
+- 已生成真实 BGE-M3 向量索引：58,792 条、1024 维，构成为 58,560 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
+- 已新增 `src/bgpkb/pipeline/evaluate_chunking.py`，阶段 B 结构门禁结果为父 section 可追溯率 100%、相邻上下文正确率 100%、引用完整率 100%；无成熟答案基线时只卡结构完整性。
 
 暂不做：
 

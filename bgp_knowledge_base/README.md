@@ -4,11 +4,30 @@ document_type: "目录入口说明"
 purpose: "说明 BGP 知识库数据准备目录的目标、范围、结构和统一运行入口，帮助快速理解仓库内容。"
 scope: "知识库根目录"
 status: "现行入口"
-last_reviewed: "2026-06-19"
+last_reviewed: "2026-07-09"
 ---
 # BGP 知识库数据准备
 
 这个目录用于把 BGP 领域资料整理成可追溯、可维护、可扩展的数据底座，并提供确定性流水线、本地查询入口和只读服务。
+
+## 当前交付状态（2026-07-09）
+
+当前项目已完成数据底座、Docling 私有清洗 v2、阶段 A 语料质量画像和阶段 B 层级检索，并已具备可访问的只读 RAG 问答入口。
+
+远端交互式部署现状：
+
+| 项目 | 当前值 |
+| --- | --- |
+| 服务器 | `root@10.99.8.28` |
+| 项目目录 | `/home/wbt/DB` |
+| 前端入口 | `http://10.99.8.28/`，备用 `http://10.99.8.28:39280/` |
+| FastAPI 后端 | `0.0.0.0:39281`，screen `bgpkb_fastapi_wbt` |
+| 静态前端 | `0.0.0.0:39280`，screen `bgpkb_frontend_wbt` |
+| embedding | `10.99.8.28:8011`，`BAAI/bge-m3` |
+| reranker | `10.99.8.28:8012`，`BAAI/bge-reranker-v2-m3` |
+| LLM | DeepSeek API；当前不部署本地 LLM |
+
+远端 FastAPI 启动时设置 `BGP_RAG_REQUIRE_RERANKER=1`，前端问答默认要求真实 reranker。当前使用 `screen` 常驻运行，不迁移到 systemd。操作命令见 [远端服务器与前端部署操作手册](docs/operations/remote_server_operations_v1.md)。
 
 ## 文档入口
 
@@ -16,20 +35,23 @@ last_reviewed: "2026-06-19"
 
 | 入口 | 用途 |
 | --- | --- |
-| [docs/README.md](docs/README.md) | 规划、治理、项目上下文和目录导航的归并索引。 |
+| [docs/README.md](docs/README.md) | 治理规范、运维指南、阶段交付、后续路线和独立项目的归并索引。 |
+| [目录介绍.md](目录介绍.md) | 数据、元数据、代码、测试、报告、发布包和阶段 B 检索产物的目录导航。 |
+| [docs/operations/remote_server_operations_v1.md](docs/operations/remote_server_operations_v1.md) | 10.99.8.28 的 SSH、GPU、模型服务、FastAPI 后端、静态前端部署和 screen 管理操作手册。 |
 | [docs/rules/document_crud_rules_v1.md](docs/rules/document_crud_rules_v1.md) | Markdown 文档 CRUD 与自动校验规则。 |
 | [data/reports/README.md](data/reports/README.md) | 阶段报告、质量报告、发布报告和人工复核报告的归并索引。 |
 | [data/corpus/cleaned/README.md](data/corpus/cleaned/README.md) | 清洗后的标准、数据源、论文、案例语料归并索引。 |
-| [data/published/README.md](data/published/README.md) | 可交付发布包、SQLite、JSONL 和查询入口。 |
+| [data/published/README.md](data/published/README.md) | 可交付发布包、SQLite、JSONL、JSON-LD、RAG 索引和查询入口。 |
 
 ## 目标
 
 构建一条可复跑的数据准备链路：
 
 ```text
-data/sources/raw -> data/corpus/parsed -> data/corpus/cleaned -> data/corpus/chunks
+data/sources/raw -> data/corpus/parsed -> data/corpus/cleaned + data/corpus/cleaned_blocks_v2
+  -> data/corpus/chunks + data/corpus/chunks_v2 + data/derived/datasets/section_catalog.jsonl
   -> data/knowledge/entities + data/knowledge/relationships
-  -> data/derived/datasets + data/published + data/reports
+  -> data/derived/datasets + data/published + data/reports + data/generated/reports
 ```
 
 ## 范围
@@ -51,13 +73,14 @@ data/sources/raw -> data/corpus/parsed -> data/corpus/cleaned -> data/corpus/chu
 ```text
 data/
   sources/        原始资料和来源登记表
-  corpus/         parsed、cleaned、chunks 语料链路
+  corpus/         parsed、cleaned、cleaned_blocks_v2、chunks、chunks_v2 语料链路
   knowledge/      实体和关系核心知识资产
   derived/        规则化派生数据集
   review_inputs/  人工填写的复核决策输入与可再生成模板
-  published/      可交付知识库入口、索引、SQLite 数据库和发布 manifest
+  published/      可交付知识库入口、索引、SQLite、JSON-LD、RAG 索引和发布 manifest
   reports/        门禁、参考和行动入口报告
   generated/      可再生成报告、指南和快照
+deploy/           Docling 和 retrieval model service 部署脚本
 metadata/
   config/         分类体系、实体类型、来源类型、质量规则
   schemas/        JSON Schema
@@ -194,19 +217,17 @@ python3 -m bgpkb.pipeline.query_knowledge_base search-chunks '"route leak"' --li
 
 `src/bgpkb/service/` 提供一个只读 FastAPI 服务，直接读取已发布的 `data/published/bgp_knowledge_base.sqlite`。该服务只做查询和浏览，不生成、不修复、不覆盖流水线产物。
 
-安装依赖：
+本地开发安装依赖：
 
 ```bash
 cd bgp_knowledge_base
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-service.txt
+uv sync
 ```
 
-启动服务：
+本地开发启动服务：
 
 ```bash
-uvicorn service.app:app --reload --host 127.0.0.1 --port 8000
+uv run uvicorn bgpkb.service.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
 浏览入口：
@@ -229,6 +250,8 @@ curl -X POST http://127.0.0.1:8000/api/v1/rag/answer \
   -H "Content-Type: application/json" \
   -d '{"query":"route leak","limit":3}'
 ```
+
+远端交互式服务不使用本地开发端口 `8000`。远端前端入口为 `http://10.99.8.28/`，FastAPI 端口为 `39281`，静态前端端口为 `39280`，由 `screen` 常驻运行。
 
 阶段 4.2 可用真实 DeepSeek API 做冒烟验证。该脚本只从环境变量读取密钥，不把密钥写入报告或数据集：
 
@@ -268,7 +291,7 @@ python3 -m bgpkb.pipeline.build_rag_answer_failure_analysis
 - `data/generated/reports/rag/deepseek_rag_answer_eval_report.md`
 - `data/generated/reports/rag/rag_answer_failure_analysis_report.md`
 
-阶段 4.5 使用远程 BGE-M3、关键词和元数据做 RRF 混合检索。默认使用 SiliconFlow `BAAI/bge-m3`；当前设备不下载或运行本地模型。无密钥时可验证离线检索边界和评测框架：
+阶段 4.5/阶段 B 已升级为远端私有 BGE-M3 服务、关键词和元数据做 RRF 混合检索。当前默认 embedding provider 是 `local_http`，指向 `10.99.8.28:8011` 的 `BAAI/bge-m3`；reranker 指向 `10.99.8.28:8012` 的 `BAAI/bge-reranker-v2-m3`。SiliconFlow 和阿里云 EAS 仍保留为备用 provider；离线 CI 使用 fake/mock 路径，不依赖 GPU 或外部 API。
 
 ```bash
 python3 -m bgpkb.pipeline.build_bge_m3_index
@@ -276,13 +299,20 @@ python3 -m bgpkb.pipeline.query_hybrid_rag search "路由泄露" --top-k 5 --no-
 python3 -m bgpkb.pipeline.run_hybrid_retrieval_eval
 ```
 
-配置 `SILICONFLOW_API_KEY` 后，可运行真实远程向量索引构建。产物位于：
+真实 BGE-M3 向量索引已由私有服务构建完成；产物位于：
 
 - `data/published/bge_m3_embedding_manifest.json`
 - `data/published/bge_m3_vector_index.jsonl`
 - `data/derived/datasets/hybrid_retrieval_eval_results.jsonl`
 - `data/generated/reports/rag/bge_m3_embedding_report.md`
 - `data/generated/reports/rag/hybrid_retrieval_eval_report.md`
+
+当前索引口径：
+
+- 输入数量：58,792。
+- 构成：58,560 个 chunk、112 个 entity、112 个 glossary、8 个 evidence template。
+- 向量维度：1024。
+- 模型 revision：`BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181`。
 
 自动化测试：
 

@@ -4,10 +4,40 @@ document_type: "项目上下文"
 purpose: "记录 BGP 知识库的建设目标、范围、架构、数据模型和交付标准，作为项目整理与后续执行的总上下文。"
 scope: "项目级规划与约束说明"
 status: "现行参考"
-last_reviewed: "2026-06-19"
+last_reviewed: "2026-07-09"
 ---
-下面给你一版**严格限定在“BGP 知识库数据准备”范围内**的技术方案。
-不讲 RAG 检索、不讲 Agent 工作流、不结合你的具体项目系统，只做一件事：
+本文最早用于限定“BGP 知识库数据准备”的底座范围；截至 2026-07-09，项目已经从数据底座推进到只读 RAG 服务和轻量前端问答。本文仍作为项目总上下文保留，但当前运行事实以 `bgp_knowledge_base/README.md`、`bgp_knowledge_base/docs/README.md` 和远端操作手册为准。
+
+## 当前状态（2026-07-09）
+
+已交付并纳入现行项目状态的能力：
+
+- Docling 私有清洗 v2、阶段 A 语料质量画像和阶段 B 层级检索已完成验收。
+- 已形成 `cleaned_blocks_v2`、`chunks_v2`、`section_catalog.jsonl`、SQLite 发布包和 BGE-M3 向量索引。
+- 阶段 B 检索链路采用 BM25 + BGE-M3 dense 混合召回、RRF 融合、`BAAI/bge-reranker-v2-m3` rerank、query type 和 context pack 组包。
+- 只读 FastAPI RAG 后端已可回答问题，并返回引用、context pack 和降级状态。
+- 轻量对话前端已采用静态导出部署，用户侧只暴露证据问答、相关章节、引用和状态，不暴露后端检索细节。
+
+当前远端部署事实：
+
+```text
+服务器：root@10.99.8.28
+项目目录：/home/wbt/DB
+前端入口：http://10.99.8.28/ 或 http://10.99.8.28:39280/
+FastAPI：0.0.0.0:39281
+embedding：10.99.8.28:8011，BAAI/bge-m3
+reranker：10.99.8.28:8012，BAAI/bge-reranker-v2-m3
+常驻方式：screen，不迁移 systemd
+```
+
+FastAPI 远端启动时设置 `BGP_RAG_REQUIRE_RERANKER=1`，前端问答默认要求真实 reranker。LLM 仍使用 DeepSeek API；当前不部署本地 LLM。
+
+下面保留的数据准备方案说明的是知识库底座设计，不能再解读为“项目尚未进入 RAG 阶段”。
+
+---
+
+下面是一版**严格限定在“BGP 知识库数据准备”范围内**的技术方案。
+它关注一件事：
 
 > **把 BGP 相关知识先整理成一个结构清楚、可追溯、可维护、可扩展的领域知识库数据底座。**
 
@@ -44,8 +74,7 @@ BGP 关系表
   -> 质量评估
 ```
 
-注意，这里还没有进入 RAG 阶段。
-这一阶段只解决：
+注意：以下是早期数据准备阶段的目标边界；当前项目已经在此基础上扩展到只读 RAG 服务和前端问答。这一阶段只解决：
 
 ```text
 知识从哪里来？
