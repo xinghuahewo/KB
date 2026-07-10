@@ -1,6 +1,7 @@
 import type { ChatMessage, Citation, RetrievalSummary } from "@/lib/chat-types";
 
 export type StoredConversation = {
+  version: 2;
   id: string;
   messages: ChatMessage[];
   citations: Citation[];
@@ -23,10 +24,49 @@ export function loadStoredConversation(storage: ConversationStorage | undefined 
   }
 
   try {
-    return JSON.parse(raw) as StoredConversation;
+    return migrateConversation(JSON.parse(raw) as Partial<StoredConversation> & LegacyConversation);
   } catch {
     return null;
   }
+}
+
+type LegacyConversation = {
+  id?: string;
+  messages?: ChatMessage[];
+  citations?: Citation[];
+  retrieval?: RetrievalSummary | null;
+  updatedAt?: string;
+};
+
+function migrateConversation(value: Partial<StoredConversation> & LegacyConversation): StoredConversation | null {
+  if (!value.id || !Array.isArray(value.messages) || !value.updatedAt) {
+    return null;
+  }
+  if (value.version === 2) {
+    return value as StoredConversation;
+  }
+
+  const assistantIndex = value.messages.map((message) => message.role).lastIndexOf("assistant");
+  const messages = value.messages.map((message, index) =>
+    index === assistantIndex
+      ? {
+          ...message,
+          evidence: {
+            citations: value.citations || [],
+            retrieval: value.retrieval || null,
+            contextPack: null,
+          },
+        }
+      : message,
+  );
+  return {
+    version: 2,
+    id: value.id,
+    messages,
+    citations: [],
+    retrieval: null,
+    updatedAt: value.updatedAt,
+  };
 }
 
 export function saveStoredConversation(

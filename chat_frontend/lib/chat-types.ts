@@ -5,9 +5,12 @@ export type ChatMessage = {
   role: ChatRole;
   content: string;
   createdAt?: string;
+  answerStatus?: AssistantAnswerStatus;
+  evidence?: AnswerEvidence;
 };
 
-export type AnswerStatus = "answered" | "no_evidence" | "llm_unavailable" | "error";
+export type AnswerStatus = "answered" | "no_evidence" | "llm_unavailable" | "error" | "stopped";
+export type AssistantAnswerStatus = AnswerStatus | "pending";
 
 export type Citation = {
   source_id?: string;
@@ -64,6 +67,12 @@ export type RetrievalSummary = {
   contextUnitCount?: number;
   hasSectionContext?: boolean;
   evidenceLabel?: string;
+};
+
+export type AnswerEvidence = {
+  citations: Citation[];
+  retrieval: RetrievalSummary | null;
+  contextPack: ContextPack | null;
 };
 
 export type ChatApiResponse = {
