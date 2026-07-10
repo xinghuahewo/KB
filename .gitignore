@@ -12,3 +12,14 @@ bgp_knowledge_base/.env
 bgp_knowledge_base/data/published/bge_m3_vector_matrix.npy
 bgp_knowledge_base/data/published/bge_m3_vector_metadata.jsonl
 bgp_knowledge_base/data/published/bge_m3_vector_fast_manifest.json
+
+# BGP 知识库运行制品：由服务器制品库按版本提供，不进入普通 Git 历史。
+bgp_knowledge_base/data/*
+!bgp_knowledge_base/data/README.md
+bgp_knowledge_base/published/
+bgp_knowledge_base/parsed/
+bgp_knowledge_base/chunks/
+bgp_knowledge_base/cleaned/
+bgp_knowledge_base/markdown/
+bgp_knowledge_base/assets/
+bgp_knowledge_base/entities/
