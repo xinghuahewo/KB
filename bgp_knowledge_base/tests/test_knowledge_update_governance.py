@@ -5,6 +5,7 @@ import sys
 from bgpkb import paths
 
 import yaml
+import pytest
 
 
 DEPENDENCIES = paths.CONFIG_DIR / "pipeline_dependencies.yaml"
@@ -21,6 +22,11 @@ def _run_script(script_name, *args):
         runpy.run_path(str(script), run_name="__main__")
     finally:
         sys.argv = old_argv
+
+
+def _require_published_artifacts():
+    if not (paths.PUBLISHED_DIR / "manifest.json").exists():
+        pytest.skip("需要已展开的发布制品；请先从服务器制品库同步 data/。")
 
 
 def test_pipeline_dependency_config_declares_safe_incremental_boundaries():
@@ -92,6 +98,7 @@ def test_incremental_planner_cli_writes_machine_and_human_outputs():
 
 
 def test_lifecycle_report_generates_update_action_queue():
+    _require_published_artifacts()
     _run_script("build_lifecycle_report.py")
 
     rows = [
@@ -106,6 +113,7 @@ def test_lifecycle_report_generates_update_action_queue():
 
 
 def test_release_notes_and_readiness_gate_are_registered_and_generated():
+    _require_published_artifacts()
     policy = paths.report_policy()
     assert policy["release_notes"]["path"] == "data/published/release_notes.md"
     assert policy["release_readiness_report"]["path"] == "data/reports/gates/release_readiness_report.md"
