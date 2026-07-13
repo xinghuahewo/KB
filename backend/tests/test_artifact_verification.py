@@ -94,6 +94,28 @@ def test_verify_artifact_release_rejects_stale_fast_vector_manifest(tmp_path):
         verify_artifact_release(data_dir)
 
 
+def test_verify_artifact_release_compares_fast_index_with_chunk_records_only(tmp_path):
+    data_dir = _write_release(tmp_path)
+    published_dir = data_dir / "published"
+    vector_path = published_dir / "bge_m3_vector_index.jsonl"
+    vector_path.write_text(
+        '{"kind":"chunk","metadata":{"chunk_id":"chunk-1"},"vector":[0.1,0.2]}\n'
+        '{"kind":"entity","doc_id":"entity-1","vector":[0.2,0.1]}\n',
+        encoding="utf-8",
+    )
+    (published_dir / "bge_m3_embedding_manifest.json").write_text(
+        json.dumps({"status": "complete", "record_count": 2, "dimensions": 2}) + "\n",
+        encoding="utf-8",
+    )
+    build_fast_vector_index(vector_path)
+    _rewrite_checksums(data_dir)
+
+    result = verify_artifact_release(data_dir)
+
+    assert result["vector_record_count"] == 2
+    assert result["fast_vector_record_count"] == 1
+
+
 def test_verify_artifact_release_fails_closed_on_checksum_mismatch(tmp_path):
     data_dir = _write_release(tmp_path)
     (data_dir / "published" / "chunk_catalog.jsonl").write_text("tampered\n", encoding="utf-8")

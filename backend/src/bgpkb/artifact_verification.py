@@ -127,6 +127,7 @@ def verify_artifact_release(data_dir: Path) -> dict:
         raise ArtifactVerificationError("向量索引元数据未达到 complete 状态或缺少有效维度")
 
     vector_count = 0
+    fast_vector_count = 0
     vector_index_path = data_dir / "published" / "bge_m3_vector_index.jsonl"
     try:
         with vector_index_path.open(encoding="utf-8") as handle:
@@ -147,6 +148,8 @@ def verify_artifact_release(data_dir: Path) -> dict:
                 ):
                     raise ArtifactVerificationError(f"向量索引第 {line_number} 行向量维度或数值无效")
                 vector_count += 1
+                if record.get("kind", "chunk") == "chunk":
+                    fast_vector_count += 1
     except (OSError, json.JSONDecodeError) as exc:
         raise ArtifactVerificationError(f"向量索引不可读：{exc}") from exc
     expected_vector_count = vector_manifest.get("record_count", vector_manifest.get("input_count"))
@@ -164,9 +167,9 @@ def verify_artifact_release(data_dir: Path) -> dict:
         raise ArtifactVerificationError(
             f"快向量索引过期或 manifest 无效：{fast_artifacts.manifest_path.relative_to(data_dir)}"
         )
-    if fast_index.record_count != vector_count:
+    if fast_index.record_count != fast_vector_count:
         raise ArtifactVerificationError(
-            f"快向量索引记录数不一致：{fast_index.record_count} != {vector_count}"
+            f"快向量索引记录数不一致：{fast_index.record_count} != {fast_vector_count}"
         )
     if fast_index.dimension != dimension:
         raise ArtifactVerificationError(
