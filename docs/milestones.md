@@ -10,10 +10,11 @@
 - 完成前端“技术编辑式网络运维工作台”设计调整。
 - 将约 2 GB 运行数据迁出普通 Git，建立不可变 release 与校验清单。
 - 完成仓库一级目录、Python 模块化单体边界、权威文档与发布/回滚入口整理。
+- 完成 `repository-architecture-consolidation-20260713` 正式发布、远端部署、四档浏览器验收和联合回滚演练。
 
 ## 当前阶段
 
-`repository-architecture-consolidation` 已完成本地实现，待最终制品门禁、远端部署与一个稳定发布周期后的兼容路径清理。
+`repository-architecture-consolidation` 已完成首个正式发布与远端部署。当前进入稳定观察期，只保留一个发布周期后的旧路径兼容清理和 OpenSpec 归档。
 
 ## 后续
 
