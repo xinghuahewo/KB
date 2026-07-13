@@ -1,0 +1,1 @@
+../publishing/build_standard_mapping_candidates.py

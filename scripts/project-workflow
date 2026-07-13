@@ -2,8 +2,8 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$REPOSITORY_ROOT/bgp_knowledge_base"
-FRONTEND_DIR="$REPOSITORY_ROOT/chat_frontend"
+BACKEND_DIR="$REPOSITORY_ROOT/backend"
+FRONTEND_DIR="$REPOSITORY_ROOT/frontend"
 
 case "${1:-}" in
   bootstrap)
@@ -24,8 +24,17 @@ case "${1:-}" in
   verify-artifacts)
     (cd "$BACKEND_DIR" && uv run python -m bgpkb.artifact_verification)
     ;;
+  release)
+    bash "$REPOSITORY_ROOT/scripts/release" "${@:2}"
+    ;;
+  deploy)
+    bash "$REPOSITORY_ROOT/scripts/deploy" "${@:2}"
+    ;;
+  rollback)
+    bash "$REPOSITORY_ROOT/scripts/rollback" "${@:2}"
+    ;;
   *)
-    printf '用法：%s {bootstrap|test|test-artifacts|build|verify-artifacts}\n' "$0" >&2
+    printf '用法：%s {bootstrap|test|test-artifacts|build|verify-artifacts|release|deploy|rollback}\n' "$0" >&2
     exit 2
     ;;
 esac

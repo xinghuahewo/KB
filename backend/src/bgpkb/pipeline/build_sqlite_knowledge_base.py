@@ -1,0 +1,1 @@
+../publishing/build_sqlite_knowledge_base.py

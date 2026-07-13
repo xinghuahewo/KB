@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CODE_RELEASE="${1:-${BGPKB_CODE_RELEASE_DIR:-}}"
+ARTIFACT_RELEASE="${2:-${BGPKB_ARTIFACT_RELEASE_DIR:-}}"
+DEPLOY_ROOT="${BGPKB_DEPLOY_ROOT:-/home/wbt/DB}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -z "$CODE_RELEASE" || -z "$ARTIFACT_RELEASE" ]]; then
+  printf '用法：make deploy ARGS="<code-release-dir> <artifact-release-dir>"\n' >&2
+  exit 2
+fi
+CODE_RELEASE="$(cd "$CODE_RELEASE" && pwd)"
+ARTIFACT_RELEASE="$(cd "$ARTIFACT_RELEASE" && pwd)"
+export BGPKB_RELEASE_ID="$(basename "$ARTIFACT_RELEASE")"
+export BGPKB_DATA_DIR="$ARTIFACT_RELEASE/data"
+
+python3 "$SCRIPT_DIR/deployment.py" check-rollback "$DEPLOY_ROOT"
+(cd "$CODE_RELEASE/backend" && uv sync --frozen --all-groups)
+(cd "$CODE_RELEASE" && make verify-artifacts && make test-artifacts)
+python3 "$SCRIPT_DIR/deployment.py" activate "$DEPLOY_ROOT" "$CODE_RELEASE" "$ARTIFACT_RELEASE"
+
+if [[ "${BGPKB_RESTART_SERVICES:-1}" == "1" ]]; then
+  if ! bash "$SCRIPT_DIR/restart-active-services" "$DEPLOY_ROOT"; then
+    python3 "$SCRIPT_DIR/deployment.py" rollback "$DEPLOY_ROOT"
+    bash "$SCRIPT_DIR/restart-active-services" "$DEPLOY_ROOT"
+    exit 1
+  fi
+  if ! bash "$SCRIPT_DIR/check-service-health"; then
+    python3 "$SCRIPT_DIR/deployment.py" rollback "$DEPLOY_ROOT"
+    bash "$SCRIPT_DIR/restart-active-services" "$DEPLOY_ROOT"
+    bash "$SCRIPT_DIR/check-service-health"
+    exit 1
+  fi
+fi

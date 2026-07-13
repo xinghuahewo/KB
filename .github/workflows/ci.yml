@@ -41,6 +41,12 @@ jobs:
       - name: Check repository hygiene
         run: bash scripts/check-repository-hygiene
 
+      - name: Check documentation links
+        run: python3 scripts/check-doc-links
+
+      - name: Check workflow paths
+        run: python3 scripts/check-workflow-paths
+
       - name: Run no-artifact tests
         run: make test
 

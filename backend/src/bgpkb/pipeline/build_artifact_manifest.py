@@ -1,0 +1,1 @@
+../publishing/build_artifact_manifest.py

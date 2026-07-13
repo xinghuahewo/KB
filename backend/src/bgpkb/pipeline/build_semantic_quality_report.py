@@ -1,0 +1,1 @@
+../publishing/build_semantic_quality_report.py

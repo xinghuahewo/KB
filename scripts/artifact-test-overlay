@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$REPOSITORY_ROOT/bgp_knowledge_base"
+BACKEND_DIR="$REPOSITORY_ROOT/backend"
 SOURCE_DATA_DIR="${BGPKB_DATA_DIR:-}"
 SOURCE_RELEASE_ID="${BGPKB_RELEASE_ID:-}"
 

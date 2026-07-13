@@ -1,0 +1,1 @@
+../indexing/build_fast_vector_index.py

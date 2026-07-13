@@ -1,4 +1,4 @@
-.PHONY: bootstrap test test-artifacts build verify-artifacts
+.PHONY: bootstrap test test-artifacts build verify-artifacts release deploy rollback
 
 bootstrap:
 	@bash scripts/project-workflow bootstrap
@@ -14,3 +14,12 @@ build:
 
 verify-artifacts:
 	@bash scripts/project-workflow verify-artifacts
+
+release:
+	@bash scripts/project-workflow release $(ARGS)
+
+deploy:
+	@bash scripts/project-workflow deploy $(ARGS)
+
+rollback:
+	@bash scripts/project-workflow rollback $(ARGS)
