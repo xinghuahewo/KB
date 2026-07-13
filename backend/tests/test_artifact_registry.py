@@ -12,13 +12,13 @@ def test_repository_registry_records_current_external_release():
     registry = load_release_registry(REPOSITORY_ROOT / "artifacts" / "releases.yaml")
 
     assert registry["schema_version"] == 1
-    assert registry["current_release_id"] == "2026-07-10-93a4c97"
-    assert registry["releases"][0] == {
-        "release_id": "2026-07-10-93a4c97",
-        "source_commit": "93a4c97",
-        "file_count": 1293,
-        "sha256sums_sha256": "97400ef06e8ef20c3d363918b79d2540d4e513e6fe5be4ea9e84e9c870f9a04b",
-        "data_path": "/srv/bgpkb/artifacts/releases/2026-07-10-93a4c97/data",
+    assert registry["current_release_id"] == "2026-07-13-a776240"
+    assert registry["releases"][-1] == {
+        "release_id": "2026-07-13-a776240",
+        "source_commit": "a7762401cc48864cd3da63b887c3251501e14f1c",
+        "file_count": 1296,
+        "sha256sums_sha256": "4617da2b38ef3e63e77da55b7a0d641db87f2339c8f1426f84e9d3f3690bec90",
+        "data_path": "/srv/bgpkb/artifacts/releases/2026-07-13-a776240/data",
         "status": "current",
     }
 
