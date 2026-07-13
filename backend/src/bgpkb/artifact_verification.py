@@ -12,6 +12,11 @@ import sys
 
 from bgpkb import paths
 from bgpkb.artifact_registry import ArtifactRegistryError, load_release_registry
+from bgpkb.infrastructure.fast_vector_index import (
+    FastVectorIndex,
+    FastVectorIndexArtifacts,
+    FastVectorIndexError,
+)
 
 
 class ArtifactVerificationError(RuntimeError):
@@ -24,6 +29,9 @@ REQUIRED_FILES = (
     "published/source_catalog.jsonl",
     "published/entity_catalog.jsonl",
     "published/bge_m3_vector_index.jsonl",
+    "published/bge_m3_vector_matrix.npy",
+    "published/bge_m3_vector_metadata.jsonl",
+    "published/bge_m3_vector_fast_manifest.json",
     "published/bge_m3_embedding_manifest.json",
     "derived/datasets/entity_source_evidence.jsonl",
     "derived/datasets/section_catalog.jsonl",
@@ -147,6 +155,24 @@ def verify_artifact_release(data_dir: Path) -> dict:
             f"向量索引记录数与元数据不一致：{vector_count} != {expected_vector_count}"
         )
 
+    fast_artifacts = FastVectorIndexArtifacts.from_index_path(vector_index_path)
+    try:
+        fast_index = FastVectorIndex.load(vector_index_path)
+    except (FastVectorIndexError, OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ArtifactVerificationError(f"快向量索引不可读：{exc}") from exc
+    if fast_index is None:
+        raise ArtifactVerificationError(
+            f"快向量索引过期或 manifest 无效：{fast_artifacts.manifest_path.relative_to(data_dir)}"
+        )
+    if fast_index.record_count != vector_count:
+        raise ArtifactVerificationError(
+            f"快向量索引记录数不一致：{fast_index.record_count} != {vector_count}"
+        )
+    if fast_index.dimension != dimension:
+        raise ArtifactVerificationError(
+            f"快向量索引维度不一致：{fast_index.dimension} != {dimension}"
+        )
+
     return {
         "release_id": release_root.name,
         "data_dir": str(data_dir),
@@ -156,6 +182,8 @@ def verify_artifact_release(data_dir: Path) -> dict:
         "vector_index_status": vector_manifest["status"],
         "vector_dimension": dimension,
         "vector_record_count": vector_count,
+        "vector_index_mode": "fast_numpy",
+        "fast_vector_record_count": fast_index.record_count,
     }
 
 

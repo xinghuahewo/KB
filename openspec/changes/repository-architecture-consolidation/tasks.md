@@ -72,3 +72,9 @@
 - [x] 6.10 记录正式发布四元组并创建整理完成 tag，更新里程碑和 CHANGELOG
 - [ ] 6.11 稳定一个约定发布周期后移除旧路径兼容映射，再次执行完整测试、构建、制品校验和远端健康检查
 - [ ] 6.12 归档 `repository-architecture-consolidation` OpenSpec change，确认活动列表只保留未完成变更
+
+## 7. 快向量索引制品回归修复
+
+- [x] 7.1 以失败测试复现候选制品缺少或携带过期快索引时门禁仍通过的问题
+- [x] 7.2 强制校验 NumPy matrix、metadata、fast manifest 与源 JSONL，并让 JSONL 兼容回退显式标记性能降级
+- [ ] 7.3 创建新的不可变快索引制品，通过完整门禁后部署并验证 `fast_numpy`、检索耗时和回滚点

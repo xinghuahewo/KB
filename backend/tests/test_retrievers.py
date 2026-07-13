@@ -143,6 +143,8 @@ def test_dense_retriever_computes_cosine_and_keeps_provider_metadata(tmp_path):
     assert result.metadata["provider"] == "local_http"
     assert result.metadata["revision"] == "rev-1"
     assert result.metadata["index_mode"] == "jsonl_scan"
+    assert result.metadata["degraded"] is True
+    assert result.metadata["degraded_reason"] == "fast_vector_index_unavailable"
 
 
 def test_dense_invalid_dimension_and_provider_failure_are_structured(tmp_path):

@@ -64,3 +64,18 @@
 #### Scenario: 新制品导致线上异常
 - **WHEN** 运维者选择上一已验证 release id 执行回滚
 - **THEN** 数据指针恢复、服务重启并通过健康检查，无需重新运行离线流水线
+
+### Requirement: 生产向量制品必须包含可验证的快速索引
+线上 dense 检索制品 MUST 同时包含源 JSONL、NumPy mmap 矩阵、metadata 和 fast manifest；部署门禁 MUST 校验快索引与源 JSONL 的大小、修改时间、记录数和维度一致。缺失或过期时部署 MUST 失败关闭，运行期兼容回退到 JSONL 时 MUST 显式报告性能降级。
+
+#### Scenario: 候选制品缺少快速索引
+- **WHEN** release 只有 `bge_m3_vector_index.jsonl`，缺少 matrix、metadata 或 fast manifest
+- **THEN** `verify-artifacts` 拒绝该 release，current 指针保持不变
+
+#### Scenario: 快速索引相对源 JSONL 已过期
+- **WHEN** fast manifest 记录的源大小或修改时间与候选 release 中的 JSONL 不一致
+- **THEN** `verify-artifacts` 报告快索引过期并拒绝部署
+
+#### Scenario: 运行期发生兼容回退
+- **WHEN** 非生产测试或旧环境缺少可加载的快速索引并扫描 JSONL
+- **THEN** SSE 指标报告 `vector_index_mode=jsonl_scan`、`degraded=true` 和明确降级原因

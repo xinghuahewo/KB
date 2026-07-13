@@ -9,6 +9,7 @@ import pytest
 
 from bgpkb import artifact_verification
 from bgpkb.artifact_verification import ArtifactVerificationError, verify_artifact_release
+from bgpkb.infrastructure.fast_vector_index import build_fast_vector_index
 
 
 def _write_release(tmp_path: Path) -> Path:
@@ -35,6 +36,7 @@ def _write_release(tmp_path: Path) -> Path:
     )
     (datasets_dir / "entity_source_evidence.jsonl").write_text("", encoding="utf-8")
     (datasets_dir / "section_catalog.jsonl").write_text("", encoding="utf-8")
+    build_fast_vector_index(published_dir / "bge_m3_vector_index.jsonl")
 
     checksum_lines = []
     for path in sorted(data_dir.rglob("*")):
@@ -61,9 +63,35 @@ def test_verify_artifact_release_checks_hashes_sqlite_and_index_metadata(tmp_pat
     result = verify_artifact_release(data_dir)
 
     assert result["release_id"] == "2026-07-10-93a4c97"
-    assert result["file_count"] == 8
+    assert result["file_count"] == 11
     assert result["sqlite_integrity"] == "ok"
     assert result["vector_index_status"] == "complete"
+    assert result["vector_index_mode"] == "fast_numpy"
+
+
+def test_verify_artifact_release_requires_fast_vector_artifacts(tmp_path):
+    data_dir = _write_release(tmp_path)
+    artifacts = build_fast_vector_index(data_dir / "published" / "bge_m3_vector_index.jsonl")
+    artifacts.matrix_path.unlink()
+    artifacts.metadata_path.unlink()
+    artifacts.manifest_path.unlink()
+    _rewrite_checksums(data_dir)
+
+    with pytest.raises(ArtifactVerificationError, match="bge_m3_vector_matrix"):
+        verify_artifact_release(data_dir)
+
+
+def test_verify_artifact_release_rejects_stale_fast_vector_manifest(tmp_path):
+    data_dir = _write_release(tmp_path)
+    vector_path = data_dir / "published" / "bge_m3_vector_index.jsonl"
+    artifacts = build_fast_vector_index(vector_path)
+    manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
+    manifest["source_size_bytes"] += 1
+    artifacts.manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    _rewrite_checksums(data_dir)
+
+    with pytest.raises(ArtifactVerificationError, match="过期"):
+        verify_artifact_release(data_dir)
 
 
 def test_verify_artifact_release_fails_closed_on_checksum_mismatch(tmp_path):

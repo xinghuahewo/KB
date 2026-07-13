@@ -225,6 +225,29 @@ def test_v2_search_uses_fixed_channel_limits_and_rrf_contract():
     assert payload["degraded"] is False
 
 
+def test_search_reports_jsonl_vector_fallback_as_degraded():
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[]))
+    vector = FakeRetriever(RetrievalChannelResult(
+        "vector",
+        items=[_channel_item("vector-only", 1, 0.8)],
+        metadata={
+            "index_mode": "jsonl_scan",
+            "degraded": True,
+            "degraded_reason": "fast_vector_index_unavailable",
+        },
+    ))
+
+    payload = hybrid_retrieval.search(
+        "route leak",
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
+    )
+
+    assert payload["degraded"] is True
+
+
 def test_rrf_is_capped_at_twenty_and_ties_are_stable():
     lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[
         _channel_item(f"chunk-{index:02}", 1, 1.0) for index in range(25, -1, -1)

@@ -2,7 +2,8 @@
 
 ## 未发布
 
-暂无。
+- 修复重构发布遗漏 NumPy mmap 快向量索引的问题：生产制品门禁现在强制校验 matrix、metadata、fast manifest 与源 JSONL，新旧不一致时拒绝部署。
+- JSONL 兼容扫描现在通过 SSE 明确报告 `degraded=true` 和 `fast_vector_index_unavailable`，避免性能回退被误判为健康。
 
 ## 2026-07-13
 
