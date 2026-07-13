@@ -327,18 +327,18 @@ def main():
     records = build_id_map(config)
     counts = Counter(record["resource_type"] for record in records)
 
-    context_path = ROOT / config["generated_policy"]["context_path"]
-    id_map_path = ROOT / config["generated_policy"]["id_map_path"]
-    report_path = ROOT / config["generated_policy"]["report_path"]
+    context_path = paths.resolve_logical_path(config["generated_policy"]["context_path"])
+    id_map_path = paths.resolve_logical_path(config["generated_policy"]["id_map_path"])
+    report_path = paths.resolve_logical_path(config["generated_policy"]["report_path"])
 
     write_json(context_path, context)
     write_jsonl(id_map_path, records)
     report_path.write_text(build_report(config, context, records), encoding="utf-8")
     append_readme_section(config, counts)
 
-    print(f"Wrote {context_path.relative_to(ROOT)}")
-    print(f"Wrote {id_map_path.relative_to(ROOT)}")
-    print(f"Wrote {report_path.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(context_path)}")
+    print(f"Wrote {paths.rel(id_map_path)}")
+    print(f"Wrote {paths.rel(report_path)}")
 
 
 if __name__ == "__main__":

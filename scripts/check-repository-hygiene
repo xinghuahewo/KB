@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPOSITORY_ROOT"
+
+tracked_artifacts="$(git ls-files -- '*.sqlite' '*.db' '*.parquet' '*.faiss' '*.index')"
+if [[ -n "$tracked_artifacts" ]]; then
+  printf '普通 Git 历史禁止跟踪运行制品：\n%s\n' "$tracked_artifacts" >&2
+  exit 1
+fi
+
+tracked_ignored="$(git ls-files -ci --exclude-standard)"
+if [[ -n "$tracked_ignored" ]]; then
+  printf '被 .gitignore 排除的运行数据不得强制加入 Git：\n%s\n' "$tracked_ignored" >&2
+  exit 1
+fi
+
+large_blobs="$(
+  git rev-list --objects --all |
+    git cat-file --batch-check='%(objecttype) %(objectname) %(objectsize) %(rest)' |
+    awk '$1 == "blob" && $3 > 1048576 { print $2 " " $3 " " $4 }'
+)"
+if [[ -n "$large_blobs" ]]; then
+  printf '普通 Git 历史包含超过 1 MiB 的 blob：\n%s\n' "$large_blobs" >&2
+  exit 1
+fi

@@ -69,6 +69,17 @@ class FakeStore:
         return self.get_section_direct_chunks(section_id)
 
 
+class FakeRetrievalData:
+    def trusted_chunk_ids(self):
+        return set()
+
+    def eligible_doc_ids(self):
+        return set()
+
+    def excluded_by_policy(self):
+        return []
+
+
 def _item(chunk_id, rank, score):
     return {
         "chunk_id": chunk_id,
@@ -92,6 +103,7 @@ def test_stage_b_fake_provider_context_pack_chain_is_not_patched_apart():
         reranker=FakeReranker(),
         query_type_client=FakeQueryTypeClient(),
         store=FakeStore(),
+        retrieval_data=FakeRetrievalData(),
     )
 
     assert pack["candidate_chunk_count"] == 2

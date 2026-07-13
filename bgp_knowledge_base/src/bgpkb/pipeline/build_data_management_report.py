@@ -29,7 +29,7 @@ def load_config():
 
 
 def path_exists(pattern):
-    target = ROOT / pattern
+    target = paths.resolve_logical_path(pattern)
     if any(char in pattern for char in "*?[]"):
         return bool(glob.glob(str(target)))
     return target.exists()
@@ -169,10 +169,10 @@ def build_report(config):
 
 def main():
     config = load_config()
-    report_path = ROOT / config["generated_policy"]["report_path"]
+    report_path = paths.resolve_logical_path(config["generated_policy"]["report_path"])
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(build_report(config), encoding="utf-8")
-    print(f"Wrote {report_path.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(report_path)}")
 
 
 if __name__ == "__main__":

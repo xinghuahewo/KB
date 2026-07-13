@@ -487,12 +487,12 @@ CLEANED_MANUAL_NOTES = {
     "data/corpus/cleaned/notes/context_summary.md": "context_2026",
 }
 
-ARTIFACT_SCAN_DIRS = [
-    "data",
-    "metadata",
-    "src",
-    "tests",
-    "docs",
+ARTIFACT_SCAN_ROOTS = [
+    paths.DATA_DIR,
+    paths.METADATA_DIR,
+    paths.PROJECT_ROOT / "src",
+    paths.TESTS_DIR,
+    paths.DOCS_DIR,
 ]
 
 ARTIFACT_EXCLUDED_PATHS = {
@@ -530,7 +530,7 @@ def load_jsonl(path):
         try:
             records.append(json.loads(line))
         except json.JSONDecodeError as exc:
-            errors.append(f"{path.relative_to(ROOT)}:{lineno}: invalid JSON: {exc}")
+            errors.append(f"{paths.rel(path)}:{lineno}: invalid JSON: {exc}")
     return records, errors
 
 
@@ -538,7 +538,7 @@ def load_json_file(path):
     try:
         return json.loads(path.read_text(encoding="utf-8")), []
     except json.JSONDecodeError as exc:
-        return None, [f"{path.relative_to(ROOT)}: invalid JSON: {exc}"]
+        return None, [f"{paths.rel(path)}: invalid JSON: {exc}"]
 
 
 def load_sources():
@@ -839,16 +839,22 @@ def source_path_from_ref(source_ref):
     path_part = source_ref.split("#", 1)[0].split(":", 1)[0]
     if not path_part or path_part.startswith(("http://", "https://")):
         return None
-    return (ROOT / path_part).resolve()
+    if path_part.startswith("../"):
+        legacy_path = (ROOT / path_part).resolve()
+        try:
+            legacy_path.relative_to(ROOT.parent.resolve())
+        except ValueError:
+            return None
+        return legacy_path
+    return paths.resolve_logical_path(path_part)
 
 
 def relative_path(path):
-    return path.relative_to(ROOT).as_posix()
+    return paths.rel(path)
 
 
 def iter_artifact_paths():
-    for dirname in ARTIFACT_SCAN_DIRS:
-        base = ROOT / dirname
+    for base in ARTIFACT_SCAN_ROOTS:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
@@ -921,7 +927,7 @@ def check_report_policy():
 
     for report_id, meta in sorted(policy.items()):
         rel = meta["path"]
-        path = ROOT / rel
+        path = paths.resolve_logical_path(rel)
         if path.exists():
             continue
         if not path.suffix:
@@ -1136,12 +1142,12 @@ def main():
         if not source_path:
             inventory_missing_paths.append(source_id)
             continue
-        resolved = (ROOT / source_path).resolve()
+        resolved = paths.resolve_logical_path(source_path)
         if not resolved.exists():
             inventory_missing_raw_files.append(f"{source_id} -> {source_path}")
             continue
         try:
-            rel_path = resolved.relative_to(ROOT)
+            rel_path = Path(paths.rel(resolved))
         except ValueError:
             continue
         if rel_path.as_posix().startswith("data/sources/raw/"):
@@ -1154,7 +1160,7 @@ def main():
                     inventory_parseable_missing_cleaned.append(f"{source_id} -> {rel_path.as_posix()}")
 
     raw_files = {
-        path.relative_to(ROOT).as_posix()
+        paths.rel(path)
         for path in (paths.RAW_DIR).glob("*/*")
         if path.is_file()
     }
@@ -1192,7 +1198,7 @@ def main():
     parsed_section_empty_content = []
     parsed_doc_ids = []
     for path, record in parsed_documents:
-        label = path.relative_to(ROOT).as_posix()
+        label = paths.rel(path)
         schema_errors.extend(validate_schema(record, schemas["parsed_document"], label))
         for field in REQUIRED_PARSED_DOCUMENT_FIELDS:
             if missing_or_empty(record, field):
@@ -1206,7 +1212,7 @@ def main():
             if path.stem != doc_id:
                 parsed_document_path_mismatches.append(f"{label}: filename stem != doc_id {doc_id}")
         if source_path:
-            resolved = (ROOT / source_path).resolve()
+            resolved = paths.resolve_logical_path(source_path)
             if not resolved.exists():
                 parsed_document_missing_source_paths.append(f"{label} -> {source_path}")
             elif source_path not in inventory_paths:
@@ -1245,7 +1251,7 @@ def main():
     cleaned_document_replacement_chars = []
     cleaned_doc_ids = []
     for path in cleaned_documents:
-        rel = path.relative_to(ROOT).as_posix()
+        rel = paths.rel(path)
         text = path.read_text(encoding="utf-8", errors="replace")
         lines = text.splitlines()
         first_line = first_content_line(lines)
@@ -1273,7 +1279,7 @@ def main():
             cleaned_document_unknown_doc_ids.append(f"{rel} -> {doc_id}")
         parsed_path = PARSED_DIR / path.parent.name / f"{doc_id}.json"
         if not parsed_path.exists():
-            cleaned_document_missing_parsed.append(f"{rel} -> {parsed_path.relative_to(ROOT).as_posix()}")
+            cleaned_document_missing_parsed.append(f"{rel} -> {paths.rel(parsed_path)}")
             continue
         parsed_title = parsed_document_titles.get(doc_id, "")
         if parsed_title and first_line != f"# {parsed_title}":
@@ -1537,7 +1543,7 @@ def main():
                 entity_source_evidence_unexpected_pairs.append(f"{record_label} -> {entity_id}:{source_id}")
         for path_field in ("source_path", "parsed_path", "cleaned_path"):
             path_value = record.get(path_field)
-            if path_value and not (ROOT / path_value).exists():
+            if path_value and not paths.resolve_logical_path(path_value).exists():
                 entity_source_evidence_missing_paths.append(f"{record_label} {path_field} -> {path_value}")
         chunk_sample_ids = record.get("chunk_sample_ids", [])
         if isinstance(chunk_sample_ids, list):
@@ -1639,7 +1645,7 @@ def main():
             values = record.get(path_field, [])
             if isinstance(values, list):
                 for path_value in values:
-                    if path_value and not (ROOT / path_value).exists():
+                    if path_value and not paths.resolve_logical_path(path_value).exists():
                         entity_review_packet_missing_paths.append(f"{record_label} {path_field} -> {path_value}")
         chunk_sample_ids = record.get("chunk_sample_ids", [])
         if isinstance(chunk_sample_ids, list):
@@ -1842,7 +1848,7 @@ def main():
             values = record.get(path_field, [])
             if isinstance(values, list):
                 for path_value in values:
-                    if path_value and not (ROOT / path_value).exists():
+                    if path_value and not paths.resolve_logical_path(path_value).exists():
                         human_review_workbook_missing_paths.append(f"{record_label} {path_field} -> {path_value}")
         chunk_sample_ids = record.get("chunk_sample_ids", [])
         if isinstance(chunk_sample_ids, list):
@@ -2591,8 +2597,12 @@ def main():
         for field in ("task_order", "task_type", "title", "primary_input", "secondary_input", "write_command"):
             if record.get(field) != task.get(field):
                 human_review_handoff_context_mismatches.append(f"{record_label} {field}")
-        expected_primary_exists = bool(record.get("primary_input") and (ROOT / record["primary_input"]).exists())
-        expected_secondary_exists = bool(record.get("secondary_input") and (ROOT / record["secondary_input"]).exists())
+        expected_primary_exists = bool(
+            record.get("primary_input") and paths.resolve_logical_path(record["primary_input"]).exists()
+        )
+        expected_secondary_exists = bool(
+            record.get("secondary_input") and paths.resolve_logical_path(record["secondary_input"]).exists()
+        )
         if record.get("primary_input_exists") is not expected_primary_exists:
             human_review_handoff_path_mismatches.append(f"{record_label} primary_input_exists")
         if record.get("secondary_input_exists") is not expected_secondary_exists:
@@ -2641,23 +2651,23 @@ def main():
     existing_template_paths = sorted(template_dir.glob("review_session_*_decisions_template.csv")) if template_dir.exists() else []
     for path in existing_template_paths:
         if path.name not in expected_template_names:
-            human_review_session_decision_template_extra_files.append(path.relative_to(ROOT).as_posix())
+            human_review_session_decision_template_extra_files.append(paths.rel(path))
     for session_id, path in sorted(expected_template_paths.items()):
         expected_items = sorted(
             queue_by_session[session_id],
             key=lambda item: (item.get("within_session_order", 999999), item.get("entity_id", "")),
         )
         if not path.exists():
-            human_review_session_decision_template_missing_files.append(path.relative_to(ROOT).as_posix())
+            human_review_session_decision_template_missing_files.append(paths.rel(path))
             continue
         try:
             with path.open(newline="", encoding="utf-8") as handle:
                 reader = csv.DictReader(handle)
                 if reader.fieldnames != REQUIRED_HUMAN_REVIEW_SESSION_DECISION_TEMPLATE_FIELDS:
-                    human_review_session_decision_template_header_mismatches.append(path.relative_to(ROOT).as_posix())
+                    human_review_session_decision_template_header_mismatches.append(paths.rel(path))
                 rows = list(reader)
         except csv.Error as exc:
-            human_review_session_decision_template_read_errors.append(f"{path.relative_to(ROOT).as_posix()}: {exc}")
+            human_review_session_decision_template_read_errors.append(f"{paths.rel(path)}: {exc}")
             continue
         if len(rows) != len(expected_items):
             human_review_session_decision_template_row_mismatches.append(f"{session_id} row_count")
@@ -2766,7 +2776,7 @@ def main():
         if artifact_path not in expected_artifact_paths:
             artifact_unknown_files.append(artifact_path)
             continue
-        resolved = (ROOT / artifact_path).resolve()
+        resolved = paths.resolve_logical_path(artifact_path)
         if not resolved.exists():
             artifact_missing_files.append(artifact_path)
             continue
@@ -3356,7 +3366,7 @@ def main():
             lines.append("- 无")
 
     REPORT_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Wrote {REPORT_FILE.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(REPORT_FILE)}")
     issue_count = sum(len(items) for _, items in sections)
     if issue_count:
         raise SystemExit(1)

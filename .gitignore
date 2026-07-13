@@ -6,6 +6,21 @@ __pycache__/
 .venv/
 venv/
 .worktrees/
+
+# 大型运行制品和数据库不得进入普通 Git 历史。
+*.sqlite
+*.sqlite-*
+*.db
+*.parquet
+*.faiss
+*.index
+*.npy
+*.npz
+
+# 仓库只跟踪制品注册表，不跟踪 release 本体或测试工作区。
+artifacts/*
+!artifacts/releases.yaml
+artifacts-test/
 bgp_knowledge_base/.env
 bgp_visual_output/
 bgp_knowledge_base/.env

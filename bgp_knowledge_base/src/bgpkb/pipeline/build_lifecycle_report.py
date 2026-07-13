@@ -36,7 +36,7 @@ def load_config():
 def iter_entities():
     for path in sorted(ENTITY_DIR.glob("*.jsonl")):
         for record in load_jsonl(path):
-            yield record, path.relative_to(ROOT).as_posix()
+            yield record, paths.rel(path)
 
 
 def index_by_entity(rows):
@@ -398,22 +398,22 @@ def render_report(config, rows, checks):
 
 def main():
     config = load_config()
-    inventory_path = ROOT / config["generated_policy"]["inventory_path"]
-    report_path = ROOT / config["generated_policy"]["report_path"]
+    inventory_path = paths.resolve_logical_path(config["generated_policy"]["inventory_path"])
+    report_path = paths.resolve_logical_path(config["generated_policy"]["report_path"])
 
     rows = build_inventory(config)
     checks = check_quality_rules(rows, config)
     actions = build_action_queue(rows, checks)
 
     write_inventory(rows, inventory_path)
-    action_queue_path = ROOT / config["generated_policy"]["action_queue_path"]
+    action_queue_path = paths.resolve_logical_path(config["generated_policy"]["action_queue_path"])
     write_inventory(actions, action_queue_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_report(config, rows, checks), encoding="utf-8")
 
-    print(f"Wrote {inventory_path.relative_to(ROOT)}")
-    print(f"Wrote {action_queue_path.relative_to(ROOT)}")
-    print(f"Wrote {report_path.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(inventory_path)}")
+    print(f"Wrote {paths.rel(action_queue_path)}")
+    print(f"Wrote {paths.rel(report_path)}")
 
 
 if __name__ == "__main__":

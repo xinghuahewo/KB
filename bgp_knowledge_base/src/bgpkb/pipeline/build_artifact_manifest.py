@@ -14,12 +14,12 @@ REPORT = paths.report_path("artifact_manifest_report")
 JSONL_OUTPUT = DATASET_DIR / "artifact_manifest.jsonl"
 CSV_OUTPUT = DATASET_DIR / "artifact_manifest.csv"
 
-SCAN_DIRS = [
-    "data",
-    "metadata",
-    "src",
-    "tests",
-    "docs",
+SCAN_ROOTS = [
+    paths.DATA_DIR,
+    paths.METADATA_DIR,
+    paths.PROJECT_ROOT / "src",
+    paths.TESTS_DIR,
+    paths.DOCS_DIR,
 ]
 
 EXCLUDED_PATHS = {
@@ -32,12 +32,11 @@ EXCLUDED_PATHS = {
 
 
 def relative_path(path):
-    return path.relative_to(ROOT).as_posix()
+    return paths.rel(path)
 
 
 def iter_artifact_paths():
-    for dirname in SCAN_DIRS:
-        base = ROOT / dirname
+    for base in SCAN_ROOTS:
         if not base.exists():
             continue
         for path in sorted(base.rglob("*")):
@@ -437,9 +436,9 @@ def main():
     write_jsonl(records)
     write_csv(records)
     write_report(records)
-    print(f"Wrote {JSONL_OUTPUT.relative_to(ROOT)}")
-    print(f"Wrote {CSV_OUTPUT.relative_to(ROOT)}")
-    print(f"Wrote {REPORT.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(JSONL_OUTPUT)}")
+    print(f"Wrote {paths.rel(CSV_OUTPUT)}")
+    print(f"Wrote {paths.rel(REPORT)}")
 
 
 if __name__ == "__main__":

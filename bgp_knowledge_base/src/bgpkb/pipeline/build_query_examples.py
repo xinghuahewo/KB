@@ -248,8 +248,9 @@ def main():
         if result["stderr"]:
             lines.extend(["标准错误：", "", "```text", result["stderr"], "```", ""])
 
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"Wrote {REPORT.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(REPORT)}")
     if failures:
         raise SystemExit(1)
 

@@ -48,7 +48,7 @@ def legacy_fallback(source, doc_id):
         )
         return {
             "doc_id": doc_id,
-            "source_path": str(source.relative_to(paths.PROJECT_ROOT)),
+            "source_path": paths.rel(source),
             "source_format": "markdown",
             "title": title,
             "sections": [{"section_id": "full", "heading": title, "content": text}],

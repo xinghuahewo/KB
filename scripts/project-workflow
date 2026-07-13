@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="$REPOSITORY_ROOT/bgp_knowledge_base"
+FRONTEND_DIR="$REPOSITORY_ROOT/chat_frontend"
+
+case "${1:-}" in
+  bootstrap)
+    (cd "$BACKEND_DIR" && uv sync --frozen --all-groups)
+    (cd "$FRONTEND_DIR" && corepack yarn install --immutable)
+    ;;
+  test)
+    (cd "$BACKEND_DIR" && uv run pytest -q -m 'not artifact and not legacy_documentation')
+    (cd "$FRONTEND_DIR" && corepack yarn test)
+    ;;
+  test-artifacts)
+    bash "$REPOSITORY_ROOT/scripts/artifact-test-overlay"
+    ;;
+  build)
+    (cd "$BACKEND_DIR" && uv build)
+    (cd "$FRONTEND_DIR" && corepack yarn build)
+    ;;
+  verify-artifacts)
+    (cd "$BACKEND_DIR" && uv run python -m bgpkb.artifact_verification)
+    ;;
+  *)
+    printf '用法：%s {bootstrap|test|test-artifacts|build|verify-artifacts}\n' "$0" >&2
+    exit 2
+    ;;
+esac

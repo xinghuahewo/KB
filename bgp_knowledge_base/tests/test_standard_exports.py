@@ -490,13 +490,13 @@ def test_cli_generates_deterministic_standard_exports_without_changing_primary_i
     root = paths.PROJECT_ROOT
     config = yaml.safe_load((root / "metadata/config/standard_exports.yaml").read_text(encoding="utf-8"))
     inputs = [
-        root / "data/published/entity_catalog.jsonl",
-        root / "data/published/source_catalog.jsonl",
-        root / "data/published/semantic_id_map.jsonl",
-        root / "data/derived/datasets/entity_source_evidence.jsonl",
-        root / "data/knowledge/relationships/relationships.jsonl",
+        paths.resolve_logical_path("data/published/entity_catalog.jsonl"),
+        paths.resolve_logical_path("data/published/source_catalog.jsonl"),
+        paths.resolve_logical_path("data/published/semantic_id_map.jsonl"),
+        paths.resolve_logical_path("data/derived/datasets/entity_source_evidence.jsonl"),
+        paths.resolve_logical_path("data/knowledge/relationships/relationships.jsonl"),
     ]
-    outputs = [root / config["outputs"][key] for key in (
+    outputs = [paths.resolve_logical_path(config["outputs"][key]) for key in (
         "entity_catalog", "source_catalog", "provenance_map", "turtle_sample", "report"
     )]
     input_hashes = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}

@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from bgpkb import paths  # noqa: E402
 from bgpkb.service import hybrid_retrieval  # noqa: E402
 from bgpkb.service import retrieval_framework  # noqa: E402
 from bgpkb.service.retrievers import RetrievalChannelResult  # noqa: E402
@@ -140,7 +141,7 @@ def test_processed_source_is_retrieval_eligible_without_changing_review_status()
         "processed_source_with_traceability",
         "approved_record",
     }
-    manifest = json.loads((ROOT / "data/published/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((paths.PUBLISHED_DIR / "manifest.json").read_text(encoding="utf-8"))
     expected_status = "approved" if manifest["corpus_version"] == "v2" else "pending"
     assert routeviews["review_status"] == expected_status
 
@@ -203,7 +204,11 @@ def test_v2_search_uses_fixed_channel_limits_and_rrf_contract():
     ], metadata={"provider": "local_http"}))
 
     payload = hybrid_retrieval.search(
-        "route leak", lexical_retriever=lexical, dense_retriever=vector,
+        "route leak",
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
     )
 
     assert lexical.calls == [(payload["normalized_query"], 50)]
@@ -226,7 +231,13 @@ def test_rrf_is_capped_at_twenty_and_ties_are_stable():
     ]))
     vector = FakeRetriever(RetrievalChannelResult("vector", items=[]))
 
-    payload = hybrid_retrieval.search("BGP", lexical_retriever=lexical, dense_retriever=vector)
+    payload = hybrid_retrieval.search(
+        "BGP",
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
+    )
 
     assert len(payload["results"]) == 20
     assert [item["chunk_id"] for item in payload["results"]] == [f"chunk-{index:02}" for index in range(20)]
@@ -240,7 +251,11 @@ def test_single_failure_degrades_and_double_failure_raises():
     vector = FakeRetriever(RetrievalChannelResult("vector", items=[_channel_item("a", 1, 0.8)]))
 
     payload = hybrid_retrieval.search(
-        "BGP", lexical_retriever=failed_lexical, dense_retriever=vector,
+        "BGP",
+        lexical_retriever=failed_lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
     )
 
     assert payload["degraded"] is True
@@ -252,13 +267,19 @@ def test_single_failure_degrades_and_double_failure_raises():
     ))
     with __import__("pytest").raises(hybrid_retrieval.RetrievalUnavailable):
         hybrid_retrieval.search(
-            "BGP", lexical_retriever=failed_lexical, dense_retriever=failed_vector,
+            "BGP",
+            lexical_retriever=failed_lexical,
+            dense_retriever=failed_vector,
+            trusted_chunk_ids=set(),
+            eligible_doc_ids=set(),
         )
 
 
 def test_default_context_store_is_reused_until_catalog_changes(tmp_path, monkeypatch):
-    chunk_catalog = tmp_path / "chunk_catalog.jsonl"
+    data_dir = tmp_path / "release" / "data"
+    chunk_catalog = data_dir / "published" / "chunk_catalog.jsonl"
     section_catalog = tmp_path / "section_catalog.jsonl"
+    chunk_catalog.parent.mkdir(parents=True)
     chunk_catalog.write_text('{"chunk_id":"c1"}\n', encoding="utf-8")
     section_catalog.write_text('{"section_id":"s"}\n', encoding="utf-8")
 
@@ -294,9 +315,8 @@ def test_default_context_store_is_reused_until_catalog_changes(tmp_path, monkeyp
         def get_section_subtree_chunks(self, section_id):
             return self.get_section_direct_chunks(section_id)
 
-    monkeypatch.setattr(hybrid_retrieval.paths, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(hybrid_retrieval.paths, "PUBLISHED_DIR", tmp_path)
-    monkeypatch.setattr(hybrid_retrieval, "_default_section_catalog_path", lambda: section_catalog)
+    monkeypatch.setenv("BGPKB_DATA_DIR", str(data_dir))
+    monkeypatch.setattr(hybrid_retrieval, "_default_section_catalog_path", lambda retrieval_data: section_catalog)
     monkeypatch.setattr(hybrid_retrieval, "ChunkStore", CountingChunkStore)
     hybrid_retrieval.clear_context_store_cache()
 

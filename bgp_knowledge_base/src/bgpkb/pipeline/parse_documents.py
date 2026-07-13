@@ -97,7 +97,7 @@ def parse_txt(path, doc_id):
     title = normalize_title(next((line.strip() for line in text.splitlines() if line.strip()), ""), doc_id)
     return {
         "doc_id": doc_id,
-        "source_path": str(path.relative_to(ROOT)),
+        "source_path": paths.rel(path),
         "source_format": "txt",
         "title": title,
         "sections": split_rfc_sections(text),
@@ -113,7 +113,7 @@ def parse_html(path, doc_id):
     sections = [{"section_id": "full", "heading": title, "content": text}]
     return {
         "doc_id": doc_id,
-        "source_path": str(path.relative_to(ROOT)),
+        "source_path": paths.rel(path),
         "source_format": "html",
         "title": title,
         "sections": sections,
@@ -148,7 +148,7 @@ def parse_yaml(path, doc_id):
     title = normalize_title(" ".join(title_parts), doc_id)
     return {
         "doc_id": doc_id,
-        "source_path": str(path.relative_to(ROOT)),
+        "source_path": paths.rel(path),
         "source_format": "yaml",
         "title": title,
         "sections": split_yaml_sections(text),
@@ -217,7 +217,7 @@ def parse_pdf(path, doc_id):
     title = normalize_title(metadata_title or first_line, doc_id)
     return {
         "doc_id": doc_id,
-        "source_path": str(path.relative_to(ROOT)),
+        "source_path": paths.rel(path),
         "source_format": "pdf",
         "title": title,
         "sections": sections or [{"section_id": "full", "heading": title, "content": text}],
@@ -242,9 +242,9 @@ def process_file(path, parsed_subdir, cleaned_subdir):
     elif path.suffix == ".pdf":
         doc, text, error = parse_pdf(path, doc_id)
         if doc is None:
-            return {"path": str(path.relative_to(ROOT)), "status": "skipped", "reason": error}
+            return {"path": paths.rel(path), "status": "skipped", "reason": error}
     else:
-        return {"path": str(path.relative_to(ROOT)), "status": "skipped", "reason": f"不支持的后缀 {path.suffix}"}
+        return {"path": paths.rel(path), "status": "skipped", "reason": f"不支持的后缀 {path.suffix}"}
 
     write_outputs(
         doc,
@@ -253,7 +253,7 @@ def process_file(path, parsed_subdir, cleaned_subdir):
         paths.CLEANED_DIR / cleaned_subdir / f"{doc_id}.md",
     )
     return {
-        "path": str(path.relative_to(ROOT)),
+        "path": paths.rel(path),
         "status": "parsed",
         "reason": "",
         "sections": len(doc["sections"]),

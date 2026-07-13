@@ -98,18 +98,18 @@ def main():
         "generated_by": "src/bgpkb/pipeline/build_rag_indexes.py",
         "vector_store": {
             "provider": "mock_jsonl",
-            "path": VECTOR_INDEX.relative_to(ROOT).as_posix(),
+            "path": paths.rel(VECTOR_INDEX),
             "real_milvus_execution": False,
             "milvus_lite_ready": True,
         },
-        "embedding_manifest": MANIFEST.relative_to(ROOT).as_posix(),
+        "embedding_manifest": paths.rel(MANIFEST),
         "lexical_fallback": cfg["lexical_fallback"],
         "semantic_identity": "data/published/semantic_id_map.jsonl",
         "trusted_collection": cfg["trusted_collection"],
     })
-    print(f"Wrote {VECTOR_INDEX.relative_to(ROOT)}")
-    print(f"Wrote {MANIFEST.relative_to(ROOT)}")
-    print(f"Wrote {RETRIEVAL_INDEX.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(VECTOR_INDEX)}")
+    print(f"Wrote {paths.rel(MANIFEST)}")
+    print(f"Wrote {paths.rel(RETRIEVAL_INDEX)}")
 
 
 if __name__ == "__main__":

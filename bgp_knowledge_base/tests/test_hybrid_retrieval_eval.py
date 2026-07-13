@@ -2,9 +2,11 @@ import json
 from pathlib import Path
 import runpy
 
+from bgpkb import paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "data" / "derived" / "datasets" / "hybrid_retrieval_eval_questions.jsonl"
+DATASET = paths.DATASETS_DIR / "hybrid_retrieval_eval_questions.jsonl"
 SCRIPT = ROOT / "src" / "bgpkb" / "pipeline" / "run_hybrid_retrieval_eval.py"
 
 

@@ -70,7 +70,7 @@ def test_collect_unmapped_relations_only_returns_real_unconfigured_values():
 
 
 def test_real_mock_candidates_are_stable_sorted_and_traceable(config):
-    relationships_path = ROOT / "data/knowledge/relationships/relationships.jsonl"
+    relationships_path = paths.RELATIONSHIPS_DIR / "relationships.jsonl"
     relationships = [json.loads(line) for line in relationships_path.read_text(encoding="utf-8").splitlines()]
     production_config = yaml.safe_load(
         (ROOT / "metadata/config/standard_exports.yaml").read_text(encoding="utf-8")

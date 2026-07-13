@@ -13,6 +13,14 @@ DATASETS = paths.DATASETS_DIR
 RAG_CONFIG = paths.CONFIG_DIR / "rag_retrieval.yaml"
 
 
+def published_dir() -> Path:
+    return paths.require_runtime_data_dir() / "published"
+
+
+def datasets_dir() -> Path:
+    return paths.require_runtime_data_dir() / "derived" / "datasets"
+
+
 def load_json(path, default=None):
     if not path.exists():
         return default if default is not None else {}
@@ -47,7 +55,7 @@ def config():
 
 def semantic_uri_map(resource_type):
     mapping = {}
-    for record in load_jsonl(PUBLISHED / "semantic_id_map.jsonl"):
+    for record in load_jsonl(published_dir() / "semantic_id_map.jsonl"):
         if record.get("resource_type") == resource_type:
             mapping[record.get("local_id")] = record.get("uri")
     return mapping
@@ -148,9 +156,10 @@ def search(query, limit=10):
     normalized = normalize_query(query)
     chunk_uris = semantic_uri_map("chunk")
     results = []
-    vector_index_exists = (PUBLISHED / "rag_mock_vector_index.jsonl").exists()
+    published = published_dir()
+    vector_index_exists = (published / "rag_mock_vector_index.jsonl").exists()
     method = "mock_hybrid" if vector_index_exists else "sqlite_fts5"
-    for chunk in load_jsonl(PUBLISHED / "chunk_catalog.jsonl"):
+    for chunk in load_jsonl(published / "chunk_catalog.jsonl"):
         score = score_chunk(chunk, normalized)
         if score <= 0:
             continue
@@ -175,7 +184,7 @@ def search(query, limit=10):
 
 def excluded_by_policy():
     excluded = []
-    for entity in load_jsonl(PUBLISHED / "entity_catalog.jsonl"):
+    for entity in load_jsonl(published_dir() / "entity_catalog.jsonl"):
         status = entity.get("review_status", "")
         if status != "approved":
             excluded.append({
@@ -227,7 +236,7 @@ def context_pack(query, limit=8):
 def evidence(entity_id):
     evidence_uris = semantic_uri_map("evidence")
     rows = []
-    for record in load_jsonl(DATASETS / "entity_source_evidence.jsonl"):
+    for record in load_jsonl(datasets_dir() / "entity_source_evidence.jsonl"):
         if record.get("entity_id") != entity_id:
             continue
         item = {

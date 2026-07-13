@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 from bgpkb import paths
 from bgpkb.service.fast_vector_index import FastVectorIndexError, load_cached_fast_vector_index
+from bgpkb.service.retrieval_data import PublishedArtifactRetrievalData, RetrievalData
 from bgpkb.service.retrieval_model_client import EmbeddingProviderChain
 
 
@@ -57,8 +58,12 @@ def _fts_query(query: str) -> str:
 
 
 class Bm25Retriever:
-    def __init__(self, db_path: Path = paths.PUBLISHED_DIR / "bgp_knowledge_base.sqlite"):
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: Path | None = None, retrieval_data: RetrievalData | None = None):
+        if db_path is not None:
+            self.db_path = Path(db_path)
+        else:
+            active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
+            self.db_path = active_data.database_path()
 
     def search(self, query: str, top_k: int) -> RetrievalChannelResult:
         invalid = _top_k_error("lexical", top_k)
@@ -68,7 +73,7 @@ class Bm25Retriever:
         if not fts_query:
             return RetrievalChannelResult("lexical", metadata={"query_empty": True})
         try:
-            uri = f"file:{self.db_path.resolve().as_posix()}?mode=ro"
+            uri = f"file:{self.db_path.resolve().as_posix()}?mode=ro&immutable=1"
             with sqlite3.connect(uri, uri=True) as conn:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
@@ -119,11 +124,16 @@ def _cosine(left: list[float], right: list[float]) -> float:
 class DenseRetriever:
     def __init__(
         self,
-        index_path: Path = paths.PUBLISHED_DIR / "bge_m3_vector_index.jsonl",
+        index_path: Path | None = None,
         provider: Any | None = None,
         min_similarity: float = 0.5,
+        retrieval_data: RetrievalData | None = None,
     ):
-        self.index_path = Path(index_path)
+        if index_path is not None:
+            self.index_path = Path(index_path)
+        else:
+            active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
+            self.index_path = active_data.vector_index_path()
         self.provider = provider or EmbeddingProviderChain.from_env()
         self.min_similarity = float(min_similarity)
 

@@ -490,13 +490,13 @@ def render_report(config, findings):
 def main():
     config = load_config()
     findings = build_findings(config)
-    findings_path = ROOT / config["generated_policy"]["findings_path"]
-    report_path = ROOT / config["generated_policy"]["report_path"]
+    findings_path = paths.resolve_logical_path(config["generated_policy"]["findings_path"])
+    report_path = paths.resolve_logical_path(config["generated_policy"]["report_path"])
     write_jsonl(findings, findings_path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(render_report(config, findings), encoding="utf-8")
-    print(f"Wrote {findings_path.relative_to(ROOT)}")
-    print(f"Wrote {report_path.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(findings_path)}")
+    print(f"Wrote {paths.rel(report_path)}")
 
 
 if __name__ == "__main__":

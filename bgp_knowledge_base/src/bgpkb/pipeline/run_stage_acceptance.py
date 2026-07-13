@@ -30,7 +30,7 @@ def find_stage(config, stage_id):
 def check_required_files(stage):
     rows = []
     for item in stage.get("required_files", []):
-        path = ROOT / item
+        path = paths.resolve_logical_path(item)
         rows.append({"path": item, "exists": path.exists()})
     return rows
 
@@ -72,7 +72,7 @@ def run_commands(stage, skip_commands=False):
 def check_reports(stage):
     rows = []
     for item in stage.get("report_checks", []):
-        path = ROOT / item["path"]
+        path = paths.resolve_logical_path(item["path"])
         text = path.read_text(encoding="utf-8") if path.exists() else ""
         missing = [needle for needle in item.get("must_contain", []) if needle not in text]
         rows.append({
@@ -200,8 +200,8 @@ def main():
     report_checks = check_reports(stage)
     decision, reasons = decide(file_checks, command_results, report_checks, stage)
 
-    report_path = ROOT / config["generated_policy"]["report_path"]
-    results_path = ROOT / config["generated_policy"]["results_path"]
+    report_path = paths.resolve_logical_path(config["generated_policy"]["report_path"])
+    results_path = paths.resolve_logical_path(config["generated_policy"]["results_path"])
     report_path.write_text(
         render_report(config, stage, file_checks, command_results, report_checks, decision, reasons),
         encoding="utf-8",
@@ -228,8 +228,8 @@ def main():
         "reasons": reasons,
     }
     write_jsonl(results_path, record)
-    print(f"Wrote {report_path.relative_to(ROOT)}")
-    print(f"Wrote {results_path.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(report_path)}")
+    print(f"Wrote {paths.rel(results_path)}")
     if decision == "fail":
         raise SystemExit(1)
     if decision == "needs_human":

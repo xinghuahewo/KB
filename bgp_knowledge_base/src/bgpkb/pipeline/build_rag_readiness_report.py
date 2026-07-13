@@ -136,9 +136,10 @@ def main():
         "- `/api/v1/retrieval/context-pack`",
         "",
     ])
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Wrote {REPORT.relative_to(ROOT)}")
-    print(f"Wrote {EVAL.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(REPORT)}")
+    print(f"Wrote {paths.rel(EVAL)}")
 
 
 if __name__ == "__main__":

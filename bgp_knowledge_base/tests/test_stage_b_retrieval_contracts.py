@@ -177,7 +177,7 @@ def test_chunk_schema_keeps_v1_compatible_and_gates_v2_hierarchy_fields():
         "review_status": "approved",
     }
     schema.validate(legacy_chunk)
-    current_chunks_v2_path = paths.PROJECT_ROOT / "data/corpus/chunks_v2/rfc4271.jsonl"
+    current_chunks_v2_path = paths.CORPUS_DIR / "chunks_v2/rfc4271.jsonl"
     current_chunks_v2_record = json.loads(
         current_chunks_v2_path.read_text(encoding="utf-8").splitlines()[0]
     )

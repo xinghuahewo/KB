@@ -5,6 +5,7 @@ import json
 import re
 import copy
 from collections import defaultdict
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 import yaml
@@ -536,18 +537,30 @@ def build_report(entity_count, source_count, provenance_count, unresolved, sampl
     return "\n".join(lines).rstrip() + "\n"
 
 
-def generate_standard_exports(root, config):
+def export_path(root, logical_path, data_dir=None):
+    """Resolve config paths while preserving tmp-project fixtures used by unit tests."""
+    logical = Path(logical_path)
+    if data_dir is not None and logical.parts and logical.parts[0] == "data":
+        return Path(data_dir) / Path(*logical.parts[1:])
+    return Path(root) / logical
+
+
+def generate_standard_exports(root, config, data_dir=None):
     """生成标准出口；有未解析引用时仅写阻塞报告并返回非零。"""
     outputs = config["outputs"]
-    approved_path = root / outputs.get("approved_mappings", "data/derived/datasets/approved_standard_mappings.jsonl")
+    approved_path = export_path(
+        root,
+        outputs.get("approved_mappings", "data/derived/datasets/approved_standard_mappings.jsonl"),
+        data_dir,
+    )
     approved_mappings = read_jsonl(approved_path) if approved_path.exists() else []
     config = apply_approved_mappings(config, approved_mappings)
 
-    entities = read_jsonl(root / "data/published/entity_catalog.jsonl")
-    sources = read_jsonl(root / "data/published/source_catalog.jsonl")
-    semantic_records = read_jsonl(root / "data/published/semantic_id_map.jsonl")
-    evidence = read_jsonl(root / "data/derived/datasets/entity_source_evidence.jsonl")
-    relationships = read_jsonl(root / "data/knowledge/relationships/relationships.jsonl")
+    entities = read_jsonl(export_path(root, "data/published/entity_catalog.jsonl", data_dir))
+    sources = read_jsonl(export_path(root, "data/published/source_catalog.jsonl", data_dir))
+    semantic_records = read_jsonl(export_path(root, "data/published/semantic_id_map.jsonl", data_dir))
+    evidence = read_jsonl(export_path(root, "data/derived/datasets/entity_source_evidence.jsonl", data_dir))
+    relationships = read_jsonl(export_path(root, "data/knowledge/relationships/relationships.jsonl", data_dir))
 
     uri_maps = semantic_uri_maps(semantic_records)
     entity_uris = uri_maps["entity"]
@@ -616,7 +629,7 @@ def generate_standard_exports(root, config):
         included_entities, included_sources, semantic_records, relationships, entity_graph, provenance, config,
         identity_errors=identity_errors, allowed_entity_ids=included_entity_ids,
     )
-    report_path = root / outputs["report"]
+    report_path = export_path(root, outputs["report"], data_dir)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
         build_report(
@@ -634,10 +647,10 @@ def generate_standard_exports(root, config):
         print(f"Wrote {outputs['report']}")
         return 1
 
-    write_json(root / outputs["entity_catalog"], {"@context": context, "@graph": entity_graph})
-    write_json(root / outputs["source_catalog"], {"@context": context, "@graph": source_graph})
-    write_jsonl(root / outputs["provenance_map"], provenance)
-    turtle_path = root / outputs["turtle_sample"]
+    write_json(export_path(root, outputs["entity_catalog"], data_dir), {"@context": context, "@graph": entity_graph})
+    write_json(export_path(root, outputs["source_catalog"], data_dir), {"@context": context, "@graph": source_graph})
+    write_jsonl(export_path(root, outputs["provenance_map"], data_dir), provenance)
+    turtle_path = export_path(root, outputs["turtle_sample"], data_dir)
     turtle_path.parent.mkdir(parents=True, exist_ok=True)
     turtle_path.write_text(
         build_turtle_sample(entity_graph, sample_limit, config["namespaces"], relationship_triples), encoding="utf-8"
@@ -651,7 +664,7 @@ def generate_standard_exports(root, config):
 def main():
     """从现有发布文件生成全部标准出口。"""
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    return generate_standard_exports(paths.PROJECT_ROOT, config)
+    return generate_standard_exports(paths.PROJECT_ROOT, config, data_dir=paths.DATA_DIR)
 
 
 if __name__ == "__main__":

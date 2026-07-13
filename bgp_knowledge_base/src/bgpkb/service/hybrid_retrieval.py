@@ -10,19 +10,22 @@ from .bge_m3_remote_client import BgeM3RemoteClient
 from .chunk_store import ChunkStore
 from .context_assembler import ContextAssembler
 from .query_type_resolver import resolve_query_type
+from .retrieval_data import PublishedArtifactRetrievalData, RetrievalData
 from .retrieval_model_client import RerankerProviderChain
 from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
 
 
-BGE_INDEX_PATH = paths.PUBLISHED_DIR / "bge_m3_vector_index.jsonl"
-MOCK_INDEX_PATH = paths.PUBLISHED_DIR / "rag_mock_vector_index.jsonl"
-ENTITY_EVIDENCE_PATH = paths.DATASETS_DIR / "entity_source_evidence.jsonl"
-SOURCE_CATALOG_PATH = paths.PUBLISHED_DIR / "source_catalog.jsonl"
+def _published_path(filename: str) -> Path:
+    return paths.require_runtime_data_dir() / "published" / filename
+
+
+def _dataset_path(filename: str) -> Path:
+    return paths.require_runtime_data_dir() / "derived" / "datasets" / filename
 
 
 def _trusted_chunk_ids():
     trusted = set()
-    for item in retrieval_framework.load_jsonl(ENTITY_EVIDENCE_PATH):
+    for item in retrieval_framework.load_jsonl(_dataset_path("entity_source_evidence.jsonl")):
         if item.get("entity_review_status") == "approved":
             trusted.update(item.get("chunk_sample_ids", []))
     return trusted
@@ -30,7 +33,7 @@ def _trusted_chunk_ids():
 
 def _retrieval_eligible_doc_ids():
     eligible = set()
-    for item in retrieval_framework.load_jsonl(SOURCE_CATALOG_PATH):
+    for item in retrieval_framework.load_jsonl(_published_path("source_catalog.jsonl")):
         if (
             item.get("processing_status") == "complete_deterministic"
             and item.get("trust_level") in {"high", "medium"}
@@ -106,7 +109,7 @@ def _lexical_search(query, limit, trusted_chunk_ids, eligible_doc_ids):
     normalized = retrieval_framework.normalize_query(query)
     uris = retrieval_framework.semantic_uri_map("chunk")
     results = []
-    for chunk in retrieval_framework.load_jsonl(retrieval_framework.PUBLISHED / "chunk_catalog.jsonl"):
+    for chunk in retrieval_framework.load_jsonl(retrieval_framework.published_dir() / "chunk_catalog.jsonl"):
         chunk_id = chunk.get("chunk_id", "")
         if not _is_trusted(chunk, trusted_chunk_ids, eligible_doc_ids):
             continue
@@ -192,12 +195,14 @@ def vector_search(
 
 
 def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_ids, client=None):
-    if BGE_INDEX_PATH.exists():
+    bge_index_path = _published_path("bge_m3_vector_index.jsonl")
+    mock_index_path = _published_path("rag_mock_vector_index.jsonl")
+    if bge_index_path.exists():
         active_client = client or BgeM3RemoteClient.from_env("siliconflow_bge_m3")
         response = active_client.embed_texts([normalized])
         if not response.get("ok"):
-            if response.get("error_code") in {"missing_api_key", "missing_endpoint"} and MOCK_INDEX_PATH.exists():
-                records = retrieval_framework.load_jsonl(MOCK_INDEX_PATH)
+            if response.get("error_code") in {"missing_api_key", "missing_endpoint"} and mock_index_path.exists():
+                records = retrieval_framework.load_jsonl(mock_index_path)
                 dimensions = len(records[0].get("vector", [])) if records else 32
                 query_vector = retrieval_framework.stable_vector(normalized, dimensions=dimensions)
                 return vector_search(
@@ -208,7 +213,7 @@ def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_id
                     eligible_doc_ids,
                 ), "offline_mock"
             return [], response.get("error_code", "unavailable")
-        records = retrieval_framework.load_jsonl(BGE_INDEX_PATH)
+        records = retrieval_framework.load_jsonl(bge_index_path)
         threshold = float(
             retrieval_framework.config().get("hybrid_retrieval", {}).get("min_vector_similarity", 0.5)
         )
@@ -220,8 +225,8 @@ def _vector_results(query, normalized, limit, trusted_chunk_ids, eligible_doc_id
             eligible_doc_ids,
             min_similarity=threshold,
         ), "complete"
-    if MOCK_INDEX_PATH.exists():
-        records = retrieval_framework.load_jsonl(MOCK_INDEX_PATH)
+    if mock_index_path.exists():
+        records = retrieval_framework.load_jsonl(mock_index_path)
         dimensions = len(records[0].get("vector", [])) if records else 32
         query_vector = retrieval_framework.stable_vector(normalized, dimensions=dimensions)
         return vector_search(query_vector, records, limit, trusted_chunk_ids, eligible_doc_ids), "offline_mock"
@@ -386,6 +391,9 @@ def search(
     client=None,
     lexical_retriever=None,
     dense_retriever=None,
+    trusted_chunk_ids=None,
+    eligible_doc_ids=None,
+    retrieval_data: RetrievalData | None = None,
 ):
     started = time.perf_counter()
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
@@ -393,10 +401,22 @@ def search(
     if (lexical_top_k, vector_top_k, rrf_k) != (50, 50, 60):
         raise ValueError("v2 召回契约固定为 lexical=50、vector=50、rrf_k=60")
     normalized = retrieval_framework.normalize_query(query)
-    trusted_chunk_ids = _trusted_chunk_ids()
-    eligible_doc_ids = _retrieval_eligible_doc_ids()
+    active_data = retrieval_data
+    if (
+        trusted_chunk_ids is None
+        or eligible_doc_ids is None
+        or lexical_retriever is None
+        or (vector_enabled and dense_retriever is None)
+    ):
+        active_data = active_data or PublishedArtifactRetrievalData.from_environment()
+    trusted_chunk_ids = (
+        active_data.trusted_chunk_ids() if trusted_chunk_ids is None else set(trusted_chunk_ids)
+    )
+    eligible_doc_ids = (
+        active_data.eligible_doc_ids() if eligible_doc_ids is None else set(eligible_doc_ids)
+    )
     lexical_started = time.perf_counter()
-    lexical = (lexical_retriever or Bm25Retriever()).search(normalized, 50)
+    lexical = (lexical_retriever or Bm25Retriever(retrieval_data=active_data)).search(normalized, 50)
     lexical.metadata.setdefault("latency_ms", round((time.perf_counter() - lexical_started) * 1000, 3))
     for item in lexical.items:
         item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
@@ -404,7 +424,9 @@ def search(
         item.setdefault("lifecycle_status", "approved_evidence" if item["trusted"] else "candidate")
     if vector_enabled:
         vector_started = time.perf_counter()
-        vector = (dense_retriever or DenseRetriever(provider=client)).search(normalized, 50)
+        vector = (
+            dense_retriever or DenseRetriever(retrieval_data=active_data, provider=client)
+        ).search(normalized, 50)
         vector.metadata.setdefault("latency_ms", round((time.perf_counter() - vector_started) * 1000, 3))
         for item in vector.items:
             item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
@@ -463,12 +485,8 @@ def _legacy_limit_to_top_n(limit):
     return min(8, max(5, int(limit))), {"limit": "use top_n"}
 
 
-def _default_section_catalog_path():
-    candidates = [
-        paths.DATASETS_DIR / "section_catalog.jsonl",
-        paths.PUBLISHED_DIR / "section_catalog.jsonl",
-    ]
-    return next((path for path in candidates if path.exists()), candidates[0])
+def _default_section_catalog_path(retrieval_data: RetrievalData):
+    return retrieval_data.section_catalog_path()
 
 
 _CONTEXT_STORE_CACHE = {}
@@ -486,27 +504,29 @@ def _catalog_signature(path):
     return (str(resolved), stat.st_size, stat.st_mtime_ns)
 
 
-def _default_context_store(section_path):
-    chunk_catalog_path = paths.PUBLISHED_DIR / "chunk_catalog.jsonl"
+def _default_context_store(section_path, retrieval_data: RetrievalData):
+    chunk_catalog_path = retrieval_data.chunk_catalog_path()
+    data_dir = chunk_catalog_path.parents[1]
     key = (
-        str(Path(paths.PROJECT_ROOT).resolve()),
+        str(data_dir.parent.resolve()),
         _catalog_signature(chunk_catalog_path),
         _catalog_signature(section_path),
     )
     cached = _CONTEXT_STORE_CACHE.get(key)
     if cached is None:
-        cached = ChunkStore(paths.PROJECT_ROOT, chunk_catalog_path, section_path)
+        cached = ChunkStore(data_dir.parent, chunk_catalog_path, section_path)
         _CONTEXT_STORE_CACHE.clear()
         _CONTEXT_STORE_CACHE[key] = cached
     return cached
 
 
-def _build_context_units(query, results, resolved_query_type, token_budget, store=None):
-    section_path = _default_section_catalog_path()
+def _build_context_units(
+    query, results, resolved_query_type, token_budget, store=None, retrieval_data: RetrievalData | None = None
+):
     if store is None:
-        if not section_path.exists():
-            return [], [{"event": "context_assembly_skipped", "reason": "section_catalog_missing"}]
-        store = _default_context_store(section_path)
+        active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
+        section_path = _default_section_catalog_path(active_data)
+        store = _default_context_store(section_path, active_data)
     assembler = ContextAssembler(store)
     try:
         pack = assembler.build(query, results, resolved_query_type, token_budget)
@@ -541,8 +561,12 @@ def context_pack(
     store=None,
     lexical_retriever=None,
     dense_retriever=None,
+    trusted_chunk_ids=None,
+    eligible_doc_ids=None,
+    retrieval_data: RetrievalData | None = None,
     progress=None,
 ):
+    active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
     alias_top_n, deprecated = _legacy_limit_to_top_n(limit)
     effective_top_n = validate_top_n(top_n if top_n is not None else alias_top_n)
     recall = search(
@@ -552,6 +576,9 @@ def context_pack(
         vector_enabled=vector_enabled,
         lexical_retriever=lexical_retriever,
         dense_retriever=dense_retriever,
+        trusted_chunk_ids=trusted_chunk_ids,
+        eligible_doc_ids=eligible_doc_ids,
+        retrieval_data=active_data,
     )
     if progress is not None:
         vector_metadata = recall.get("channel_metadata", {}).get("vector", {})
@@ -589,7 +616,12 @@ def context_pack(
     query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
     context_started = time.perf_counter()
     context_units, trim_events = _build_context_units(
-        query, reranked["results"], query_type_payload["resolved_query_type"], token_budget, store=store,
+        query,
+        reranked["results"],
+        query_type_payload["resolved_query_type"],
+        token_budget,
+        store=store,
+        retrieval_data=active_data,
     )
     context_assembly_latency_ms = round((time.perf_counter() - context_started) * 1000, 3)
     citations = _citations_from_units(context_units) or retrieval_framework.citations_for(reranked["results"])
@@ -598,7 +630,7 @@ def context_pack(
         "schema_version": "context_pack_v2",
         "results": reranked["results"],
         "citations": citations,
-        "excluded_by_policy": retrieval_framework.excluded_by_policy(),
+        "excluded_by_policy": active_data.excluded_by_policy(),
         "requested_query_type": query_type_payload["requested_query_type"],
         "resolved_query_type": query_type_payload["resolved_query_type"],
         "query_type_resolution": query_type_payload,
