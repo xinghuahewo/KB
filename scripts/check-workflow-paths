@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""静态校验 CI、Makefile 和旧 pipeline 兼容入口引用的路径。"""
+
+from pathlib import Path
+import re
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+CI = ROOT / ".github" / "workflows" / "ci.yml"
+MAKEFILE = ROOT / "Makefile"
+SCRIPT_REFERENCE = re.compile(r"(?<![A-Za-z0-9_./-])(scripts/[A-Za-z0-9_./-]+)")
+MAKE_REFERENCE = re.compile(r"\bmake\s+([A-Za-z0-9_-]+)")
+
+
+def main() -> int:
+    failures: list[str] = []
+    ci_text = CI.read_text(encoding="utf-8")
+    make_text = MAKEFILE.read_text(encoding="utf-8")
+    for reference in sorted(set(SCRIPT_REFERENCE.findall(ci_text + "\n" + make_text))):
+        if not (ROOT / reference).is_file():
+            failures.append(f"工作流引用不存在：{reference}")
+    for target in sorted(set(MAKE_REFERENCE.findall(ci_text))):
+        if not re.search(rf"(?m)^{re.escape(target)}:\s*$", make_text):
+            failures.append(f"CI 引用不存在的 Make 目标：{target}")
+    pipeline = ROOT / "backend" / "src" / "bgpkb" / "pipeline"
+    for path in sorted(pipeline.glob("*.py")):
+        if path.is_symlink() and not path.resolve().is_file():
+            failures.append(f"旧 pipeline 兼容链接失效：{path.relative_to(ROOT)}")
+    if failures:
+        print("\n".join(failures), file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

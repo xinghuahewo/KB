@@ -8,33 +8,50 @@ on:
   pull_request:
 
 jobs:
-  test:
+  verify:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: bgp_knowledge_base
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements-service.txt
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
 
-      - name: Run tests
-        run: python -m pytest -v
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.19.0"
 
-      - name: Run pipeline
-        run: python scripts/run_pipeline.py
+      - name: Enable Corepack
+        run: corepack enable
 
-      - name: Run stage acceptance
-        run: python scripts/run_stage_acceptance.py --stage phase_4_rag_framework_v1
+      - name: Install OpenSpec
+        run: npm install --global @fission-ai/openspec@1.5.0
 
-      - name: Run artifact and quality checks
-        run: python scripts/build_artifact_manifest.py && python scripts/quality_check.py
+      - name: Bootstrap locked dependencies
+        run: make bootstrap
+
+      - name: Check repository hygiene
+        run: bash scripts/check-repository-hygiene
+
+      - name: Check documentation links
+        run: python3 scripts/check-doc-links
+
+      - name: Check workflow paths
+        run: python3 scripts/check-workflow-paths
+
+      - name: Run no-artifact tests
+        run: make test
+
+      - name: Validate OpenSpec
+        run: openspec validate --all --strict --no-interactive
+
+      - name: Build backend and frontend
+        run: make build

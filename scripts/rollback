@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEPLOY_ROOT="${BGPKB_DEPLOY_ROOT:-/home/wbt/DB}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/deployment.py" rollback "$DEPLOY_ROOT"
+bash "$SCRIPT_DIR/restart-active-services" "$DEPLOY_ROOT"
+bash "$SCRIPT_DIR/check-service-health"

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="$REPOSITORY_ROOT/backend"
+SOURCE_DATA_DIR="${BGPKB_DATA_DIR:-}"
+SOURCE_RELEASE_ID="${BGPKB_RELEASE_ID:-}"
+
+if [[ -z "$SOURCE_DATA_DIR" || ! -d "$SOURCE_DATA_DIR" ]]; then
+  printf 'BGPKB_DATA_DIR 必须指向已验证 release 的 data 目录。\n' >&2
+  exit 2
+fi
+if [[ -z "$SOURCE_RELEASE_ID" ]]; then
+  printf 'BGPKB_RELEASE_ID 必须显式指定 artifacts/releases.yaml 中的 release。\n' >&2
+  exit 2
+fi
+
+if [[ -n "${BGPKB_ARTIFACT_TEST_DIR:-}" ]]; then
+  (cd "$BACKEND_DIR" && uv run python -m bgpkb.artifact_gate)
+  exit $?
+fi
+
+if [[ "$(uname -s)" != "Linux" || "$(id -u)" -ne 0 ]]; then
+  printf '自动 overlay 需要 Linux root；请预先创建隔离副本并设置 BGPKB_ARTIFACT_TEST_DIR。\n' >&2
+  exit 2
+fi
+
+WORKSPACE="$(mktemp -d "${TMPDIR:-/tmp}/bgpkb-artifact-test.XXXXXX")"
+UPPER_DIR="$WORKSPACE/upper"
+WORK_DIR="$WORKSPACE/work"
+MERGED_DIR="$WORKSPACE/merged"
+MOUNTED=0
+mkdir -p "$UPPER_DIR" "$WORK_DIR" "$MERGED_DIR"
+
+cleanup() {
+  if [[ "$MOUNTED" -eq 1 ]]; then
+    umount "$MERGED_DIR" 2>/dev/null || true
+  fi
+  rm -rf -- "$WORKSPACE"
+}
+trap cleanup EXIT INT TERM
+
+mount -t overlay overlay \
+  -o "lowerdir=$SOURCE_DATA_DIR,upperdir=$UPPER_DIR,workdir=$WORK_DIR" \
+  "$MERGED_DIR"
+MOUNTED=1
+export BGPKB_ARTIFACT_TEST_DIR="$MERGED_DIR"
+
+test_status=0
+(cd "$BACKEND_DIR" && uv run python -m bgpkb.artifact_gate) || test_status=$?
+
+umount "$MERGED_DIR"
+MOUNTED=0
+
+verify_status=0
+(cd "$BACKEND_DIR" && uv run python -m bgpkb.artifact_verification) || verify_status=$?
+
+if [[ "$verify_status" -ne 0 ]]; then
+  exit "$verify_status"
+fi
+exit "$test_status"

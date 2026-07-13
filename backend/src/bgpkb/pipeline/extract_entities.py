@@ -1,0 +1,1 @@
+../publishing/extract_entities.py

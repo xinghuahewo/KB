@@ -1,0 +1,9 @@
+schema_version: 1
+current_release_id: 2026-07-10-93a4c97
+releases:
+  - release_id: 2026-07-10-93a4c97
+    source_commit: 93a4c97
+    file_count: 1293
+    sha256sums_sha256: 97400ef06e8ef20c3d363918b79d2540d4e513e6fe5be4ea9e84e9c870f9a04b
+    data_path: /srv/bgpkb/artifacts/releases/2026-07-10-93a4c97/data
+    status: current

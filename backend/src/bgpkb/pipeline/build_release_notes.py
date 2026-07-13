@@ -1,0 +1,1 @@
+../publishing/build_release_notes.py

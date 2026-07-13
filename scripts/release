@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RELEASE_ID="${1:-${BGPKB_CODE_RELEASE_ID:-}}"
+RELEASES_DIR="${BGPKB_CODE_RELEASES_DIR:-/home/wbt/DB-code-releases}"
+
+if [[ -z "$RELEASE_ID" ]]; then
+  printf '用法：make release ARGS=<code-release-id>\n' >&2
+  exit 2
+fi
+if [[ ! "$RELEASE_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  printf 'code release id 只允许字母、数字、点、下划线和连字符。\n' >&2
+  exit 2
+fi
+DESTINATION="$RELEASES_DIR/$RELEASE_ID"
+TEMPORARY="$RELEASES_DIR/.${RELEASE_ID}.next-$$"
+if [[ -e "$DESTINATION" ]]; then
+  printf '代码 release 已存在且不可覆盖：%s\n' "$DESTINATION" >&2
+  exit 2
+fi
+
+mkdir -p "$RELEASES_DIR"
+(cd "$REPOSITORY_ROOT" && {
+  if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    printf '工作树不干净；release 只能从已提交且可追溯的 Git commit 构建。\n' >&2
+    exit 2
+  fi
+})
+(cd "$REPOSITORY_ROOT" && make test && make build)
+(cd "$REPOSITORY_ROOT" && {
+  if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    printf '测试或构建后工作树出现未提交文件，拒绝生成 release。\n' >&2
+    exit 2
+  fi
+})
+rm -rf -- "$TEMPORARY"
+trap 'rm -rf -- "$TEMPORARY"' EXIT INT TERM
+mkdir -p "$TEMPORARY"
+(cd "$REPOSITORY_ROOT" && git archive --format=tar HEAD) | tar -xf - -C "$TEMPORARY"
+mkdir -p "$TEMPORARY/frontend/out"
+rsync -a "$REPOSITORY_ROOT/frontend/out/" "$TEMPORARY/frontend/out/"
+COMMIT="$(cd "$REPOSITORY_ROOT" && git rev-parse HEAD)"
+FRONTEND_SHA256="$(python3 -c 'import hashlib, pathlib, sys; root=pathlib.Path(sys.argv[1]); h=hashlib.sha256(); [(h.update(p.relative_to(root).as_posix().encode()), h.update(p.read_bytes())) for p in sorted(root.rglob("*")) if p.is_file()]; print(h.hexdigest())' "$REPOSITORY_ROOT/frontend/out")"
+printf '{"schema_version":1,"release_id":"%s","git_commit":"%s","frontend_sha256":"%s"}\n' \
+  "$RELEASE_ID" "$COMMIT" "$FRONTEND_SHA256" > "$TEMPORARY/release-manifest.json"
+mv "$TEMPORARY" "$DESTINATION"
+trap - EXIT INT TERM
+printf '%s\n' "$DESTINATION"

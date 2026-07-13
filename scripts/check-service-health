@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BGPKB_ENV_FILE="${BGPKB_ENV_FILE:-/etc/bgpkb/runtime.env}"
+if [[ ! -r "$BGPKB_ENV_FILE" ]]; then
+  printf '外部运行环境文件不存在或不可读：%s\n' "$BGPKB_ENV_FILE" >&2
+  exit 2
+fi
+set -a
+source "$BGPKB_ENV_FILE"
+set +a
+
+ATTEMPTS="${BGPKB_HEALTH_ATTEMPTS:-30}"
+INTERVAL="${BGPKB_HEALTH_INTERVAL_SECONDS:-2}"
+
+wait_for_url() {
+  local label="$1"
+  local url="$2"
+  local attempt
+  for ((attempt = 1; attempt <= ATTEMPTS; attempt += 1)); do
+    if curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null; then
+      return 0
+    fi
+    sleep "$INTERVAL"
+  done
+  printf '%s 健康检查超时：%s\n' "$label" "$url" >&2
+  return 1
+}
+
+wait_for_url "静态前端" "${BGPKB_FRONTEND_URL:-http://127.0.0.1:39280/index.html}"
+wait_for_url "FastAPI" "${BGPKB_FASTAPI_HEALTH_URL:-http://127.0.0.1:39281/health}"
+wait_for_url "embedding" "${BGPKB_EMBEDDING_HEALTH_URL:-http://127.0.0.1:8011/health}"
+wait_for_url "reranker" "${BGPKB_RERANKER_HEALTH_URL:-http://127.0.0.1:8012/health}"
+printf '前端、FastAPI、embedding 与 reranker 健康检查通过。\n'

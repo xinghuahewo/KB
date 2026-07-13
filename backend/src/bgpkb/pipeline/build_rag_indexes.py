@@ -1,0 +1,1 @@
+../indexing/build_rag_indexes.py

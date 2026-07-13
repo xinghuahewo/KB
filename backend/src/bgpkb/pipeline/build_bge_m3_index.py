@@ -1,0 +1,1 @@
+../indexing/build_bge_m3_index.py

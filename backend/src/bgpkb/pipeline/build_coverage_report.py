@@ -1,0 +1,1 @@
+../publishing/build_coverage_report.py
