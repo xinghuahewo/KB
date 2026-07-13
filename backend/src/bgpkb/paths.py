@@ -41,7 +41,7 @@ CONFIG_DIR = METADATA_DIR / "config"
 SCHEMAS_DIR = METADATA_DIR / "schemas"
 REPORT_POLICY_PATH = CONFIG_DIR / "report_policy.yaml"
 
-DOCS_DIR = PROJECT_ROOT / "docs"
+DOCS_DIR = REPOSITORY_ROOT / "docs"
 TESTS_DIR = PROJECT_ROOT / "tests"
 
 _REPORT_POLICY_CACHE = None
@@ -76,6 +76,8 @@ def rel(path: Path) -> str:
     path = Path(path)
     if path.is_relative_to(DATA_DIR):
         return (Path("data") / path.relative_to(DATA_DIR)).as_posix()
+    if path.is_relative_to(DOCS_DIR):
+        return (Path("docs") / path.relative_to(DOCS_DIR)).as_posix()
     return path.relative_to(PROJECT_ROOT).as_posix()
 
 

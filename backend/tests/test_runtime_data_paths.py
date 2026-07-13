@@ -57,6 +57,11 @@ def test_logical_relative_path_preserves_data_prefix_for_external_artifacts(monk
     importlib.reload(paths)
 
 
+def test_repository_docs_path_and_relative_label_follow_moved_root_docs():
+    assert paths.DOCS_DIR == paths.REPOSITORY_ROOT / "docs"
+    assert paths.rel(paths.DOCS_DIR / "architecture.md") == "docs/architecture.md"
+
+
 def test_logical_data_path_resolves_under_external_artifact(monkeypatch, tmp_path):
     data_dir = tmp_path / "release" / "data"
     data_dir.mkdir(parents=True)

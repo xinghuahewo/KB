@@ -174,3 +174,4 @@ def test_root_gitignore_blocks_runtime_artifacts_but_keeps_release_registry():
         assert pattern in gitignore
     assert "artifacts/*" in gitignore
     assert "!artifacts/releases.yaml" in gitignore
+    assert "backend/dist/" in gitignore
