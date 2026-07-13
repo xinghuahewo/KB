@@ -232,6 +232,8 @@ class DenseRetriever:
             "index_path": str(self.index_path),
             "score": "cosine",
             "index_mode": "jsonl_scan",
+            "degraded": True,
+            "degraded_reason": "fast_vector_index_unavailable",
             "vector_count": scanned_count,
             "index_search_ms": round((time.perf_counter() - index_started) * 1000, 3),
             "latency_ms": round((time.perf_counter() - started) * 1000, 3),

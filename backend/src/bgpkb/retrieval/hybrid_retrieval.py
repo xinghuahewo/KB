@@ -437,6 +437,11 @@ def search(
     channel_errors = {
         channel: result.error for channel, result in channel_results.items() if result.error is not None
     }
+    degraded_channels = {
+        channel: result.metadata.get("degraded_reason") or f"{channel}_degraded"
+        for channel, result in channel_results.items()
+        if result.metadata.get("degraded")
+    }
     technical_channels = [result for result in channel_results.values() if not result.metadata.get("disabled")]
     if technical_channels and all(result.error is not None for result in technical_channels):
         raise RetrievalUnavailable(channel_errors)
@@ -457,7 +462,8 @@ def search(
         "vector_count": len(vector.items),
         "vector_status": channel_status["vector"],
         "vector_min_similarity": None,
-        "degraded": bool(channel_errors),
+        "degraded": bool(channel_errors or degraded_channels),
+        "degraded_reason": next(iter(degraded_channels.values()), None),
         "channel_errors": channel_errors,
         "channel_status": channel_status,
         "channel_metadata": {channel: result.metadata for channel, result in channel_results.items()},
