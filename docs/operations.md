@@ -85,6 +85,8 @@ make rollback
 
 运行密钥和服务环境固定保存在仓库外 `/etc/bgpkb/runtime.env`，权限由服务器管理员控制。部署前必须确认该文件存在、可读，并至少保留现有 DeepSeek 和模型服务配置。
 
+模型服务仅绑定服务器地址时，运行环境还应设置 `BGPKB_EMBEDDING_HEALTH_URL=http://10.99.8.28:8011/health` 和 `BGPKB_RERANKER_HEALTH_URL=http://10.99.8.28:8012/health`。重启与健康检查脚本都会读取同一个外置环境文件，避免切换成功后被 localhost 探测误判并回滚。
+
 首次迁移必须先建立可回滚的旧版本，不能直接部署新版本：
 
 1. 在移动任何目录前，从已提交的新代码运行 `make release ARGS=<candidate-id>`，得到 `/home/wbt/DB-code-releases/<candidate-id>`。

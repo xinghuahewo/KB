@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 
@@ -74,6 +76,54 @@ def test_health_check_is_bounded_and_checks_static_frontend():
     assert "BGPKB_ENV_FILE" in restart
     assert "/etc/bgpkb/runtime.env" in restart
     assert "DEEPSEEK_API_KEY" in restart
+
+
+def test_health_check_loads_external_runtime_urls(tmp_path):
+    env_file = tmp_path / "runtime.env"
+    env_file.write_text(
+        "\n".join(
+            (
+                "BGPKB_FRONTEND_URL=http://frontend.example/index.html",
+                "BGPKB_FASTAPI_HEALTH_URL=http://fastapi.example/health",
+                "BGPKB_EMBEDDING_HEALTH_URL=http://embedding.example/health",
+                "BGPKB_RERANKER_HEALTH_URL=http://reranker.example/health",
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    curl_log = tmp_path / "curl.log"
+    fake_curl = fake_bin / "curl"
+    fake_curl.write_text(
+        '#!/usr/bin/env bash\nprintf "%s\\n" "${@: -1}" >> "$CURL_LOG"\n',
+        encoding="utf-8",
+    )
+    fake_curl.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "CURL_LOG": str(curl_log),
+        "BGPKB_ENV_FILE": str(env_file),
+        "BGPKB_HEALTH_ATTEMPTS": "1",
+        "BGPKB_HEALTH_INTERVAL_SECONDS": "0",
+    }
+
+    subprocess.run(
+        ["bash", str(REPOSITORY_ROOT / "scripts" / "check-service-health")],
+        check=True,
+        env=env,
+        text=True,
+        capture_output=True,
+    )
+
+    assert curl_log.read_text(encoding="utf-8").splitlines() == [
+        "http://frontend.example/index.html",
+        "http://fastapi.example/health",
+        "http://embedding.example/health",
+        "http://reranker.example/health",
+    ]
 
 
 def test_artifact_overlay_keeps_source_release_read_only_and_reverifies_it():

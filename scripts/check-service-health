@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+BGPKB_ENV_FILE="${BGPKB_ENV_FILE:-/etc/bgpkb/runtime.env}"
+if [[ ! -r "$BGPKB_ENV_FILE" ]]; then
+  printf '外部运行环境文件不存在或不可读：%s\n' "$BGPKB_ENV_FILE" >&2
+  exit 2
+fi
+set -a
+source "$BGPKB_ENV_FILE"
+set +a
+
 ATTEMPTS="${BGPKB_HEALTH_ATTEMPTS:-30}"
 INTERVAL="${BGPKB_HEALTH_INTERVAL_SECONDS:-2}"
 
