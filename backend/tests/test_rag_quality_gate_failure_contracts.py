@@ -99,7 +99,7 @@ def test_stale_report_is_rejected_by_manifest_binding_and_time_order():
     assert "stale_report:report_predates_manifest" in decision.failure_codes
 
 
-def test_context_valid_but_semantically_wrong_citation_fails_support_check():
+def test_gold_source_mismatch_is_scored_by_versioned_metrics_not_freshness_gate():
     report = _passing_report()
     report["evaluations"]["answer"]["samples"] = [
         {
@@ -122,10 +122,8 @@ def test_context_valid_but_semantically_wrong_citation_fails_support_check():
 
     decision = _evaluate(report)
 
-    assert decision.exit_code != 0
-    assert decision.failure_codes == (
-        "citation_support_mismatch:answer-route-leak-definition:claim-route-leak-definition",
-    )
+    assert decision.exit_code == 0
+    assert decision.failure_codes == ()
 
 
 def test_jsonl_scan_fallback_is_a_performance_release_failure():

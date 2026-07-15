@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 
+import pytest
+
 from test_publish_index_closure_v1 import _build_candidate
 
 
@@ -464,3 +466,75 @@ def test_release_evidence_exit_code_propagates_threshold_and_blocking_failures()
 
     evaluations["retrieval"] = {"status": "skipped_blocking", "hard_failure_count": 0}
     assert release_evidence_exit_code({"metrics": passing_metrics, "evaluations": evaluations}) == 1
+
+
+def test_existing_evidence_can_be_reused_only_with_exact_fresh_bindings():
+    from bgpkb.workflows.release_gate_evidence import validate_existing_evidence
+
+    evidence = {
+        "schema_version": "rag_release_gate_evidence_v1",
+        "candidate": {
+            "release_id": "release-a",
+            "manifest_hash": "sha256:" + "a" * 64,
+            "manifest_generated_at": "2026-07-15T08:00:00Z",
+            "code_commit": "b" * 40,
+        },
+        "report": {
+            "started_at": "2026-07-15T08:01:00Z",
+            "completed_at": "2026-07-15T08:02:00Z",
+        },
+        "models": MODELS,
+        "prompt_version": "grounded_answer_prompt_v1",
+        "evaluations": {
+            "retrieval": {"status": "passed", "hard_failure_count": 0},
+            "answer": {"status": "passed", "hard_failure_count": 0, "samples": []},
+            "performance": {
+                "status": "passed",
+                "hard_failure_count": 0,
+                "index_mode": "fast_numpy",
+                "degraded": False,
+            },
+        },
+        "metrics": {
+            "data": {
+                "schema_traceability_rate": 1.0,
+                "citation_id_validity_rate": 1.0,
+                "empty_retrieval_text_count": 0,
+                "short_eligible_chunk_count": 0,
+                "exact_duplicate_rate": 0.0,
+            },
+            "retrieval": {"recall_at_8": 0.83, "mrr": 0.62},
+            "answer": {
+                "claim_citation_coverage": 0.41,
+                "citation_precision": 0.63,
+                "hard_negative_rejection_rate": 1.0,
+                "injection_protection_rate": 0.75,
+            },
+            "performance": {
+                "retrieval_latency_p95_ms": 255.0,
+                "index_mode": "fast_numpy",
+                "degraded": False,
+            },
+        },
+    }
+
+    assert validate_existing_evidence(
+        evidence,
+        release_id="release-a",
+        manifest_hash="sha256:" + "a" * 64,
+        code_commit="b" * 40,
+        models=MODELS,
+        prompt_version="grounded_answer_prompt_v1",
+    ) is evidence
+
+    stale = json.loads(json.dumps(evidence))
+    stale["candidate"]["manifest_hash"] = "sha256:" + "c" * 64
+    with pytest.raises(ValueError, match="stale_report:manifest_hash_mismatch"):
+        validate_existing_evidence(
+            stale,
+            release_id="release-a",
+            manifest_hash="sha256:" + "a" * 64,
+            code_commit="b" * 40,
+            models=MODELS,
+            prompt_version="grounded_answer_prompt_v1",
+        )

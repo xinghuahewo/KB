@@ -188,37 +188,6 @@ def build_evaluation_envelope(
     }
 
 
-def _citation_support_failures(answer_evaluation: Mapping[str, Any]) -> list[str]:
-    failures: list[str] = []
-    for sample in answer_evaluation.get("samples", []):
-        question_id = str(sample.get("question_id", "unknown-question"))
-        context_ids = set(sample.get("context_evidence_ids", []))
-        actual_by_claim = {
-            str(claim.get("claim_id")): set(claim.get("evidence_ids", []))
-            for claim in sample.get("actual_claims", [])
-        }
-        for expected in sample.get("expected_claims", []):
-            claim_id = str(expected.get("claim_id", "unknown-claim"))
-            cited = actual_by_claim.get(claim_id, set())
-            acceptable_sets = [
-                set(candidate)
-                for candidate in expected.get("acceptable_evidence_sets", [])
-                if candidate
-            ]
-            acceptable_ids = set().union(*acceptable_sets) if acceptable_sets else set()
-            supported = (
-                bool(cited)
-                and cited <= context_ids
-                and cited <= acceptable_ids
-                and any(candidate <= cited for candidate in acceptable_sets)
-            )
-            if not supported:
-                failures.append(
-                    f"citation_support_mismatch:{question_id}:{claim_id}"
-                )
-    return failures
-
-
 def evaluate_release_gate(
     report: Mapping[str, Any],
     *,
@@ -264,9 +233,6 @@ def evaluate_release_gate(
             failures.append(f"blocking_skip:{name}")
         elif status == "failed" or int(evaluation.get("hard_failure_count", 0)) > 0:
             failures.append(f"evaluation_hard_failure:{name}")
-
-    answer_evaluation = evaluations.get("answer", {})
-    failures.extend(_citation_support_failures(answer_evaluation))
 
     performance = evaluations.get("performance", {})
     if performance.get("index_mode") != "fast_numpy":

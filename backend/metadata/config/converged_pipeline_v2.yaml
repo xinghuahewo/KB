@@ -171,6 +171,7 @@ stages:
         args:
           - --data-dir
           - "{data_dir}"
+          - --reuse-existing-report
           - --registry
           - "{backend_root}/metadata/sources/source_registry.yaml"
           - --release-id
@@ -261,6 +262,7 @@ stages:
         args:
           - --data-dir
           - "{data_dir}"
+          - --reuse-existing-report
       - id: verify-candidate-release
         module: bgpkb.pipeline.verify_candidate_release
         write_paths:

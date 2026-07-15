@@ -739,6 +739,35 @@ def release_evidence_exit_code(evidence: Mapping[str, object]) -> int:
     return 0 if decision["status"] == "passed" else 1
 
 
+def validate_existing_evidence(
+    evidence: dict[str, object],
+    *,
+    release_id: str,
+    manifest_hash: str,
+    code_commit: str,
+    models: Mapping[str, Mapping[str, str]],
+    prompt_version: str,
+) -> dict[str, object]:
+    """复核同一候选的完整真实评测证据，不重新调用模型。"""
+
+    from bgpkb.domain.rag_quality_gates import evaluate_release_gate
+
+    decision = evaluate_release_gate(
+        evidence,
+        expected_release_id=release_id,
+        expected_manifest_hash=manifest_hash,
+        expected_code_commit=code_commit,
+        expected_models=models,
+        expected_prompt_version=prompt_version,
+    )
+    failures = list(decision.failure_codes)
+    if release_evidence_exit_code(evidence) != 0:
+        failures.append("versioned_quality_thresholds_failed")
+    if failures:
+        raise ValueError(",".join(dict.fromkeys(failures)))
+    return evidence
+
+
 def http_requester(target_url: str, *, timeout_seconds: float = 120.0) -> RequestFn:
     base = target_url.rstrip("/")
 
@@ -816,12 +845,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--performance-report", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
+    parser.add_argument(
+        "--reuse-existing-report",
+        action="store_true",
+        help="只复核同一候选、代码和模型绑定的既有完整评测证据",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if not args.target_url:
+    if not args.target_url and not args.reuse_existing_report:
         raise SystemExit("缺少 --target-url 或 BGPKB_VERIFY_TARGET_URL")
     if not args.code_commit:
         raise SystemExit("缺少 --code-commit 或 BGPKB_CODE_COMMIT")
@@ -836,6 +870,37 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output or (
         args.data_dir / "published" / "rag_release_gate_evidence.json"
     )
+    if args.reuse_existing_report:
+        try:
+            manifest_path = args.data_dir / "published" / "publish_index_manifest_v1.json"
+            manifest = _load_json(manifest_path)
+            evidence = _load_json(output)
+            validate_existing_evidence(
+                evidence,
+                release_id=str(manifest.get("release_id", "")),
+                manifest_hash=_sha256(manifest_path),
+                code_commit=args.code_commit,
+                models=models,
+                prompt_version=args.prompt_version,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(json.dumps({
+                "output": str(output),
+                "status": "failed",
+                "exit_code": 1,
+                "reused_existing_report": True,
+                "reason": str(exc),
+            }, ensure_ascii=False, sort_keys=True))
+            return 1
+        print(json.dumps({
+            "output": str(output),
+            "release_id": evidence["candidate"]["release_id"],
+            "status": "passed",
+            "exit_code": 0,
+            "reused_existing_report": True,
+            "metrics": evidence["metrics"],
+        }, ensure_ascii=False, sort_keys=True))
+        return 0
     evidence = build_release_gate_evidence(
         data_dir=args.data_dir,
         code_commit=args.code_commit,
