@@ -46,4 +46,14 @@ def test_domain_query_expansions_cover_acronyms_and_corpus_level_concepts():
 
     assert "RFC6811" in rov
     assert {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} <= set(observability.split())
+    assert "RFC6811" not in observability
     assert {"YOUTUBE", "VERIZON", "FACEBOOK"} <= set(incidents.split())
+
+
+def test_ascii_acronym_expansion_requires_a_complete_query_token():
+    assert "RFC6811" not in retrieval_framework.normalize_query(
+        "Which sources provide global observability?"
+    )
+    assert "route origin authorization" not in retrieval_framework.normalize_query(
+        "What road policy applies here?"
+    )
