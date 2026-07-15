@@ -85,7 +85,7 @@ def _validate_snapshot(snapshot: dict) -> None:
         raise ValueError("source snapshot Schema 校验失败：" + "; ".join(error.message for error in errors))
 
 
-def _write_snapshot(store_root: Path, snapshot: dict) -> None:
+def _write_snapshot(store_root: Path, snapshot: dict) -> dict:
     _validate_snapshot(snapshot)
     path = Path(store_root) / "snapshots" / snapshot["source_id"] / f"{snapshot['snapshot_id']}.json"
     if path.exists():
@@ -93,8 +93,9 @@ def _write_snapshot(store_root: Path, snapshot: dict) -> None:
         identity_fields = ("snapshot_id", "source_id", "object_digest", "object_path", "byte_size")
         if any(existing.get(field) != snapshot.get(field) for field in identity_fields):
             raise RuntimeError(f"已有 snapshot 身份冲突：{path}")
-        return
+        return existing
     _atomic_json(path, snapshot)
+    return snapshot
 
 
 def _legacy_row(source, registry_version, legacy_root, store, store_root, acquired_at, dry_run):
@@ -132,7 +133,7 @@ def _legacy_row(source, registry_version, legacy_root, store, store_root, acquir
         acquisition_status="imported",
         http={"status_code": None, "etag": None, "last_modified": None},
     )
-    _write_snapshot(store_root, snapshot)
+    snapshot = _write_snapshot(store_root, snapshot)
     return {
         "source_id": source["source_id"], "status": "imported", "required": source["required"],
         "object_created": stored.created, "snapshot": snapshot,
@@ -217,7 +218,7 @@ def _http_row(source, registry_version, store, store_root, acquired_at, opener=u
         acquired_at=acquired_at, mime_type=metadata["mime_type"],
         acquisition_status="downloaded", http=metadata["http"],
     )
-    _write_snapshot(store_root, snapshot)
+    snapshot = _write_snapshot(store_root, snapshot)
     return {
         "source_id": source["source_id"], "status": "downloaded", "required": source["required"],
         "object_created": stored.created, "snapshot": snapshot,

@@ -184,6 +184,37 @@ def test_legacy_import_is_read_only_and_reuses_objects(tmp_path):
         assert (path.stat().st_mtime_ns, path.read_bytes()) == state
 
 
+def test_legacy_import_reuses_existing_immutable_snapshot_metadata(tmp_path):
+    raw = tmp_path / "legacy"
+    (raw / "standards").mkdir(parents=True)
+    (raw / "standards" / "rfc4271.txt").write_bytes(b"frozen RFC bytes")
+    registry = _registry(_source("rfc4271", "standards/rfc4271.txt"))
+    store_root = tmp_path / "store"
+
+    first = import_legacy_sources(
+        registry,
+        legacy_root=raw,
+        store_root=store_root,
+        acquired_at="2026-07-14T00:00:00Z",
+    )
+    second = import_legacy_sources(
+        registry,
+        legacy_root=raw,
+        store_root=store_root,
+        acquired_at="2026-07-15T00:00:00Z",
+    )
+
+    first_snapshot = first["sources"][0]["snapshot"]
+    second_snapshot = second["sources"][0]["snapshot"]
+    persisted = json.loads(
+        next((store_root / "snapshots" / "rfc4271").glob("snapshot_*.json"))
+        .read_text(encoding="utf-8")
+    )
+
+    assert second_snapshot == first_snapshot == persisted
+    assert second_snapshot["acquired_at"] == "2026-07-14T00:00:00Z"
+
+
 def test_source_ingest_isolates_failures_and_writes_atomic_terminal_manifest(tmp_path):
     raw = tmp_path / "legacy"
     (raw / "standards").mkdir(parents=True)
