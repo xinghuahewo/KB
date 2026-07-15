@@ -90,6 +90,9 @@ class DeepSeekClient:
                         "对象必须包含 schema_version、answer、claims、evidence_ids、confidence、"
                         "insufficient_evidence；每个 claim 必须包含 schema_version=grounded_claim_v1、"
                         "claim_type、text、evidence_ids、confidence。每个 factual claim 至少引用一个允许的 evidence_id。"
+                        "引用的 evidence 必须直接支持问题所询问的事实、关系或操作；"
+                        "仅有主题或关键词重叠不足以支持 claim。若证据没有直接回答问题，不得从常识补全，"
+                        "必须按证据不足处理。"
                         "证据不足时 answer、claims、evidence_ids 必须为空并设置 insufficient_evidence=true。"
                     ),
                 },

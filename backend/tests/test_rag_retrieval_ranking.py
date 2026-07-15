@@ -35,23 +35,20 @@ def test_chinese_route_leak_expansion_surfaces_route_leak_results():
     assert any("route" in item["content_preview"].lower() or "route" in item["title"].lower() for item in results)
 
 
-def test_domain_query_expansions_cover_acronyms_and_corpus_level_concepts():
-    rov = retrieval_framework.normalize_query("ROV 会把起源有效性分成哪些状态？")
+def test_query_expansions_do_not_inject_gold_source_names_for_broad_concepts():
     observability = retrieval_framework.normalize_query(
         "Which data sources jointly provide global BGP observability?"
     )
     incidents = retrieval_framework.normalize_query(
         "Which common operational risks are reflected by major routing incident cases?"
     )
-    mitigations = retrieval_framework.normalize_query(
-        "当前 BGP 安全缓解手段可分为哪些主要类别？"
+    research = retrieval_framework.normalize_query(
+        "近年来的 BGP 安全研究有哪些主要方向？"
     )
 
-    assert "RFC6811" in rov
-    assert {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} <= set(observability.split())
-    assert "RFC6811" not in observability
-    assert {"YOUTUBE", "VERIZON", "FACEBOOK"} <= set(incidents.split())
-    assert {"PRACTICAL", "PEERLOCK", "ARTEMIS"} <= set(mitigations.split())
+    assert not {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} & set(observability.split())
+    assert not {"YOUTUBE", "VERIZON", "FACEBOOK"} & set(incidents.split())
+    assert not {"BGP2VEC", "OSCILLOSCOPE", "BGPSHIELD"} & set(research.split())
 
 
 def test_ascii_acronym_expansion_requires_a_complete_query_token():

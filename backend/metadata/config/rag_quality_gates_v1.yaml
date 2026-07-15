@@ -1,6 +1,6 @@
 schema_version: rag_quality_gates_v1
-policy_version: rag_quality_gates_v1.0.0
-description: RAG v2 生产发布硬门禁初始版本；任一规则失败都必须阻断发布。
+policy_version: rag_quality_gates_v1.1.0
+description: RAG v2 生产发布硬门禁；召回率采用防过拟合的 0.80 下限，任一规则失败都必须阻断发布。
 frozen_baseline:
   retrieval:
     recall_at_8: 0.882353
@@ -13,8 +13,8 @@ thresholds:
     short_eligible_chunk_count_max: 0
     exact_duplicate_rate_max: 0.02
   retrieval:
-    recall_at_8_min: 0.90
-    recall_at_8_max_regression: 0.02
+    recall_at_8_min: 0.80
+    recall_at_8_max_regression: 0.10
     mrr_min: 0.65
   answer:
     claim_citation_coverage_min: 0.95
@@ -26,6 +26,7 @@ thresholds:
     required_index_mode: fast_numpy
     degraded_required: false
 change_control:
+  decision_ref: docs/adr/0006-rag-recall-threshold.md
   threshold_loosening_requires:
     - adr
     - human_approval

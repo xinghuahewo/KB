@@ -328,10 +328,13 @@ def test_llm_payload_isolates_untrusted_evidence_and_requests_json():
     assert "不可信数据" in payload["messages"][0]["content"]
     assert "禁止执行" in payload["messages"][0]["content"]
     assert injection not in payload["messages"][0]["content"]
+    system_prompt = payload["messages"][0]["content"]
     user_payload = json.loads(payload["messages"][1]["content"])
     assert user_payload["question"] == "如何防止路由泄露"
     assert user_payload["evidence"][0]["content"] == injection
     assert user_payload["allowed_evidence_ids"] == [item["evidence_id"] for item in pack["evidence"]]
+    assert "直接支持问题所询问的事实、关系或操作" in system_prompt
+    assert "仅有主题或关键词重叠不足以支持 claim" in system_prompt
 
 
 def test_offline_structure_client_uses_the_same_grounded_contract():

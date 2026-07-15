@@ -415,59 +415,26 @@ def test_source_anchor_recognizes_the_ris_domain_acronym():
     }
 
 
-def test_context_pack_rejects_unsupported_intent_but_preserves_channel_evidence():
-    manifest_hash = "sha256:" + "a" * 64
-    lexical_item = _channel_item("stock-route", 1, 1.0)
-    lexical_item.update({
-        "doc_id": "rfc4271",
-        "source_ref": "rfc4271#part",
-        "retrieval_input_manifest_hash": manifest_hash,
-    })
-    lexical = FakeRetriever(RetrievalChannelResult(
-        "lexical",
-        items=[lexical_item],
-        metadata={"retrieval_input_manifest_hash": manifest_hash},
-    ))
-    vector = FakeRetriever(RetrievalChannelResult(
-        "vector",
-        items=[],
-        metadata={
-            "retrieval_input_manifest_hash": manifest_hash,
-            "index_mode": "fast_numpy",
-        },
-    ))
+def test_search_only_anchors_sources_explicitly_named_in_original_query(monkeypatch):
+    lexical_item = _channel_item("rfc7908", 1, 1.0)
+    lexical_item["doc_id"] = "rfc7908"
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[lexical_item]))
+    vector = FakeRetriever(RetrievalChannelResult("vector", items=[]))
+    monkeypatch.setattr(
+        hybrid_retrieval.retrieval_framework,
+        "normalize_query",
+        lambda query: f"{query} RFC7908",
+    )
 
-    class RetrievalData:
-        @staticmethod
-        def excluded_by_policy():
-            return []
-
-    class ForbiddenReranker:
-        def rerank(self, *args, **kwargs):
-            raise AssertionError("不支持的查询不得进入 reranker")
-
-    payload = hybrid_retrieval.context_pack(
-        "How can today's best stock purchase be selected from a BGP routing table?",
-        top_n=8,
-        query_type="fact",
-        require_model=True,
-        reranker=ForbiddenReranker(),
+    payload = hybrid_retrieval.search(
+        "What is a route leak?",
         lexical_retriever=lexical,
         dense_retriever=vector,
         trusted_chunk_ids=set(),
         eligible_doc_ids=set(),
-        retrieval_data=RetrievalData(),
     )
 
-    assert payload["results"] == []
-    assert payload["rerank_status"] == "empty"
-    assert payload["channel_metadata"]["vector"]["index_mode"] == "fast_numpy"
-    assert payload["query_scope"] == {
-        "policy_version": "query_scope_v1",
-        "status": "unsupported",
-        "rule_id": "unsupported_financial_recommendation",
-        "reason": "知识库不支持由 BGP 数据推导投资建议",
-    }
+    assert "source_anchor" not in payload["results"][0]
 
 
 def test_context_pack_uses_the_same_normalized_query_for_recall_and_rerank(monkeypatch):

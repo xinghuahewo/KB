@@ -30,7 +30,7 @@ def test_release_checker_recomputes_versioned_quality_thresholds():
             "short_eligible_chunk_count": 0,
             "exact_duplicate_rate": 0.0,
         },
-        "retrieval": {"recall_at_8": 0.90, "mrr": 0.65},
+        "retrieval": {"recall_at_8": 0.80, "mrr": 0.65},
         "answer": {
             "claim_citation_coverage": 0.95,
             "citation_precision": 0.95,
@@ -50,9 +50,9 @@ def test_release_checker_recomputes_versioned_quality_thresholds():
 
     quality = next(item for item in checks if item["name"] == "rag_quality_thresholds")
     assert quality["status"] == "pass"
-    assert "rag_quality_gates_v1.0.0" in quality["detail"]
+    assert "rag_quality_gates_v1.1.0" in quality["detail"]
 
-    passing_metrics["retrieval"]["recall_at_8"] = 0.89
+    passing_metrics["retrieval"]["recall_at_8"] = 0.79
     failed = check_release_readiness.release_quality_checks(
         ownership_status={"status": "ready"},
         evaluation_evidence={"status": "passed", "metrics": passing_metrics},

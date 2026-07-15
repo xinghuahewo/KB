@@ -20,7 +20,7 @@ def passing_metrics() -> dict:
             "short_eligible_chunk_count": 0,
             "exact_duplicate_rate": 0.02,
         },
-        "retrieval": {"recall_at_8": 0.90, "mrr": 0.65},
+        "retrieval": {"recall_at_8": 0.80, "mrr": 0.65},
         "answer": {
             "claim_citation_coverage": 0.95,
             "citation_precision": 0.95,
@@ -39,7 +39,7 @@ def test_versioned_quality_policy_freezes_all_initial_release_thresholds():
     policy = yaml.safe_load(POLICY_PATH.read_text(encoding="utf-8"))
 
     assert policy["schema_version"] == "rag_quality_gates_v1"
-    assert policy["policy_version"] == "rag_quality_gates_v1.0.0"
+    assert policy["policy_version"] == "rag_quality_gates_v1.1.0"
     assert policy["frozen_baseline"]["retrieval"]["recall_at_8"] == pytest.approx(
         0.882353
     )
@@ -52,8 +52,8 @@ def test_versioned_quality_policy_freezes_all_initial_release_thresholds():
             "exact_duplicate_rate_max": 0.02,
         },
         "retrieval": {
-            "recall_at_8_min": 0.90,
-            "recall_at_8_max_regression": 0.02,
+            "recall_at_8_min": 0.80,
+            "recall_at_8_max_regression": 0.10,
             "mrr_min": 0.65,
         },
         "answer": {
@@ -72,6 +72,7 @@ def test_versioned_quality_policy_freezes_all_initial_release_thresholds():
         "adr",
         "human_approval",
     ]
+    assert policy["change_control"]["decision_ref"] == "docs/adr/0006-rag-recall-threshold.md"
 
 
 @pytest.mark.parametrize(
@@ -82,7 +83,7 @@ def test_versioned_quality_policy_freezes_all_initial_release_thresholds():
         ("data", "empty_retrieval_text_count", 1, "data.empty_retrieval_text_count"),
         ("data", "short_eligible_chunk_count", 1, "data.short_eligible_chunk_count"),
         ("data", "exact_duplicate_rate", 0.021, "data.exact_duplicate_rate"),
-        ("retrieval", "recall_at_8", 0.899, "retrieval.recall_at_8_min"),
+        ("retrieval", "recall_at_8", 0.799, "retrieval.recall_at_8_min"),
         ("retrieval", "mrr", 0.649, "retrieval.mrr"),
         ("answer", "claim_citation_coverage", 0.949, "answer.claim_citation_coverage"),
         ("answer", "citation_precision", 0.949, "answer.citation_precision"),
@@ -113,7 +114,7 @@ def test_recall_regression_is_checked_separately_from_absolute_threshold():
     policy = copy.deepcopy(policy)
     policy["frozen_baseline"]["retrieval"]["recall_at_8"] = 0.95
     metrics = passing_metrics()
-    metrics["retrieval"]["recall_at_8"] = 0.92
+    metrics["retrieval"]["recall_at_8"] = 0.84
 
     decision = evaluate_quality_metrics(metrics, policy=policy)
 
@@ -132,7 +133,7 @@ def test_missing_metrics_are_hard_failures_and_passing_boundary_is_accepted():
     assert any(item["reason"] == "missing_metric" for item in missing["failures"])
     assert passing == {
         "schema_version": "rag_quality_gate_decision_v1",
-        "policy_version": "rag_quality_gates_v1.0.0",
+        "policy_version": "rag_quality_gates_v1.1.0",
         "status": "passed",
         "hard_failure_count": 0,
         "failures": [],

@@ -441,7 +441,7 @@ def test_release_evidence_exit_code_propagates_threshold_and_blocking_failures()
             "short_eligible_chunk_count": 0,
             "exact_duplicate_rate": 0.0,
         },
-        "retrieval": {"recall_at_8": 0.91, "mrr": 0.70},
+        "retrieval": {"recall_at_8": 0.81, "mrr": 0.70},
         "answer": {
             "claim_citation_coverage": 0.96,
             "citation_precision": 0.96,
@@ -459,7 +459,7 @@ def test_release_evidence_exit_code_propagates_threshold_and_blocking_failures()
     assert release_evidence_exit_code({"metrics": passing_metrics, "evaluations": evaluations}) == 0
 
     failing_metrics = json.loads(json.dumps(passing_metrics))
-    failing_metrics["retrieval"]["recall_at_8"] = 0.89
+    failing_metrics["retrieval"]["recall_at_8"] = 0.79
     assert release_evidence_exit_code({"metrics": failing_metrics, "evaluations": evaluations}) == 1
 
     evaluations["retrieval"] = {"status": "skipped_blocking", "hard_failure_count": 0}

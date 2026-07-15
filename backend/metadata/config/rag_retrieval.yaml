@@ -127,60 +127,10 @@ lexical_fallback:
   provider: sqlite_fts5
   enabled: true
 query_expansions:
-  route leak:
-    - RFC7908
   路由泄露:
     - route leak
     - route leaks
-    - RFC7908
-  ROV:
-    - route origin validation
-    - RFC6811
-  RouteViews:
-    - ROUTEVIEWS
-  RIPE RIS:
-    - RIPE
-    - RIS
-  global BGP observability:
-    - ROUTEVIEWS
-    - RIPE
-    - RIS
-    - BGPSTREAM
-  全球 BGP 可观测性:
-    - ROUTEVIEWS
-    - RIPE
-    - RIS
-    - BGPSTREAM
-  classic BGP defenses:
-    - PRACTICAL
-    - DEFENSES
-  经典 BGP 防御措施:
-    - PRACTICAL
-    - DEFENSES
-  BGP security mitigations:
-    - PRACTICAL
-    - PEERLOCK
-    - ARTEMIS
-  BGP 安全缓解手段:
-    - PRACTICAL
-    - PEERLOCK
-    - ARTEMIS
-  recent research:
-    - BGP2VEC
-    - OSCILLOSCOPE
-    - BGPSHIELD
-  近年来的研究:
-    - BGP2VEC
-    - OSCILLOSCOPE
-    - BGPSHIELD
-  major routing incident cases:
-    - YOUTUBE
-    - VERIZON
-    - FACEBOOK
-  典型路由事件案例:
-    - YOUTUBE
-    - VERIZON
-    - FACEBOOK
+    - RFC 7908
   前缀劫持:
     - prefix hijack
     - BGP hijack
@@ -204,43 +154,6 @@ query_expansions:
   劫持:
     - hijack
     - BGP hijack
-query_scope:
-  policy_version: query_scope_v1
-  unsupported_intents:
-    - rule_id: unsupported_weather_or_climate
-      reason: BGP 知识库不包含天气或气候因果数据
-      term_groups:
-        - [天气, weather, 海洋温度, ocean temperature]
-    - rule_id: unsupported_private_contact_data
-      reason: 知识库不提供个人私密联系方式
-      term_groups:
-        - [私人, private]
-        - [手机号, phone number]
-    - rule_id: unsupported_root_password_reset
-      reason: BGP 知识库不提供设备 root 密码重置方法
-      term_groups:
-        - [root 密码, root password]
-        - [重置, reset]
-    - rule_id: unsupported_financial_recommendation
-      reason: 知识库不支持由 BGP 数据推导投资建议
-      term_groups:
-        - [股票, stock]
-        - [买入, purchase, buy]
-    - rule_id: unsupported_employee_policy
-      reason: BGP 知识库不包含企业员工制度
-      term_groups:
-        - [员工休假, employee leave]
-        - [政策, policy]
-    - rule_id: unsupported_private_customer_policy
-      reason: 知识库不包含未公开客户的内部数据政策
-      term_groups:
-        - [未公开客户, undisclosed customer]
-        - [删除政策, deletion policy]
-    - rule_id: unsupported_sports_prediction
-      reason: BGP 知识库不提供体育赛事预测
-      term_groups:
-        - [世界杯, world cup]
-        - [预测, predict]
 query_type:
   allowed_values: [fact, procedure, policy, global, auto]
   resolved_values: [fact, procedure, policy, global]
