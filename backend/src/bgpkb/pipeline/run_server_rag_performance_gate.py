@@ -202,6 +202,88 @@ def evaluate_samples(samples: list[dict], *, retrieval_p95_max_ms: float) -> dic
     }
 
 
+def validate_existing_report(
+    report: dict,
+    *,
+    candidate_release_id: str,
+    candidate_manifest_hash: str,
+    questions: list[dict],
+    concurrency: int,
+    retrieval_p95_max_ms: float,
+) -> dict:
+    """复核同一候选的既有性能报告，不重新发送在线请求。"""
+
+    failures: list[dict] = []
+    expected_question_ids = [str(question["question_id"]) for question in questions]
+    samples = report.get("samples")
+    actual_question_ids = (
+        [str(sample.get("question_id", "")) for sample in samples]
+        if isinstance(samples, list)
+        else []
+    )
+    expected_workload = {
+        "question_set_version": questions[0]["dataset_version"],
+        "question_count": len(questions),
+        "concurrency": concurrency,
+    }
+    checks = (
+        (
+            "performance.report_schema",
+            report.get("schema_version"),
+            "rag_server_performance_report_v1",
+        ),
+        (
+            "performance.report_candidate_release",
+            report.get("candidate", {}).get("release_id"),
+            candidate_release_id,
+        ),
+        (
+            "performance.report_candidate_manifest",
+            report.get("candidate", {}).get("manifest_hash"),
+            candidate_manifest_hash,
+        ),
+        ("performance.report_workload", report.get("workload"), expected_workload),
+        (
+            "performance.report_sample_closure",
+            sorted(actual_question_ids),
+            sorted(expected_question_ids),
+        ),
+    )
+    for rule_id, actual, expected in checks:
+        if actual != expected:
+            failures.append({"rule_id": rule_id, "actual": actual, "expected": expected})
+
+    recomputed = evaluate_samples(
+        samples if isinstance(samples, list) else [],
+        retrieval_p95_max_ms=retrieval_p95_max_ms,
+    )
+    recorded_decision = {
+        "status": report.get("status"),
+        "hard_failure_count": report.get("hard_failure_count"),
+        "failures": report.get("failures"),
+        "metrics": report.get("metrics"),
+    }
+    expected_decision = {
+        key: recomputed[key]
+        for key in ("status", "hard_failure_count", "failures", "metrics")
+    }
+    if recorded_decision != expected_decision:
+        failures.append({
+            "rule_id": "performance.report_decision_integrity",
+            "actual": recorded_decision,
+            "expected": expected_decision,
+        })
+    failures.extend(recomputed["failures"])
+    return {
+        "status": "failed" if failures else "passed",
+        "exit_code": 1 if failures else 0,
+        "hard_failure_count": len(failures),
+        "failures": failures,
+        "metrics": recomputed["metrics"],
+        "reused_existing_report": True,
+    }
+
+
 def build_report(
     *,
     samples: list[dict],
@@ -264,9 +346,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--concurrency", type=int, default=workload["concurrency"])
     parser.add_argument("--timeout-seconds", type=float, default=60)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--reuse-existing-report",
+        action="store_true",
+        help="仅复核同一候选的既有完整性能报告，不重新运行工作负载。",
+    )
     args = parser.parse_args(argv)
 
-    if not args.target_url:
+    if not args.target_url and not args.reuse_existing_report:
         parser.error("缺少 --target-url 或 BGPKB_VERIFY_TARGET_URL")
     candidate_release_id, candidate_manifest_hash = resolve_candidate_identity(
         args.data_dir,
@@ -278,6 +365,34 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     questions = load_questions(args.questions)
+    if args.reuse_existing_report:
+        if not output.is_file():
+            decision = {
+                "status": "failed",
+                "exit_code": 1,
+                "hard_failure_count": 1,
+                "failures": [{
+                    "rule_id": "performance.report_missing",
+                    "actual": str(output),
+                    "expected": "existing report",
+                }],
+                "metrics": {},
+                "reused_existing_report": True,
+            }
+        else:
+            decision = validate_existing_report(
+                json.loads(output.read_text(encoding="utf-8")),
+                candidate_release_id=candidate_release_id,
+                candidate_manifest_hash=candidate_manifest_hash,
+                questions=questions,
+                concurrency=args.concurrency,
+                retrieval_p95_max_ms=policy["thresholds"]["performance"][
+                    "retrieval_latency_p95_ms_max"
+                ],
+            )
+        print(json.dumps({"output": str(output), **decision}, ensure_ascii=False, sort_keys=True))
+        return decision["exit_code"]
+
     started_at = _utc_now()
     samples = run_workload(
         questions,

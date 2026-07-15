@@ -240,6 +240,7 @@ stages:
         args:
           - --data-dir
           - "{data_dir}"
+          - --reuse-existing-report
       - id: build-release-gate-evidence
         module: bgpkb.pipeline.build_release_gate_evidence
         code_dependencies:

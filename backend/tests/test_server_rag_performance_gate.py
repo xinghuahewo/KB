@@ -163,3 +163,141 @@ def test_performance_cli_derives_candidate_identity_from_publish_manifest(tmp_pa
 
     assert release_id == "candidate-a"
     assert manifest_hash == "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+
+def test_existing_performance_report_can_be_reused_without_running_workload(
+    tmp_path, monkeypatch
+):
+    from bgpkb.pipeline import run_server_rag_performance_gate as gate
+
+    data_dir = tmp_path / "candidate-a" / "data"
+    published = data_dir / "published"
+    published.mkdir(parents=True)
+    manifest = published / "publish_index_manifest_v1.json"
+    manifest.write_text(json.dumps({"release_id": "candidate-a"}) + "\n", encoding="utf-8")
+    manifest_hash = "sha256:" + hashlib.sha256(manifest.read_bytes()).hexdigest()
+    questions = tmp_path / "questions.jsonl"
+    questions.write_text(
+        json.dumps(
+            {
+                "question_id": "q-1",
+                "query": "什么是 BGP？",
+                "query_type": "fact",
+                "dataset_version": "retrieval_gold_test_v1",
+            },
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = gate.build_report(
+        samples=[
+            {
+                "question_id": "q-1",
+                "query_type": "fact",
+                "ok": True,
+                "dense_search_latency_ms": 4,
+                "retrieval_latency_ms": 80,
+                "answer_latency_ms": 7000,
+                "index_mode": "fast_numpy",
+                "degraded": False,
+                "answer_status": "answered",
+            }
+        ],
+        decision=gate.evaluate_samples([], retrieval_p95_max_ms=500)
+        | {
+            "status": "passed",
+            "exit_code": 0,
+            "hard_failure_count": 0,
+            "failures": [],
+            "metrics": gate.summarize_samples(
+                [
+                    {
+                        "question_id": "q-1",
+                        "ok": True,
+                        "dense_search_latency_ms": 4,
+                        "retrieval_latency_ms": 80,
+                        "answer_latency_ms": 7000,
+                        "index_mode": "fast_numpy",
+                        "degraded": False,
+                    }
+                ]
+            ),
+        },
+        target_url="http://127.0.0.1:39282",
+        candidate_release_id="candidate-a",
+        candidate_manifest_hash=manifest_hash,
+        question_set_version="retrieval_gold_test_v1",
+        concurrency=4,
+        started_at="2026-07-15T08:00:00Z",
+        completed_at="2026-07-15T08:01:00Z",
+    )
+    output = published / "rag_server_performance_report_v1.json"
+    gate.write_report(output, report)
+
+    monkeypatch.setattr(
+        gate,
+        "run_workload",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("复用已有报告时不得运行网络工作负载")
+        ),
+    )
+
+    exit_code = gate.main(
+        [
+            "--target-url",
+            "http://127.0.0.1:39282",
+            "--data-dir",
+            str(data_dir),
+            "--questions",
+            str(questions),
+            "--output",
+            str(output),
+            "--reuse-existing-report",
+        ]
+    )
+
+    assert exit_code == 0
+
+
+def test_existing_performance_report_reuse_fails_closed_on_sample_mismatch(tmp_path):
+    from bgpkb.pipeline.run_server_rag_performance_gate import (
+        validate_existing_report,
+    )
+
+    report = {
+        "schema_version": "rag_server_performance_report_v1",
+        "candidate": {
+            "release_id": "candidate-a",
+            "manifest_hash": "sha256:" + "a" * 64,
+        },
+        "workload": {
+            "question_set_version": "retrieval_gold_test_v1",
+            "question_count": 1,
+            "concurrency": 4,
+        },
+        "status": "passed",
+        "hard_failure_count": 0,
+        "failures": [],
+        "metrics": {},
+        "samples": [],
+    }
+
+    decision = validate_existing_report(
+        report,
+        candidate_release_id="candidate-a",
+        candidate_manifest_hash="sha256:" + "a" * 64,
+        questions=[
+            {
+                "question_id": "q-1",
+                "dataset_version": "retrieval_gold_test_v1",
+            }
+        ],
+        concurrency=4,
+        retrieval_p95_max_ms=500,
+    )
+
+    assert decision["status"] == "failed"
+    assert "performance.report_sample_closure" in {
+        item["rule_id"] for item in decision["failures"]
+    }

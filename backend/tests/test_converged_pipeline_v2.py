@@ -495,6 +495,13 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
     assert importlib.util.find_spec("bgpkb.pipeline.run_pipeline") is not None
     assert importlib.util.find_spec("bgpkb.pipeline.build_fast_vector_index") is not None
 
+    performance_subtask = next(
+        subtask
+        for subtask in definition.stages["verify-release"].subtasks
+        if subtask.subtask_id == "evaluate-server-performance"
+    )
+    assert "--reuse-existing-report" in performance_subtask.args
+
     candidate_dir = tmp_path / "candidate"
     calls: list[tuple[str, str]] = []
     _run(candidate_dir, target_stage="source-ingest", calls=calls)
