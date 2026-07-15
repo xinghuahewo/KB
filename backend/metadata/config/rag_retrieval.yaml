@@ -157,6 +157,14 @@ query_expansions:
   经典 BGP 防御措施:
     - PRACTICAL
     - DEFENSES
+  BGP security mitigations:
+    - PRACTICAL
+    - PEERLOCK
+    - ARTEMIS
+  BGP 安全缓解手段:
+    - PRACTICAL
+    - PEERLOCK
+    - ARTEMIS
   recent research:
     - BGP2VEC
     - OSCILLOSCOPE

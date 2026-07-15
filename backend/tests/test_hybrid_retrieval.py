@@ -375,7 +375,44 @@ def test_rrf_candidate_pool_caps_each_logical_source_before_global_limit():
     )
 
     assert [item["doc_id"] for item in fused].count("dominant-source") == 2
-    assert any(item["doc_id"] == "independent-source" for item in fused)
+    assert fused[1]["doc_id"] == "independent-source"
+
+
+def test_rrf_preserves_named_source_anchor_before_the_global_candidate_limit():
+    lexical_items = []
+    for index in range(25):
+        item = _channel_item(f"generic-{index:02}", index + 1, 1.0)
+        item.update({
+            "doc_id": f"generic-source-{index:02}",
+            "source_ref": f"generic-source-{index:02}#part",
+        })
+        lexical_items.append(item)
+    anchor = _channel_item("rfc7908-definition", 26, 0.1)
+    anchor.update({"doc_id": "rfc7908", "source_ref": "rfc7908#definition"})
+    lexical_items.append(anchor)
+
+    fused = hybrid_retrieval._rrf_channel_results(
+        RetrievalChannelResult("lexical", items=lexical_items),
+        RetrievalChannelResult("vector", items=[]),
+        query="What is a BGP route leak? RFC7908",
+        limit=20,
+    )
+
+    anchored = next(item for item in fused if item["doc_id"] == "rfc7908")
+    assert anchored["source_anchor"] == {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": ["rfc7908"],
+    }
+
+
+def test_source_anchor_recognizes_the_ris_domain_acronym():
+    assert hybrid_retrieval._source_anchor(
+        "How can RouteViews and RIS be cross-checked?",
+        {"doc_id": "ripe_ris_docs"},
+    ) == {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": ["ris"],
+    }
 
 
 def test_context_pack_rejects_unsupported_intent_but_preserves_channel_evidence():

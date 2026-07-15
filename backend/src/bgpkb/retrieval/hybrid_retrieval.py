@@ -4,6 +4,7 @@ from collections import Counter
 import hashlib
 import math
 from pathlib import Path
+import re
 import time
 
 from bgpkb import paths
@@ -291,6 +292,59 @@ def _source_identity(item):
     return source_ref.split("#", 1)[0]
 
 
+_SOURCE_ANCHOR_STOPWORDS = {
+    "actions",
+    "api",
+    "archive",
+    "bgp",
+    "data",
+    "doc",
+    "docs",
+    "framework",
+    "global",
+    "index",
+    "outage",
+    "paper",
+    "raw",
+    "review",
+    "route",
+    "routes",
+    "routing",
+    "source",
+}
+
+
+def _source_anchor_terms(item):
+    identity = str(item.get("doc_id") or item.get("source_id") or "").casefold()
+    return sorted({
+        token
+        for token in re.findall(r"[a-z0-9]+", identity)
+        if (
+            (len(token) >= 4 or token in {"ris"} or re.fullmatch(r"rfc\d+", token))
+            and not token.isdigit()
+            and token not in _SOURCE_ANCHOR_STOPWORDS
+        )
+    })
+
+
+def _source_anchor(query, item):
+    text = str(query).casefold()
+    matched = [
+        term
+        for term in _source_anchor_terms(item)
+        if re.search(
+            rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+            text,
+        )
+    ]
+    if not matched:
+        return None
+    return {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": matched,
+    }
+
+
 def suppress_retrieval_duplicates(
     candidates,
     *,
@@ -416,8 +470,26 @@ def rerank_candidates(
         item["rerank_score"] = float(score)
         indexed.append(item)
     indexed.sort(key=lambda item: (-item["rerank_score"], item["_original_rrf_rank"], item.get("chunk_id", "")))
+    indexed_by_chunk = {item.get("chunk_id"): item for item in indexed}
+    anchored = []
+    anchored_chunk_ids = set()
+    for pool_item in pool:
+        anchor = pool_item.get("source_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        chunk_id = pool_item.get("chunk_id")
+        item = indexed_by_chunk.get(chunk_id, dict(pool_item))
+        item["ranking_rule_id"] = anchor.get("rule_id")
+        if chunk_id not in indexed_by_chunk:
+            item["rerank_score"] = None
+        anchored.append(item)
+        anchored_chunk_ids.add(chunk_id)
+    combined = [
+        *anchored,
+        *(item for item in indexed if item.get("chunk_id") not in anchored_chunk_ids),
+    ]
     indexed, cap_diagnostics = suppress_retrieval_duplicates(
-        indexed,
+        combined,
         suppress_exact=False,
     )
     suppression_diagnostics.extend(cap_diagnostics)
@@ -425,7 +497,8 @@ def rerank_candidates(
     for rank, item in enumerate(indexed[:requested_top_n], start=1):
         item.pop("_original_rrf_rank", None)
         item["rerank_rank"] = rank
-        item["score"] = item["rerank_score"]
+        if item.get("rerank_score") is not None:
+            item["score"] = item["rerank_score"]
         results.append(item)
     return {
         "results": results,
@@ -461,7 +534,7 @@ def _best_channel_items(result):
     return best
 
 
-def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
+def _rrf_channel_results(lexical_result, vector_result, query="", limit=20, rrf_k=60):
     fused = {}
     for result in (lexical_result, vector_result):
         for chunk_id, item in _best_channel_items(result).items():
@@ -481,16 +554,36 @@ def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
         item["fusion_score"] = item["rrf_score"]
         item["retrieval_method"] = "hybrid_rrf"
     items.sort(key=lambda item: (-item["rrf_score"], item["chunk_id"]))
+    if query:
+        for item in items:
+            anchor = _source_anchor(query, item)
+            if anchor:
+                item["source_anchor"] = anchor
+        items = [
+            *[item for item in items if item.get("source_anchor")],
+            *[item for item in items if not item.get("source_anchor")],
+        ]
     selected = []
+    deferred = []
     source_counts = Counter()
     for item in items:
         source_id = _source_identity(item) or str(item.get("chunk_id", ""))
-        if source_counts[source_id] >= 2:
+        if source_counts[source_id] >= 1:
+            deferred.append(item)
             continue
         selected.append(item)
         source_counts[source_id] += 1
         if len(selected) >= limit:
             break
+    if len(selected) < limit:
+        for item in deferred:
+            source_id = _source_identity(item) or str(item.get("chunk_id", ""))
+            if source_counts[source_id] >= 2:
+                continue
+            selected.append(item)
+            source_counts[source_id] += 1
+            if len(selected) >= limit:
+                break
     return selected
 
 
@@ -591,7 +684,13 @@ def search(
     technical_channels = [result for result in channel_results.values() if not result.metadata.get("disabled")]
     if technical_channels and all(result.error is not None for result in technical_channels):
         raise RetrievalUnavailable(channel_errors)
-    results = _rrf_channel_results(lexical, vector, limit=limit, rrf_k=60)
+    results = _rrf_channel_results(
+        lexical,
+        vector,
+        query=normalized,
+        limit=limit,
+        rrf_k=60,
+    )
     channel_status = {
         channel: (
             "disabled" if result.metadata.get("disabled") else

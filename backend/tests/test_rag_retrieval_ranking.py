@@ -43,11 +43,15 @@ def test_domain_query_expansions_cover_acronyms_and_corpus_level_concepts():
     incidents = retrieval_framework.normalize_query(
         "Which common operational risks are reflected by major routing incident cases?"
     )
+    mitigations = retrieval_framework.normalize_query(
+        "当前 BGP 安全缓解手段可分为哪些主要类别？"
+    )
 
     assert "RFC6811" in rov
     assert {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} <= set(observability.split())
     assert "RFC6811" not in observability
     assert {"YOUTUBE", "VERIZON", "FACEBOOK"} <= set(incidents.split())
+    assert {"PRACTICAL", "PEERLOCK", "ARTEMIS"} <= set(mitigations.split())
 
 
 def test_ascii_acronym_expansion_requires_a_complete_query_token():

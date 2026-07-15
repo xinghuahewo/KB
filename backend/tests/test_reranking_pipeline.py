@@ -201,3 +201,33 @@ def test_per_document_cap_is_applied_after_reranker_ordering():
         "rule_id": "per_document_candidate_cap_v1",
         "limit": 2,
     }]
+
+
+def test_reranker_preserves_named_source_anchor_outside_model_top_n():
+    candidates = [_candidate(f"generic-{index}", 1.0 - index / 100) for index in range(8)]
+    anchor = _candidate("rfc7908-anchor", 0.1)
+    anchor.update({
+        "doc_id": "rfc7908",
+        "source_ref": "rfc7908#definition",
+        "source_anchor": {
+            "rule_id": "exact_named_source_preservation_v1",
+            "matched_terms": ["rfc7908"],
+        },
+    })
+    candidates.append(anchor)
+    reranker = FakeReranker([
+        {"index": index, "relevance_score": 0.99 - index / 100}
+        for index in range(5)
+    ])
+
+    payload = hybrid_retrieval.rerank_candidates(
+        "What is a BGP route leak? RFC7908",
+        candidates,
+        top_n=5,
+        reranker=reranker,
+    )
+
+    assert payload["results"][0]["chunk_id"] == "rfc7908-anchor"
+    assert payload["results"][0]["rerank_score"] is None
+    assert payload["results"][0]["ranking_rule_id"] == "exact_named_source_preservation_v1"
+    assert len(payload["results"]) == 5
