@@ -353,6 +353,81 @@ def test_rrf_is_capped_at_twenty_and_ties_are_stable():
     assert payload["channel_status"]["vector"] == "empty"
 
 
+def test_rrf_candidate_pool_caps_each_logical_source_before_global_limit():
+    lexical_items = []
+    for index in range(25):
+        item = _channel_item(f"dominant-{index:02}", index + 1, 1.0)
+        item.update({"doc_id": "dominant-source", "source_ref": "dominant-source#part"})
+        lexical_items.append(item)
+    tail = _channel_item("independent", 26, 0.1)
+    tail.update({"doc_id": "independent-source", "source_ref": "independent-source#part"})
+    lexical_items.append(tail)
+
+    fused = hybrid_retrieval._rrf_channel_results(
+        RetrievalChannelResult("lexical", items=lexical_items),
+        RetrievalChannelResult("vector", items=[]),
+        limit=20,
+    )
+
+    assert [item["doc_id"] for item in fused].count("dominant-source") == 2
+    assert any(item["doc_id"] == "independent-source" for item in fused)
+
+
+def test_context_pack_rejects_unsupported_intent_but_preserves_channel_evidence():
+    manifest_hash = "sha256:" + "a" * 64
+    lexical_item = _channel_item("stock-route", 1, 1.0)
+    lexical_item.update({
+        "doc_id": "rfc4271",
+        "source_ref": "rfc4271#part",
+        "retrieval_input_manifest_hash": manifest_hash,
+    })
+    lexical = FakeRetriever(RetrievalChannelResult(
+        "lexical",
+        items=[lexical_item],
+        metadata={"retrieval_input_manifest_hash": manifest_hash},
+    ))
+    vector = FakeRetriever(RetrievalChannelResult(
+        "vector",
+        items=[],
+        metadata={
+            "retrieval_input_manifest_hash": manifest_hash,
+            "index_mode": "fast_numpy",
+        },
+    ))
+
+    class RetrievalData:
+        @staticmethod
+        def excluded_by_policy():
+            return []
+
+    class ForbiddenReranker:
+        def rerank(self, *args, **kwargs):
+            raise AssertionError("不支持的查询不得进入 reranker")
+
+    payload = hybrid_retrieval.context_pack(
+        "How can today's best stock purchase be selected from a BGP routing table?",
+        top_n=8,
+        query_type="fact",
+        require_model=True,
+        reranker=ForbiddenReranker(),
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
+        retrieval_data=RetrievalData(),
+    )
+
+    assert payload["results"] == []
+    assert payload["rerank_status"] == "empty"
+    assert payload["channel_metadata"]["vector"]["index_mode"] == "fast_numpy"
+    assert payload["query_scope"] == {
+        "policy_version": "query_scope_v1",
+        "status": "unsupported",
+        "rule_id": "unsupported_financial_recommendation",
+        "reason": "知识库不支持由 BGP 数据推导投资建议",
+    }
+
+
 def test_single_failure_degrades_and_double_failure_raises():
     failed_lexical = FakeRetriever(RetrievalChannelResult(
         "lexical", error={"code": "bm25_unavailable", "message": "broken"},

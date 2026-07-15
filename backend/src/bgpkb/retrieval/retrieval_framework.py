@@ -70,6 +70,32 @@ def normalize_query(query):
     return " ".join(dict.fromkeys(term for term in terms if term)).strip()
 
 
+def assess_query_scope(query):
+    """按版本化、可审计规则判定查询是否属于知识库可回答范围。"""
+    policy = config().get("query_scope", {})
+    policy_version = str(policy.get("policy_version", "query_scope_v1"))
+    text = str(query).casefold()
+    for rule in policy.get("unsupported_intents", []):
+        groups = rule.get("term_groups", [])
+        if groups and all(
+            any(str(term).casefold() in text for term in group)
+            for group in groups
+            if isinstance(group, list) and group
+        ):
+            return {
+                "policy_version": policy_version,
+                "status": "unsupported",
+                "rule_id": str(rule["rule_id"]),
+                "reason": str(rule["reason"]),
+            }
+    return {
+        "policy_version": policy_version,
+        "status": "supported",
+        "rule_id": "supported_bgp_knowledge_query",
+        "reason": "查询属于 BGP 知识库可检索范围",
+    }
+
+
 def token_set(text):
     return {part.lower() for part in text.replace("/", " ").replace("_", " ").replace("-", " ").split() if part}
 

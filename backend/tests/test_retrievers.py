@@ -12,7 +12,12 @@ from bgpkb.infrastructure.fast_vector_index import (
     load_cached_fast_vector_index,
     verify_fast_vector_artifacts,
 )
-from bgpkb.retrieval.retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
+from bgpkb.retrieval.retrievers import (
+    Bm25Retriever,
+    DenseRetriever,
+    RetrievalChannelResult,
+    _fts_query,
+)
 from bgpkb.pipeline import build_sqlite_knowledge_base as sqlite_builder
 
 from test_retrieval_document_v1_gold import _eligibility, _governance, _semantic_chunk
@@ -66,6 +71,14 @@ def test_bm25_failure_and_empty_result_are_distinguishable(tmp_path):
 
     assert missing.error and missing.items == []
     assert empty.error is None and empty.items == []
+
+
+def test_fts_query_preserves_all_uppercase_and_mixed_case_domain_terms():
+    query = _fts_query("How are ASPA, ROV, and BGPsec responsibilities separated?")
+
+    assert '"ASPA"' in query
+    assert '"ROV"' in query
+    assert '"BGPsec"' in query
 
 
 def test_current_bm25_candidates_propagate_retrieval_manifest_to_reranker(tmp_path):

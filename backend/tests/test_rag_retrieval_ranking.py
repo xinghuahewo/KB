@@ -33,3 +33,17 @@ def test_chinese_route_leak_expansion_surfaces_route_leak_results():
     assert "route leak" in normalized
     assert results
     assert any("route" in item["content_preview"].lower() or "route" in item["title"].lower() for item in results)
+
+
+def test_domain_query_expansions_cover_acronyms_and_corpus_level_concepts():
+    rov = retrieval_framework.normalize_query("ROV 会把起源有效性分成哪些状态？")
+    observability = retrieval_framework.normalize_query(
+        "Which data sources jointly provide global BGP observability?"
+    )
+    incidents = retrieval_framework.normalize_query(
+        "Which common operational risks are reflected by major routing incident cases?"
+    )
+
+    assert "RFC6811" in rov
+    assert {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} <= set(observability.split())
+    assert {"YOUTUBE", "VERIZON", "FACEBOOK"} <= set(incidents.split())

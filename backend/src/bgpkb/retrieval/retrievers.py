@@ -51,7 +51,10 @@ def _fts_query(query: str) -> str:
     ]
     named_tokens = [
         token for token in tokens
-        if re.search(r"[a-z][A-Z]", token) or re.match(r"[A-Z]{2,}[A-Z][a-z]", token)
+        if (
+            re.search(r"[a-z][A-Z]", token)
+            or re.fullmatch(r"[A-Z]{2,}[A-Za-z0-9]*", token)
+        )
     ]
     if named_tokens:
         tokens = named_tokens

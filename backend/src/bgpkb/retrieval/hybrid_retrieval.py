@@ -479,7 +479,17 @@ def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
         item["fusion_score"] = item["rrf_score"]
         item["retrieval_method"] = "hybrid_rrf"
     items.sort(key=lambda item: (-item["rrf_score"], item["chunk_id"]))
-    return items[:limit]
+    selected = []
+    source_counts = Counter()
+    for item in items:
+        source_id = _source_identity(item) or str(item.get("chunk_id", ""))
+        if source_counts[source_id] >= 2:
+            continue
+        selected.append(item)
+        source_counts[source_id] += 1
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def _governance_diagnostics(results):
@@ -747,6 +757,10 @@ def context_pack(
         eligible_doc_ids=eligible_doc_ids,
         retrieval_data=active_data,
     )
+    query_scope = retrieval_framework.assess_query_scope(query)
+    recall["query_scope"] = query_scope
+    if query_scope["status"] == "unsupported":
+        recall["results"] = []
     if progress is not None:
         vector_metadata = recall.get("channel_metadata", {}).get("vector", {})
         progress({
@@ -817,7 +831,19 @@ def context_pack(
             "latency_ms": reranked.get("latency_ms"),
             "degraded": bool(reranked.get("degraded", False)),
         })
-    query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
+    if query_scope["status"] == "unsupported":
+        query_type_payload = {
+            "requested_query_type": query_type,
+            "resolved_query_type": "fact",
+            "provider": "query_scope_policy",
+            "model": "",
+            "prompt_version": "query_scope_v1",
+            "reason": query_scope["reason"],
+            "degraded": False,
+            "degraded_reason": None,
+        }
+    else:
+        query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
     context_started = time.perf_counter()
     structured_context = _build_structured_context(
         query,
