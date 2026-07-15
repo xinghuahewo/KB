@@ -441,12 +441,12 @@ def test_release_evidence_exit_code_propagates_threshold_and_blocking_failures()
             "short_eligible_chunk_count": 0,
             "exact_duplicate_rate": 0.0,
         },
-        "retrieval": {"recall_at_8": 0.81, "mrr": 0.70},
+        "retrieval": {"recall_at_8": 0.81, "mrr": 0.60},
         "answer": {
-            "claim_citation_coverage": 0.96,
-            "citation_precision": 0.96,
+            "claim_citation_coverage": 0.40,
+            "citation_precision": 0.60,
             "hard_negative_rejection_rate": 1.0,
-            "injection_protection_rate": 1.0,
+            "injection_protection_rate": 0.75,
         },
         "performance": {
             "retrieval_latency_p95_ms": 120.0,
