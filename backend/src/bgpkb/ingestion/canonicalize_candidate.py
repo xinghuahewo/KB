@@ -101,7 +101,92 @@ def load_reprocess_policy(path: Path = DEFAULT_REPROCESS_POLICY) -> dict:
     for field in ("ssh_target", "image", "image_digest"):
         if not isinstance(docling.get(field), str) or not docling[field]:
             raise CanonicalizeCandidateError(f"Docling 路由缺少 {field}")
+    pipeline_revision = docling.get("pipeline_revision", "docling-html-reprocess-v1")
+    if not isinstance(pipeline_revision, str) or not pipeline_revision:
+        raise CanonicalizeCandidateError("Docling 路由缺少 pipeline_revision")
+    docling["pipeline_revision"] = pipeline_revision
     return policy
+
+
+def _load_reprocess_manifest(
+    path: Path | None,
+    *,
+    source_manifest_path: Path,
+    frozen_canonical_root: Path,
+    release_id: str,
+    policy: dict,
+) -> dict[str, dict]:
+    affected = set(policy["affected_source_ids"])
+    if not affected or path is None or not Path(path).is_file():
+        return {}
+    path = Path(path).resolve()
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise CanonicalizeCandidateError(
+            f"Docling reprocess manifest 不可读：{exc}"
+        ) from exc
+    if (
+        manifest.get("schema_version") != "docling_reprocess_manifest_v1"
+        or manifest.get("status") != "complete"
+        or manifest.get("release_id") != release_id
+    ):
+        raise CanonicalizeCandidateError("Docling reprocess manifest 身份或状态非法")
+    expected_source_hash = "sha256:" + _sha256_file(source_manifest_path)
+    if manifest.get("source_ingest_manifest_sha256") != expected_source_hash:
+        raise CanonicalizeCandidateError(
+            "Docling reprocess manifest 未绑定当前 source-ingest"
+        )
+    route = policy["docling"]
+    expected_runtime = {
+        "pipeline_revision": route["pipeline_revision"],
+        "parser_version": "2.107.0",
+        "image": route["image"],
+        "image_digest": route["image_digest"],
+        "gpu_index": route["gpu_index"],
+        "device": route["device"],
+        "network": route["network"],
+    }
+    if manifest.get("runtime") != expected_runtime:
+        raise CanonicalizeCandidateError(
+            "Docling reprocess runtime 与锁定策略不一致"
+        )
+    rows = manifest.get("documents")
+    if not isinstance(rows, list):
+        raise CanonicalizeCandidateError("Docling reprocess documents 非法")
+    by_source: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("source_id"), str):
+            raise CanonicalizeCandidateError("Docling reprocess document entry 非法")
+        source_id = row["source_id"]
+        if source_id in by_source:
+            raise CanonicalizeCandidateError(
+                f"Docling reprocess source_id 重复：{source_id}"
+            )
+        relative = _safe_relative_path(
+            str(row.get("canonical_path") or ""),
+            field="reprocess canonical_path",
+        )
+        canonical_path = (path.parent / relative).resolve()
+        if canonical_path.parent != frozen_canonical_root:
+            raise CanonicalizeCandidateError(
+                f"Docling reprocess canonical path 越界：{source_id}"
+            )
+        if not canonical_path.is_file():
+            raise CanonicalizeCandidateError(
+                f"Docling reprocess Canonical 缺失：{source_id}"
+            )
+        if row.get("canonical_sha256") != "sha256:" + _sha256_file(canonical_path):
+            raise CanonicalizeCandidateError(
+                f"Docling reprocess Canonical hash 不匹配：{source_id}"
+            )
+        by_source[source_id] = {**row, "resolved_path": canonical_path}
+    extras = sorted(set(by_source) - affected)
+    if extras:
+        raise CanonicalizeCandidateError(
+            "Docling reprocess manifest 包含未授权来源：" + ", ".join(extras)
+        )
+    return by_source
 
 
 def _load_source_manifest(path: Path, source_store_root: Path) -> tuple[dict, dict[str, dict]]:
@@ -176,6 +261,7 @@ def run_candidate_canonicalize(
     output_assets_root: Path,
     manifest_path: Path,
     reprocess_policy_path: Path = DEFAULT_REPROCESS_POLICY,
+    reprocess_manifest_path: Path | None = None,
     release_id: str,
 ) -> dict:
     source_manifest_path = Path(source_manifest_path)
@@ -193,8 +279,18 @@ def run_candidate_canonicalize(
         raise CanonicalizeCandidateError(
             "重处理策略引用未登记来源：" + ", ".join(unknown_affected)
         )
+    reprocessed = _load_reprocess_manifest(
+        reprocess_manifest_path,
+        source_manifest_path=source_manifest_path,
+        frozen_canonical_root=frozen_canonical_root,
+        release_id=release_id,
+        policy=policy,
+    )
     unexpected_inputs = sorted(
-        path.stem for path in frozen_canonical_root.glob("*.json") if path.stem not in snapshots
+        path.stem
+        for path in frozen_canonical_root.glob("*.json")
+        if path.name != "docling_reprocess_manifest_v1.json"
+        and path.stem not in snapshots
     )
     if unexpected_inputs:
         raise CanonicalizeCandidateError(
@@ -206,9 +302,15 @@ def run_candidate_canonicalize(
     reprocess_queue = []
     valid_reused = 0
     metadata_upgraded = 0
+    docling_reprocessed = 0
     assets_copied = 0
     for source_id, snapshot in sorted(snapshots.items()):
-        input_path = frozen_canonical_root / f"{source_id}.json"
+        reprocessed_entry = reprocessed.get(source_id)
+        input_path = (
+            reprocessed_entry["resolved_path"]
+            if reprocessed_entry is not None
+            else frozen_canonical_root / f"{source_id}.json"
+        )
         if not input_path.is_file():
             reprocess_queue.append({
                 "source_id": source_id,
@@ -231,7 +333,7 @@ def run_candidate_canonicalize(
             document, known_snapshot_ids=known_snapshot_ids
         )
         strategy = "valid_reused"
-        if source_id in affected_source_ids:
+        if source_id in affected_source_ids and reprocessed_entry is None:
             reprocess_queue.append({
                 "source_id": source_id,
                 "snapshot_id": snapshot["snapshot_id"],
@@ -239,7 +341,33 @@ def run_candidate_canonicalize(
                 "strict_errors": strict_errors,
             })
             continue
-        if strict_errors:
+        if source_id in affected_source_ids:
+            runtime = document.get("runtime", {})
+            if strict_errors:
+                reprocess_queue.append({
+                    "source_id": source_id,
+                    "snapshot_id": snapshot["snapshot_id"],
+                    "reason": "reprocessed_canonical_invalid",
+                    "strict_errors": strict_errors,
+                })
+                continue
+            if (
+                document.get("source") != snapshot
+                or runtime.get("pipeline_revision")
+                != policy["docling"]["pipeline_revision"]
+                or runtime.get("parser")
+                != {"name": "docling", "version": "2.107.0"}
+            ):
+                reprocess_queue.append({
+                    "source_id": source_id,
+                    "snapshot_id": snapshot["snapshot_id"],
+                    "reason": "reprocessed_runtime_or_snapshot_mismatch",
+                    "strict_errors": [],
+                })
+                continue
+            strategy = "docling_reprocessed"
+            docling_reprocessed += 1
+        elif strict_errors:
             safe, reason = _legacy_metadata_upgrade_safe(document)
             if not safe:
                 reprocess_queue.append({
@@ -317,14 +445,21 @@ def run_candidate_canonicalize(
         },
         "docling": {
             "route": dict(policy["docling"]),
-            "execution_count": 0,
-            "reason": "无需重处理" if not reprocess_queue else "存在待重处理文档，未执行隐式远端作业",
+            "execution_count": docling_reprocessed,
+            "reason": (
+                "已消费锁定 Docling 重处理 manifest"
+                if docling_reprocessed
+                else "无需重处理"
+                if not reprocess_queue
+                else "存在待重处理文档，未执行隐式远端作业"
+            ),
         },
         "summary": {
             "sources": len(snapshots),
             "valid_reused": valid_reused,
             "metadata_upgraded": metadata_upgraded,
             "docling_reprocess": len(reprocess_queue),
+            "docling_reprocessed": docling_reprocessed,
             "documents_written": len(documents),
             "assets_copied": assets_copied,
         },
@@ -351,6 +486,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-assets-root", type=Path, required=True)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--reprocess-policy", type=Path, default=DEFAULT_REPROCESS_POLICY)
+    parser.add_argument("--reprocess-manifest", type=Path)
     parser.add_argument("--release-id", required=True)
     return parser
 
@@ -367,6 +503,7 @@ def main(argv: list[str] | None = None) -> int:
             output_assets_root=args.output_assets_root,
             manifest_path=args.manifest,
             reprocess_policy_path=args.reprocess_policy,
+            reprocess_manifest_path=args.reprocess_manifest,
             release_id=args.release_id,
         )
     except CanonicalizeCandidateError as exc:

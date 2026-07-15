@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from bgpkb.ingestion.canonical_contract import validate_canonical_document
+from bgpkb.ingestion.canonical_migration import upgrade_legacy_canonical_metadata
 from bgpkb.ingestion.canonicalize_candidate import (
     CanonicalizeCandidateError,
     load_reprocess_policy,
@@ -191,6 +192,7 @@ def test_candidate_canonicalize_upgrades_only_metadata_and_closes_assets(tmp_pat
         "valid_reused": 0,
         "metadata_upgraded": 1,
         "docling_reprocess": 0,
+        "docling_reprocessed": 0,
         "documents_written": 1,
         "assets_copied": 1,
     }
@@ -288,3 +290,97 @@ def test_docling_reprocess_policy_fails_closed_for_any_route_other_than_gpu_1(tm
 
     with pytest.raises(CanonicalizeCandidateError, match="GPU 1"):
         load_reprocess_policy(policy)
+
+
+def test_policy_affected_source_requires_locked_reprocess_manifest(tmp_path):
+    inputs = _write_inputs(tmp_path)
+    inputs["policy"].write_text(
+        inputs["policy"].read_text(encoding="utf-8").replace(
+            "affected_source_ids: []", "affected_source_ids: [paper]"
+        )
+        + "  pipeline_revision: docling-html-reprocess-v1\n",
+        encoding="utf-8",
+    )
+    output_root = tmp_path / "candidate" / "data" / "corpus" / "canonical"
+    manifest_path = tmp_path / "candidate" / "data" / "manifests" / "canonical_documents_v2.json"
+
+    result = run_candidate_canonicalize(
+        source_manifest_path=inputs["source_manifest"],
+        source_store_root=inputs["source_store"],
+        frozen_canonical_root=inputs["frozen_canonical"],
+        frozen_assets_root=inputs["frozen_assets"],
+        output_root=output_root,
+        output_assets_root=tmp_path / "candidate" / "data" / "corpus" / "assets_v2",
+        manifest_path=manifest_path,
+        reprocess_policy_path=inputs["policy"],
+        reprocess_manifest_path=inputs["frozen_canonical"] / "docling_reprocess_manifest_v1.json",
+        release_id="candidate-11-2",
+    )
+
+    assert result["status"] == "blocked_reprocess_required"
+    assert result["docling_reprocess_queue"][0]["reason"] == "policy_affected"
+
+
+def test_policy_affected_source_accepts_only_manifest_bound_docling_result(tmp_path):
+    inputs = _write_inputs(tmp_path)
+    inputs["policy"].write_text(
+        inputs["policy"].read_text(encoding="utf-8").replace(
+            "affected_source_ids: []", "affected_source_ids: [paper]"
+        )
+        + "  pipeline_revision: docling-html-reprocess-v1\n",
+        encoding="utf-8",
+    )
+    legacy = _legacy_document("paper", b"immutable pdf bytes")
+    legacy["runtime"]["pipeline_revision"] = "docling-html-reprocess-v1"
+    strict = upgrade_legacy_canonical_metadata(legacy, inputs["snapshot"])
+    canonical_path = inputs["frozen_canonical"] / "paper.json"
+    canonical_path.write_text(json.dumps(strict) + "\n", encoding="utf-8")
+    canonical_sha = _sha256(canonical_path.read_bytes())
+    reprocess_manifest = inputs["frozen_canonical"] / "docling_reprocess_manifest_v1.json"
+    reprocess_manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "docling_reprocess_manifest_v1",
+                "release_id": "candidate-11-2",
+                "status": "complete",
+                "source_ingest_manifest_sha256": "sha256:"
+                + _sha256(inputs["source_manifest"].read_bytes()),
+                "runtime": {
+                    "pipeline_revision": "docling-html-reprocess-v1",
+                    "parser_version": "2.107.0",
+                    "image": "bgpkb-docling-v2:2.107.0-cu128",
+                    "image_digest": "sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2",
+                    "gpu_index": 1,
+                    "device": "nvidia.com/gpu=1",
+                    "network": "none",
+                },
+                "documents": [
+                    {
+                        "source_id": "paper",
+                        "canonical_path": "paper.json",
+                        "canonical_sha256": "sha256:" + canonical_sha,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_candidate_canonicalize(
+        source_manifest_path=inputs["source_manifest"],
+        source_store_root=inputs["source_store"],
+        frozen_canonical_root=inputs["frozen_canonical"],
+        frozen_assets_root=inputs["frozen_assets"],
+        output_root=tmp_path / "candidate" / "data" / "corpus" / "canonical",
+        output_assets_root=tmp_path / "candidate" / "data" / "corpus" / "assets_v2",
+        manifest_path=tmp_path / "candidate" / "data" / "manifests" / "canonical_documents_v2.json",
+        reprocess_policy_path=inputs["policy"],
+        reprocess_manifest_path=reprocess_manifest,
+        release_id="candidate-11-2",
+    )
+
+    assert result["status"] == "complete"
+    assert result["summary"]["docling_reprocessed"] == 1
+    assert result["documents"][0]["strategy"] == "docling_reprocessed"
+    assert result["docling"]["execution_count"] == 1

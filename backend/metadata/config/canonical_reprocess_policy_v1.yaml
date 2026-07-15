@@ -1,6 +1,33 @@
 schema_version: canonical_reprocess_policy_v1
-policy_version: canonical_reprocess_policy_v1.0.0
-affected_source_ids: []
+policy_version: canonical_reprocess_policy_v1.1.0
+affected_source_ids:
+  - ap2vec_2022
+  - arin_aspa_doc
+  - aswatch_2015
+  - aws_route53_crypto_hijack_2018
+  - bgpstream_docs
+  - bgpstream_tutorials
+  - caida_as_relationships
+  - china_telecom_europe_route_leak_2019
+  - cloudflare_outage_2026
+  - cloudflare_verizon_route_leak_2019
+  - facebook_outage_cloudflare_2021
+  - facebook_outage_meta_2021
+  - fastly_rpki_hijack_2024
+  - indosat_route_leak_2014
+  - mainone_google_cloudflare_route_leak_2018
+  - manrs_bgp_2020_review
+  - manrs_measurement_framework
+  - manrs_observatory_faq
+  - manrs_regional_bgp_incidents_2020
+  - practical_defenses_2007
+  - ripe_aspa_doc
+  - ripe_ris_docs
+  - ripe_ris_raw_data
+  - ripe_ris_route_collectors
+  - ripestat_api_docs
+  - routeviews_archive_index
+  - youtube_hijack_google_2008
 docling:
   ssh_target: root@10.99.8.28
   gpu_index: 1
@@ -8,3 +35,4 @@ docling:
   network: none
   image: bgpkb-docling-v2:2.107.0-cu128
   image_digest: sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2
+  pipeline_revision: docling-html-reprocess-v1

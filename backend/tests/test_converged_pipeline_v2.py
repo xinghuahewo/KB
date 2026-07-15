@@ -502,6 +502,16 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
     )
     assert "--reuse-existing-report" in performance_subtask.args
 
+    canonicalize_subtask = next(
+        subtask
+        for subtask in definition.stages["canonicalize"].subtasks
+        if subtask.subtask_id == "build-canonical-documents"
+    )
+    reprocess_index = canonicalize_subtask.args.index("--reprocess-manifest")
+    assert canonicalize_subtask.args[reprocess_index + 1] == (
+        "{frozen_canonical_root}/docling_reprocess_manifest_v1.json"
+    )
+
     candidate_dir = tmp_path / "candidate"
     calls: list[tuple[str, str]] = []
     _run(candidate_dir, target_stage="source-ingest", calls=calls)

@@ -61,6 +61,8 @@ stages:
           - "{candidate_dir}/data/manifests/canonical_documents_v2.json"
           - --reprocess-policy
           - "{backend_root}/metadata/config/canonical_reprocess_policy_v1.yaml"
+          - --reprocess-manifest
+          - "{frozen_canonical_root}/docling_reprocess_manifest_v1.json"
           - --release-id
           - "{release_id}"
 

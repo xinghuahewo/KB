@@ -94,6 +94,57 @@ def test_adapter_is_stable_for_identical_inputs():
     assert len({block["block_id"] for block in first["blocks"]}) == len(first["blocks"])
 
 
+def test_adapter_recovers_unmounted_body_items_without_importing_furniture():
+    adapter = load_adapter()
+    payload = {
+        "body": {
+            "children": [
+                {"$ref": "#/texts/0"},
+                {"$ref": "#/texts/2"},
+            ]
+        },
+        "texts": [
+            {
+                "self_ref": "#/texts/0",
+                "label": "title",
+                "content_layer": "body",
+                "orig": "ASPA Overview",
+                "text": "ASPA Overview",
+            },
+            {
+                "self_ref": "#/texts/1",
+                "label": "text",
+                "content_layer": "body",
+                "orig": "An ASPA authorizes provider ASNs.",
+                "text": "An ASPA authorizes provider ASNs.",
+            },
+            {
+                "self_ref": "#/texts/2",
+                "label": "text",
+                "content_layer": "furniture",
+                "orig": "Skip to main content",
+                "text": "Skip to main content",
+            },
+        ],
+    }
+
+    document = adapter.adapt_docling_document(
+        payload, SOURCE_META, RUNTIME_META, {}
+    )
+
+    assert [block["cleaned_text"] for block in document["blocks"]] == [
+        "ASPA Overview",
+        "An ASPA authorizes provider ASNs.",
+    ]
+    assert document["diagnostics"] == [
+        {
+            "code": "unmounted_body_items_recovered",
+            "count": 1,
+            "source_anchors": ["#/texts/1"],
+        }
+    ]
+
+
 def test_docling_success_never_calls_fallback():
     adapter = load_adapter()
     calls = {"docling": 0, "fallback": 0}
