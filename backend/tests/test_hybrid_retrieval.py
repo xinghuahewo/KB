@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import runpy
@@ -57,6 +58,58 @@ def test_rrf_fuses_lexical_and_vector_results_and_deduplicates_chunks():
     assert fused[0]["retrieval_method"] == "hybrid_rrf"
     assert {"lexical", "vector"} <= set(fused[0]["match_reasons"])
     assert fused[0]["fusion_score"] > 0
+
+
+def test_reranker_uses_current_retrieval_text_and_blocks_component_manifest_drift():
+    manifest_hash = "sha256:" + "a" * 64
+    candidate = result("rfc7908", "chunk-current", "standard", 1.0)
+    retrieval_text = "title: Route Leak\ncontent: complete body tail-marker"
+    candidate.update({
+        "retrieval_text": retrieval_text,
+        "retrieval_text_hash": "sha256:" + hashlib.sha256(retrieval_text.encode()).hexdigest(),
+        "retrieval_text_version": "retrieval_text_v1",
+        "retrieval_input_manifest_hash": manifest_hash,
+    })
+
+    class CapturingReranker:
+        def __init__(self):
+            self.documents = None
+
+        def rerank(self, query, documents, top_n, require_model=False):
+            self.documents = documents
+            return {
+                "ok": True,
+                "provider": "fake",
+                "model": "BAAI/bge-reranker-v2-m3",
+                "revision": "rev-test",
+                "results": [{"index": 0, "relevance_score": 0.9}],
+            }
+
+    reranker = CapturingReranker()
+    payload = hybrid_retrieval.rerank_candidates(
+        "route leak",
+        [candidate],
+        reranker=reranker,
+        component_manifest_hashes={
+            "fts": manifest_hash,
+            "embedding": manifest_hash,
+            "reranker": manifest_hash,
+        },
+    )
+    assert reranker.documents == [candidate["retrieval_text"]]
+    assert payload["reranker_input_manifest_hash"] == manifest_hash
+
+    with __import__("pytest").raises(ValueError, match="embedding"):
+        hybrid_retrieval.rerank_candidates(
+            "route leak",
+            [candidate],
+            reranker=reranker,
+            component_manifest_hashes={
+                "fts": manifest_hash,
+                "embedding": "sha256:" + "c" * 64,
+                "reranker": manifest_hash,
+            },
+        )
 
 
 def test_vector_search_filters_results_below_similarity_threshold():
@@ -246,6 +299,39 @@ def test_search_reports_jsonl_vector_fallback_as_degraded():
     )
 
     assert payload["degraded"] is True
+
+
+def test_context_pack_accepts_empty_candidates_with_matching_channel_manifests(monkeypatch):
+    manifest_hash = "sha256:" + "a" * 64
+
+    class EmptyRetrievalData:
+        @staticmethod
+        def excluded_by_policy():
+            return []
+
+    monkeypatch.setattr(hybrid_retrieval, "search", lambda *args, **kwargs: {
+        "results": [],
+        "channel_metadata": {
+            "lexical": {"retrieval_input_manifest_hash": manifest_hash},
+            "vector": {"retrieval_input_manifest_hash": manifest_hash},
+        },
+        "degraded": False,
+        "lexical_count": 0,
+        "vector_count": 0,
+        "vector_status": "empty",
+    })
+
+    payload = hybrid_retrieval.context_pack(
+        "明天北京逐小时天气",
+        top_n=5,
+        query_type="fact",
+        require_model=True,
+        retrieval_data=EmptyRetrievalData(),
+    )
+
+    assert payload["results"] == []
+    assert payload["rerank_status"] == "empty"
+    assert payload["degraded"] is False
 
 
 def test_rrf_is_capped_at_twenty_and_ties_are_stable():

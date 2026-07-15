@@ -1,0 +1,56 @@
+schema_version: retrieval_eligibility_policy_config_v1
+policy_version: retrieval_eligibility_v1
+policy_actor: system:retrieval_eligibility_policy
+supported_purposes:
+  - answer_evidence
+  - knowledge_fact
+forbidden_direct_actor_kinds:
+  - llm
+  - embedding
+  - reranker
+rule_order:
+  - retrieval.missing_source_trace
+  - retrieval.isolated_content
+  - retrieval.parse_not_approved
+  - retrieval.content_quality_not_approved
+  - retrieval.source_untrusted
+  - retrieval.semantic_rejected
+  - retrieval.knowledge_fact_requires_semantic_review
+  - retrieval.internal_source_requires_review
+  - retrieval.reviewed_trusted_evidence
+  - retrieval.pending_governance_caution
+  - retrieval.no_matching_rule
+rules:
+  retrieval.missing_source_trace:
+    status: ineligible
+    reason: 缺少有效 source_ref 或不可变 source snapshot，无法形成来源闭包
+  retrieval.isolated_content:
+    status: ineligible
+    reason: 内容命中语义隔离信号，不得进入检索集合
+  retrieval.parse_not_approved:
+    status: ineligible
+    reason: 解析状态不是 parsed，结构有效性前置条件未通过
+  retrieval.content_quality_not_approved:
+    status: ineligible
+    reason: 内容质量状态不是 approved，质量前置条件未通过
+  retrieval.source_untrusted:
+    status: ineligible
+    reason: 来源已被判定为不可信，不得用于检索回答
+  retrieval.semantic_rejected:
+    status: ineligible
+    reason: 语义审核已拒绝，不得用于检索回答
+  retrieval.knowledge_fact_requires_semantic_review:
+    status: ineligible
+    reason: 正式知识事实必须经过语义审核批准
+  retrieval.internal_source_requires_review:
+    status: ineligible
+    reason: 内部来源缺少独立来源可信审核，不得进入检索集合
+  retrieval.reviewed_trusted_evidence:
+    status: eligible
+    reason: 解析、内容、来源可信和语义审核均满足完整检索条件
+  retrieval.pending_governance_caution:
+    status: eligible_with_caution
+    reason: 结构与内容质量通过，但来源或语义治理仍为 pending/unknown
+  retrieval.no_matching_rule:
+    status: ineligible
+    reason: 输入状态未命中已批准规则，按保守默认值禁止检索

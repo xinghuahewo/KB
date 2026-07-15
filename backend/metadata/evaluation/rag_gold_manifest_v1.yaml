@@ -1,0 +1,35 @@
+schema_version: rag_gold_manifest_v1
+manifest_version: 1.0.0
+retrieval_gold:
+  path: metadata/evaluation/retrieval_gold_v1.jsonl
+  schema: metadata/schemas/retrieval_gold_question_v1.schema.json
+  version: retrieval_gold_v1.0.0
+  question_count: 104
+answer_gold:
+  path: metadata/evaluation/answer_gold_v1.jsonl
+  schema: metadata/schemas/answer_gold_case_v1.schema.json
+  version: answer_gold_v1.0.0
+  case_count: 24
+  scoring_guide: docs/quality/rag-answer-gold-scoring-v1.md
+ownership:
+  config: metadata/config/rag_eval_ownership.yaml
+  status: assigned
+  signed_by: [吴柏橦, 兴华]
+  approval_evidence: metadata/evaluation/reviews/rag_gold_v1_owner_assignment_20260715.json
+  release_effect: ready
+model_binding:
+  embedding:
+    model: BAAI/bge-m3
+    revision: candidate_release_required
+    status: pending_candidate_release
+  reranker:
+    model: BAAI/bge-reranker-v2-m3
+    revision: candidate_release_required
+    status: pending_candidate_release
+  llm:
+    provider: deepseek
+    model: deepseek-v4-pro
+    revision: DeepSeek-V4-Pro@2026-04-24
+    status: pinned
+prompt_version: grounded_answer_prompt_v1
+change_control: pull_request

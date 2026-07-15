@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/source-snapshot-v1.json",
+  "title": "SourceSnapshotV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "source_id", "registry_version", "object_digest", "object_path", "byte_size", "mime_type", "acquired_at", "acquisition_status", "origin_locator", "license", "http"],
+  "properties": {
+    "schema_version": {"const": "source_snapshot_v1"},
+    "snapshot_id": {"type": "string", "pattern": "^snapshot_[0-9a-f]{64}$"},
+    "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$"},
+    "registry_version": {"type": "string", "minLength": 1},
+    "object_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "object_path": {"type": "string", "pattern": "^objects/sha256/[0-9a-f]{64}$"},
+    "byte_size": {"type": "integer", "minimum": 0},
+    "mime_type": {"type": "string", "minLength": 1},
+    "acquired_at": {"type": "string", "format": "date-time"},
+    "acquisition_status": {"enum": ["imported", "downloaded", "not_modified"]},
+    "origin_locator": {"type": "string", "minLength": 1},
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "identifier", "notes"],
+      "properties": {
+        "status": {"enum": ["known", "unknown", "restricted"]},
+        "identifier": {"type": ["string", "null"]},
+        "notes": {"type": "string"}
+      }
+    },
+    "http": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_code", "etag", "last_modified"],
+      "properties": {
+        "status_code": {"type": ["integer", "null"], "minimum": 100, "maximum": 599},
+        "etag": {"type": ["string", "null"]},
+        "last_modified": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

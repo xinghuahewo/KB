@@ -31,6 +31,8 @@ backend/data/published/bge_m3_vector_fast_manifest.json
 # BGP 知识库运行制品：由服务器制品库按版本提供，不进入普通 Git 历史。
 backend/data/*
 !backend/data/README.md
+**/sources/raw/objects/
+**/source-store/objects/
 backend/published/
 backend/parsed/
 backend/chunks/

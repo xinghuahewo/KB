@@ -12,6 +12,12 @@ def _json(value):
     return json.loads(value) if value else None
 
 
+def _table_exists(conn, table):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
 def stats(conn):
     tables = [
         "sources",
@@ -26,7 +32,14 @@ def stats(conn):
         "glossary",
         "human_review_progress",
     ]
-    result = {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in tables}
+    result = {
+        table: (
+            conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            if _table_exists(conn, table)
+            else 0
+        )
+        for table in tables
+    }
     result["entity_types"] = {
         row["entity_type"]: row["count"]
         for row in conn.execute("SELECT entity_type, COUNT(*) AS count FROM entities GROUP BY entity_type")
@@ -36,6 +49,7 @@ def stats(conn):
         for row in conn.execute("SELECT review_status, COUNT(*) AS count FROM entities GROUP BY review_status")
     }
     result["integrity_check"] = conn.execute("PRAGMA integrity_check").fetchone()[0]
+    result["governance_attached"] = False
     return result
 
 
@@ -84,26 +98,34 @@ def entity(conn, entity_id):
         (entity_id,),
     ))
     result["evidence"] = evidence(conn, entity_id)["records"]
-    result["review_packets"] = rows_to_dicts(conn.execute(
-        """
-        SELECT packet_id, review_order, review_bucket, evidence_record_count,
-               total_chunk_count, suggested_action
-        FROM review_packets
-        WHERE entity_id = ?
-        ORDER BY review_order
-        """,
-        (entity_id,),
-    ))
-    result["actions"] = rows_to_dicts(conn.execute(
-        """
-        SELECT action_id, action_order, priority, action_type, status,
-               needs_llm, suggested_action
-        FROM next_actions
-        WHERE entity_id = ?
-        ORDER BY priority, action_order
-        """,
-        (entity_id,),
-    ))
+    result["review_packets"] = (
+        rows_to_dicts(conn.execute(
+            """
+            SELECT packet_id, review_order, review_bucket, evidence_record_count,
+                   total_chunk_count, suggested_action
+            FROM review_packets
+            WHERE entity_id = ?
+            ORDER BY review_order
+            """,
+            (entity_id,),
+        ))
+        if _table_exists(conn, "review_packets")
+        else []
+    )
+    result["actions"] = (
+        rows_to_dicts(conn.execute(
+            """
+            SELECT action_id, action_order, priority, action_type, status,
+                   needs_llm, suggested_action
+            FROM next_actions
+            WHERE entity_id = ?
+            ORDER BY priority, action_order
+            """,
+            (entity_id,),
+        ))
+        if _table_exists(conn, "next_actions")
+        else []
+    )
     return result
 
 
@@ -172,6 +194,8 @@ def neighbors(conn, entity_id):
 
 
 def evidence(conn, entity_id):
+    if not _table_exists(conn, "entity_evidence"):
+        return {"entity_id": entity_id, "records": []}
     return {
         "entity_id": entity_id,
         "records": rows_to_dicts(conn.execute(
@@ -295,6 +319,8 @@ def search_chunks(conn, query, limit):
 
 
 def actions(conn, status="", needs_llm=None, limit=10):
+    if not _table_exists(conn, "next_actions"):
+        return []
     clauses = []
     params = []
     if status:
@@ -320,6 +346,8 @@ def actions(conn, status="", needs_llm=None, limit=10):
 
 
 def progress(conn, scope_type="", limit=10):
+    if not _table_exists(conn, "human_review_progress"):
+        return []
     clauses = []
     params = []
     if scope_type:

@@ -1,11 +1,21 @@
 import json
+import os
 import math
 import sqlite3
 
+import numpy as np
 import pytest
 
-from bgpkb.infrastructure.fast_vector_index import FastVectorIndex, build_fast_vector_index
+from bgpkb.infrastructure.fast_vector_index import (
+    FastVectorIndex,
+    build_fast_vector_index,
+    load_cached_fast_vector_index,
+    verify_fast_vector_artifacts,
+)
 from bgpkb.retrieval.retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
+from bgpkb.pipeline import build_sqlite_knowledge_base as sqlite_builder
+
+from test_retrieval_document_v1_gold import _eligibility, _governance, _semantic_chunk
 
 
 def _fts_database(path):
@@ -58,6 +68,32 @@ def test_bm25_failure_and_empty_result_are_distinguishable(tmp_path):
     assert empty.error is None and empty.items == []
 
 
+def test_current_bm25_candidates_propagate_retrieval_manifest_to_reranker(tmp_path):
+    from bgpkb.indexing.retrieval_documents import (
+        build_retrieval_input_manifest,
+        derive_retrieval_document,
+    )
+
+    db_path = tmp_path / "retrieval.sqlite"
+    chunk = _semantic_chunk(content="complete retrieval text with lexical_tail_marker")
+    document = derive_retrieval_document(
+        chunk, eligibility=_eligibility(), governance=_governance(chunk)
+    )
+    manifest = build_retrieval_input_manifest([document])
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(sqlite_builder.SCHEMA)
+        assert sqlite_builder.create_fts_tables(conn)
+        sqlite_builder.insert_retrieval_documents(conn, [document], manifest, True)
+        conn.commit()
+
+    result = Bm25Retriever(db_path).search("lexical_tail_marker", 5)
+
+    assert result.error is None
+    assert result.metadata["retrieval_input_manifest_hash"] == manifest["input_manifest_hash"]
+    assert result.items[0]["retrieval_input_manifest_hash"] == manifest["input_manifest_hash"]
+    assert result.items[0]["retrieval_text"] == document["retrieval_text"]
+
+
 class FakeProvider:
     def embed_texts(self, texts, require_model=False):
         return {
@@ -102,6 +138,70 @@ def test_fast_vector_index_builder_normalizes_chunk_vectors(tmp_path):
     assert [item["chunk_id"] for item in results] == ["a"]
     assert results[0]["raw_score"] == pytest.approx(1.0)
     assert "vector" not in results[0]
+
+
+def test_fast_vector_freshness_uses_source_hash_and_builder_is_preallocated_mmap(tmp_path):
+    index = tmp_path / "bge_m3_vector_index.jsonl"
+    rows = [
+        {
+            "doc_id": "chunk:a",
+            "kind": "chunk",
+            "retrieval_input_manifest_hash": "sha256:" + "a" * 64,
+            "metadata": {
+                "chunk_id": "a",
+                "eligibility": {"status": "eligible"},
+            },
+            "vector": [3.0, 4.0],
+        },
+        {
+            "doc_id": "chunk:b",
+            "kind": "chunk",
+            "retrieval_input_manifest_hash": "sha256:" + "a" * 64,
+            "metadata": {
+                "chunk_id": "b",
+                "eligibility": {"status": "eligible"},
+            },
+            "vector": [4.0, 3.0],
+        },
+    ]
+    index.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+
+    artifacts = build_fast_vector_index(index)
+    manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
+    loaded = FastVectorIndex.load(index)
+
+    assert manifest["source_index_sha256"].startswith("sha256:")
+    assert manifest["build_strategy"] == "two_pass_preallocated_memmap_v1"
+    assert isinstance(loaded.matrix, np.memmap)
+    verified = verify_fast_vector_artifacts(index, eligible_chunk_ids={"a", "b"})
+    assert verified["eligible_chunk_ids_hash"] == manifest["eligible_chunk_ids_hash"]
+
+    original_stat = index.stat()
+    original = index.read_text(encoding="utf-8")
+    changed = original.replace("[3.0, 4.0]", "[4.0, 3.0]", 1)
+    assert len(changed.encode()) == len(original.encode())
+    index.write_text(changed, encoding="utf-8")
+    os.utime(index, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+
+    assert FastVectorIndex.load(index) is None
+    # 在线路径依赖激活前已验证的不可变 release，不重新扫描大型源 JSONL。
+    assert load_cached_fast_vector_index(index) is not None
+
+
+def test_fast_vector_gate_rejects_eligibility_set_mismatch(tmp_path):
+    index = tmp_path / "bge_m3_vector_index.jsonl"
+    index.write_text(
+        json.dumps({
+            "kind": "chunk",
+            "metadata": {"chunk_id": "a", "eligibility": {"status": "eligible"}},
+            "vector": [1.0, 0.0],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    build_fast_vector_index(index)
+
+    with pytest.raises(RuntimeError, match="eligibility"):
+        verify_fast_vector_artifacts(index, eligible_chunk_ids={"a", "missing"})
 
 
 def test_dense_retriever_prefers_fast_vector_index_without_reading_jsonl(tmp_path):

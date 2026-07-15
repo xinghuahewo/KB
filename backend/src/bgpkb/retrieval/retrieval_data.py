@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from bgpkb import paths
+from bgpkb.infrastructure import serving_bundle
 
 
 class RetrievalData(Protocol):
@@ -56,7 +57,7 @@ class PublishedArtifactRetrievalData:
         return path
 
     def database_path(self) -> Path:
-        return self._required(self.published_path("bgp_knowledge_base.sqlite"))
+        return serving_bundle.resolve_serving_database_path(self.data_dir)
 
     def vector_index_path(self) -> Path:
         return self._required(self.published_path("bge_m3_vector_index.jsonl"))
@@ -71,6 +72,25 @@ class PublishedArtifactRetrievalData:
         return self._required(self.published_path("section_catalog.jsonl"))
 
     def trusted_chunk_ids(self) -> set[str]:
+        database_path = self.database_path()
+        with serving_bundle.connect_serving_database(
+            database_path,
+            allow_legacy=serving_bundle.legacy_reader_enabled(),
+        ) as connection:
+            has_documents = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='retrieval_documents'"
+            ).fetchone()
+            if has_documents:
+                return {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT chunk_id FROM retrieval_documents
+                        WHERE source_trust_status = 'trusted'
+                          AND eligibility_status IN ('eligible', 'eligible_with_caution')
+                        """
+                    )
+                }
         trusted: set[str] = set()
         for item in _load_jsonl(self.dataset_path("entity_source_evidence.jsonl")):
             if item.get("entity_review_status") == "approved":
@@ -78,6 +98,24 @@ class PublishedArtifactRetrievalData:
         return trusted
 
     def eligible_doc_ids(self) -> set[str]:
+        database_path = self.database_path()
+        with serving_bundle.connect_serving_database(
+            database_path,
+            allow_legacy=serving_bundle.legacy_reader_enabled(),
+        ) as connection:
+            has_documents = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='retrieval_documents'"
+            ).fetchone()
+            if has_documents:
+                return {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT DISTINCT doc_id FROM retrieval_documents
+                        WHERE eligibility_status IN ('eligible', 'eligible_with_caution')
+                        """
+                    )
+                }
         return {
             item.get("source_id", "")
             for item in _load_jsonl(self.published_path("source_catalog.jsonl"))
@@ -86,13 +124,27 @@ class PublishedArtifactRetrievalData:
         }
 
     def excluded_by_policy(self) -> list[dict]:
-        excluded = []
-        for entity in _load_jsonl(self.published_path("entity_catalog.jsonl")):
-            status = entity.get("review_status", "")
-            if status != "approved":
-                excluded.append({
-                    "entity_id": entity.get("entity_id", ""),
-                    "reason": "not_approved",
-                    "review_status": status,
-                })
-        return excluded
+        database_path = self.database_path()
+        with serving_bundle.connect_serving_database(
+            database_path,
+            allow_legacy=serving_bundle.legacy_reader_enabled(),
+        ) as connection:
+            has_entities = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='entities'"
+            ).fetchone()
+            if has_entities:
+                return [
+                    {
+                        "entity_id": row[0],
+                        "reason": "not_approved",
+                        "review_status": row[1],
+                    }
+                    for row in connection.execute(
+                        """
+                        SELECT entity_id, review_status FROM entities
+                        WHERE review_status != 'approved'
+                        ORDER BY entity_id
+                        """
+                    )
+                ]
+        return []

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import json
+import os
 import sqlite3
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.infrastructure import serving_bundle
 
 
 ROOT = paths.PROJECT_ROOT
@@ -11,6 +13,31 @@ PUBLISHED_DIR = paths.PUBLISHED_DIR
 REPORT = paths.report_path("sqlite_knowledge_base_report")
 DB_PATH = PUBLISHED_DIR / "bgp_knowledge_base.sqlite"
 SCHEMA_PATH = PUBLISHED_DIR / "sqlite_schema.sql"
+SERVING_DB_PATH = PUBLISHED_DIR / serving_bundle.SERVING_DB_FILENAME
+GOVERNANCE_DB_PATH = PUBLISHED_DIR / serving_bundle.GOVERNANCE_DB_FILENAME
+
+GOVERNANCE_DATASET_FILES = (
+    "evidence_governance_states_v1",
+    "evidence_governance_migration_v1",
+    "entity_source_evidence",
+    "entity_review_packets",
+    "next_action_queue",
+    "case_observations",
+    "human_review_workbook",
+    "human_review_decision_audit",
+    "human_review_decision_apply_preview",
+    "human_review_input_validation",
+    "human_review_progress",
+    "human_review_evidence_extracts",
+    "human_review_session_queue",
+    "human_review_session_status",
+    "human_review_field_checklist",
+    "human_review_source_matrix",
+    "human_review_task_board",
+    "human_review_handoff",
+    "knowledge_candidates",
+    "knowledge_candidate_decision_audit",
+)
 
 
 def load_jsonl(path):
@@ -98,6 +125,31 @@ CREATE TABLE chunks (
   next_chunk_id TEXT,
   hierarchy_status TEXT NOT NULL,
   source_block_ids_json TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
+
+CREATE TABLE retrieval_documents (
+  retrieval_doc_id TEXT PRIMARY KEY,
+  chunk_id TEXT NOT NULL UNIQUE,
+  doc_id TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  document_profile TEXT NOT NULL,
+  semantic_unit TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  retrieval_text TEXT NOT NULL,
+  retrieval_text_hash TEXT NOT NULL,
+  retrieval_text_version TEXT NOT NULL,
+  content_preview TEXT NOT NULL,
+  parse_status TEXT NOT NULL,
+  content_quality_status TEXT NOT NULL,
+  source_trust_status TEXT NOT NULL,
+  semantic_review_status TEXT NOT NULL,
+  eligibility_status TEXT NOT NULL,
+  eligibility_policy_version TEXT NOT NULL,
+  eligibility_rule_id TEXT NOT NULL,
+  eligibility_reason TEXT NOT NULL,
+  eligibility_audit_json TEXT NOT NULL,
   payload_json TEXT NOT NULL
 );
 
@@ -504,6 +556,9 @@ CREATE INDEX idx_entities_type ON entities(entity_type);
 CREATE INDEX idx_entities_review_status ON entities(review_status);
 CREATE INDEX idx_chunks_doc_id ON chunks(doc_id);
 CREATE INDEX idx_chunks_source_type ON chunks(source_type);
+CREATE INDEX idx_retrieval_documents_doc_id ON retrieval_documents(doc_id);
+CREATE INDEX idx_retrieval_documents_source_id ON retrieval_documents(source_id);
+CREATE INDEX idx_retrieval_documents_text_hash ON retrieval_documents(retrieval_text_hash);
 CREATE INDEX idx_relationships_src ON relationships(src_id, relation);
 CREATE INDEX idx_relationships_dst ON relationships(dst_id, relation);
 CREATE INDEX idx_entity_sources_source ON entity_sources(source_id);
@@ -555,11 +610,9 @@ def create_fts_tables(conn):
               payload_json
             );
             CREATE VIRTUAL TABLE chunk_fts USING fts5(
+              retrieval_doc_id UNINDEXED,
               chunk_id UNINDEXED,
-              title,
-              source_type,
-              chunk_type,
-              content_preview
+              retrieval_text
             );
             """
         )
@@ -630,7 +683,6 @@ def insert_entities(conn, entities, fts_enabled):
 def insert_chunks(conn, chunks, fts_enabled):
     rows = []
     topic_rows = []
-    fts_rows = []
     for record in chunks:
         rows.append({
             "chunk_id": record["chunk_id"],
@@ -656,14 +708,6 @@ def insert_chunks(conn, chunks, fts_enabled):
         })
         for topic in record.get("topics", []):
             topic_rows.append((record["chunk_id"], topic))
-        if fts_enabled:
-            fts_rows.append((
-                record["chunk_id"],
-                record["title"],
-                record["source_type"],
-                record["chunk_type"],
-                record["content_preview"],
-            ))
 
     conn.executemany(
         """
@@ -684,8 +728,79 @@ def insert_chunks(conn, chunks, fts_enabled):
         rows,
     )
     conn.executemany("INSERT OR IGNORE INTO chunk_topics VALUES (?, ?)", topic_rows)
+
+
+def insert_retrieval_documents(conn, documents, manifest, fts_enabled):
+    rows = []
+    fts_rows = []
+    expected_version = manifest.get("retrieval_text_version")
+    for record in documents:
+        if record.get("retrieval_text_version") != expected_version:
+            raise ValueError("Retrieval Document 与 FTS input manifest 版本不一致")
+        governance = record["governance"]
+        eligibility = record["eligibility"]
+        rows.append({
+            "retrieval_doc_id": record["retrieval_doc_id"],
+            "chunk_id": record["chunk_id"],
+            "doc_id": record["doc_id"],
+            "source_id": record["source_id"],
+            "title": record["title"],
+            "document_profile": record["document_profile"],
+            "semantic_unit": record["semantic_unit"],
+            "source_ref": record["source_ref"],
+            "retrieval_text": record["retrieval_text"],
+            "retrieval_text_hash": record["retrieval_text_hash"],
+            "retrieval_text_version": record["retrieval_text_version"],
+            "content_preview": record["content_preview"],
+            "parse_status": governance["parse_status"],
+            "content_quality_status": governance["content_quality_status"],
+            "source_trust_status": governance["source_trust_status"],
+            "semantic_review_status": governance["semantic_review_status"],
+            "eligibility_status": eligibility["status"],
+            "eligibility_policy_version": eligibility["policy_version"],
+            "eligibility_rule_id": eligibility["rule_id"],
+            "eligibility_reason": eligibility["reason"],
+            "eligibility_audit_json": dump_json(eligibility["audit"]),
+            "payload_json": dump_json(record),
+        })
+        if fts_enabled:
+            fts_rows.append((
+                record["retrieval_doc_id"],
+                record["chunk_id"],
+                record["retrieval_text"],
+            ))
+    conn.executemany(
+        """
+        INSERT INTO retrieval_documents (
+          retrieval_doc_id, chunk_id, doc_id, source_id, title,
+          document_profile, semantic_unit, source_ref, retrieval_text,
+          retrieval_text_hash, retrieval_text_version, content_preview,
+          parse_status, content_quality_status, source_trust_status,
+          semantic_review_status, eligibility_status,
+          eligibility_policy_version, eligibility_rule_id,
+          eligibility_reason, eligibility_audit_json, payload_json
+        ) VALUES (
+          :retrieval_doc_id, :chunk_id, :doc_id, :source_id, :title,
+          :document_profile, :semantic_unit, :source_ref, :retrieval_text,
+          :retrieval_text_hash, :retrieval_text_version, :content_preview,
+          :parse_status, :content_quality_status, :source_trust_status,
+          :semantic_review_status, :eligibility_status,
+          :eligibility_policy_version, :eligibility_rule_id,
+          :eligibility_reason, :eligibility_audit_json, :payload_json
+        )
+        """,
+        rows,
+    )
     if fts_enabled:
-        conn.executemany("INSERT INTO chunk_fts VALUES (?, ?, ?, ?, ?)", fts_rows)
+        conn.executemany("INSERT INTO chunk_fts VALUES (?, ?, ?)", fts_rows)
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES (?, ?)",
+        ("fts_input_manifest_hash", manifest["input_manifest_hash"]),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES (?, ?)",
+        ("fts_retrieval_text_version", expected_version),
+    )
 
 
 def iter_relationship_rows(adjacency):
@@ -1386,6 +1501,7 @@ def build_database():
     sources = load_jsonl(PUBLISHED_DIR / "source_catalog.jsonl")
     entities = load_jsonl(PUBLISHED_DIR / "entity_catalog.jsonl")
     chunks = load_jsonl(PUBLISHED_DIR / "chunk_catalog.jsonl")
+    retrieval_documents = load_jsonl(PUBLISHED_DIR / "retrieval_documents_v1.jsonl")
     adjacency = load_json(PUBLISHED_DIR / "relationship_adjacency.json")
     lexical_index = load_json(PUBLISHED_DIR / "lexical_index.json")
     manifest = load_json(PUBLISHED_DIR / "manifest.json")
@@ -1426,6 +1542,15 @@ def build_database():
         insert_sources(conn, sources)
         insert_entities(conn, entities, fts_enabled)
         insert_chunks(conn, chunks, fts_enabled)
+        if retrieval_documents:
+            from bgpkb.indexing.retrieval_documents import build_retrieval_input_manifest
+
+            insert_retrieval_documents(
+                conn,
+                retrieval_documents,
+                build_retrieval_input_manifest(retrieval_documents),
+                fts_enabled,
+            )
         insert_relationships(conn, adjacency)
         insert_lexical_index(conn, lexical_index)
         insert_entity_evidence(conn, entity_evidence)
@@ -1465,6 +1590,7 @@ def build_database():
             "entities": table_count(conn, "entities"),
             "entity_sources": table_count(conn, "entity_sources"),
             "chunks": table_count(conn, "chunks"),
+            "retrieval_documents": table_count(conn, "retrieval_documents"),
             "chunk_topics": table_count(conn, "chunk_topics"),
             "relationships": table_count(conn, "relationships"),
             "lexical_terms": table_count(conn, "lexical_terms"),
@@ -1500,6 +1626,110 @@ def build_database():
     return counts, integrity, fts_enabled
 
 
+def _candidate_release_id(manifest):
+    explicit = (
+        os.environ.get("BGPKB_RELEASE_ID")
+        or manifest.get("release_id")
+        or manifest.get("artifact_release_id")
+    )
+    if explicit:
+        return str(explicit)
+    fingerprint = __import__("hashlib").sha256(
+        dump_json(manifest).encode("utf-8")
+    ).hexdigest()[:16]
+    return f"candidate-{fingerprint}"
+
+
+def load_governance_bundle_datasets(
+    dataset_dir,
+    *,
+    published_dir=None,
+    historical_corpus_version="v1",
+):
+    """把当前复核、审计、历史证据和离线工作流投影到治理制品输入。"""
+
+    dataset_dir = Path(dataset_dir)
+    published_dir = Path(published_dir) if published_dir is not None else None
+    datasets = {}
+    for dataset_name in GOVERNANCE_DATASET_FILES:
+        dataset_path = dataset_dir / f"{dataset_name}.jsonl"
+        if (
+            published_dir is not None
+            and not dataset_path.is_file()
+            and dataset_name.startswith("evidence_governance_")
+        ):
+            dataset_path = published_dir / f"{dataset_name}.jsonl"
+        datasets[dataset_name] = load_jsonl(dataset_path)
+    datasets["historical_v1_evidence"] = build_historical_evidence_chunks(
+        datasets["human_review_evidence_extracts"],
+        corpus_version=historical_corpus_version,
+    )
+    return datasets
+
+
+def build_database_bundles(
+    *,
+    published_dir=PUBLISHED_DIR,
+    dataset_dir=paths.DATASETS_DIR,
+    release_id=None,
+):
+    """从当前候选输入构建分离的 serving/governance SQLite 制品。"""
+
+    published_dir = Path(published_dir)
+    manifest = load_json(published_dir / "manifest.json")
+    selected_release_id = release_id or _candidate_release_id(manifest)
+    retrieval_documents = load_jsonl(published_dir / "retrieval_documents_v1.jsonl")
+    if not retrieval_documents:
+        raise ValueError("新 serving bundle 需要非空 retrieval_documents_v1.jsonl")
+    sources = load_jsonl(published_dir / "source_catalog.jsonl")
+    entities = load_jsonl(published_dir / "entity_catalog.jsonl")
+    source_ids = {record.get("source_id") for record in sources}
+    entity_sources = [
+        {"entity_id": entity["entity_id"], "source_id": source_id}
+        for entity in entities
+        for source_id in entity.get("source_refs", [])
+        if source_id in source_ids
+    ]
+    adjacency = load_json(published_dir / "relationship_adjacency.json")
+    relationships = []
+    for record in iter_relationship_rows(adjacency):
+        relationships.append(
+            {
+                **record,
+                "source_refs": json.loads(record.get("source_refs_json", "[]")),
+            }
+        )
+    governance_datasets = load_governance_bundle_datasets(
+        dataset_dir,
+        published_dir=published_dir,
+        historical_corpus_version=manifest.get(
+            "historical_review_evidence_corpus_version", "v1"
+        ),
+    )
+    serving_result = serving_bundle.build_serving_database(
+        published_dir / serving_bundle.SERVING_DB_FILENAME,
+        release_id=selected_release_id,
+        retrieval_documents=retrieval_documents,
+        sources=sources,
+        entities=entities,
+        entity_sources=entity_sources,
+        relationships=relationships,
+    )
+    governance_result = serving_bundle.build_governance_database(
+        published_dir / serving_bundle.GOVERNANCE_DB_FILENAME,
+        release_id=selected_release_id,
+        datasets=governance_datasets,
+    )
+    return {
+        "release_id": selected_release_id,
+        "serving": serving_result,
+        "governance": governance_result,
+        "governance_dataset_counts": {
+            name: len(records) for name, records in sorted(governance_datasets.items())
+        },
+    }
+
+
 def write_report(counts, integrity, fts_enabled):
     lines = [
         "# SQLite 知识库报告",
@@ -1528,14 +1758,43 @@ def write_report(counts, integrity, fts_enabled):
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def write_bundle_report(result):
+    lines = [
+        "# SQLite 服务与治理制品报告",
+        "",
+        "## 数据边界",
+        "",
+        "- `serving.sqlite`：在线只读检索、证据组装和必要知识查询。",
+        "- `governance.sqlite`：人工复核、决策审计、历史 v1 evidence 和离线工作流。",
+        "- 在线进程不得打开 `governance.sqlite`。",
+        "",
+        "## 构建结果",
+        "",
+        f"- release id：{result['release_id']}",
+        f"- serving schema：{result['serving']['schema_version']}",
+        f"- serving retrieval documents：{result['serving']['retrieval_document_count']}",
+        f"- governance schema：{result['governance']['schema_version']}",
+        f"- governance records：{result['governance']['record_count']}",
+        "- 两个数据库均在同文件系统临时文件中完成校验后原子替换。",
+    ]
+    REPORT.parent.mkdir(parents=True, exist_ok=True)
+    REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _display_path(path):
+    selected = Path(path)
+    try:
+        return selected.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(selected)
+
+
 def main():
-    counts, integrity, fts_enabled = build_database()
-    write_report(counts, integrity, fts_enabled)
-    print(f"Wrote {DB_PATH.relative_to(ROOT)}")
-    print(f"Wrote {SCHEMA_PATH.relative_to(ROOT)}")
-    print(f"Wrote {REPORT.relative_to(ROOT)}")
-    if integrity != "ok":
-        raise SystemExit(1)
+    result = build_database_bundles()
+    write_bundle_report(result)
+    print(f"Wrote {_display_path(SERVING_DB_PATH)}")
+    print(f"Wrote {_display_path(GOVERNANCE_DB_PATH)}")
+    print(f"Wrote {_display_path(REPORT)}")
 
 
 if __name__ == "__main__":

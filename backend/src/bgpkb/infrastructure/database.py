@@ -1,28 +1,28 @@
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.infrastructure import serving_bundle
 import sqlite3
-from urllib.parse import quote
 
 
 ROOT = paths.PROJECT_ROOT
-DB_PATH = paths.PUBLISHED_DIR / "bgp_knowledge_base.sqlite"
-DB_FILENAME = "bgp_knowledge_base.sqlite"
+DB_PATH = paths.PUBLISHED_DIR / serving_bundle.SERVING_DB_FILENAME
+DB_FILENAME = serving_bundle.SERVING_DB_FILENAME
 SERVICE_NAME = "bgp-knowledge-base-service"
 SERVICE_VERSION = "0.1.0"
 
 
 def runtime_database_path() -> Path:
     """Return the SQLite file from the explicitly configured release artifact."""
-    return paths.require_runtime_data_dir() / "published" / DB_FILENAME
+    return serving_bundle.resolve_serving_database_path(paths.require_runtime_data_dir())
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
     db_path = db_path or runtime_database_path()
-    uri = f"file:{quote(str(db_path), safe='/')}?mode=ro&immutable=1"
-    conn = sqlite3.connect(uri, uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+    return serving_bundle.connect_serving_database(
+        db_path,
+        allow_legacy=serving_bundle.legacy_reader_enabled(),
+    )
 
 
 def health_status(db_path: Path | None = None) -> dict:
@@ -49,8 +49,21 @@ def health_status(db_path: Path | None = None) -> dict:
         return status
 
     try:
+        reader = serving_bundle.inspect_serving_database(
+            db_path,
+            allow_legacy=serving_bundle.legacy_reader_enabled(),
+        )
         with connect(db_path) as conn:
             status["integrity_check"] = conn.execute("PRAGMA integrity_check").fetchone()[0]
-    except sqlite3.Error as exc:
+        status.update(
+            {
+                "reader_mode": reader["mode"],
+                "degraded": reader["degraded"],
+                "schema_version": reader["schema_version"],
+                "minimum_reader_version": reader["minimum_reader_version"],
+                "release_id": reader["release_id"],
+            }
+        )
+    except (sqlite3.Error, serving_bundle.ServingBundleError) as exc:
         status["error"] = str(exc)
     return status

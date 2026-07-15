@@ -1,0 +1,11 @@
+{
+  "schema_version": "rag_evidence_pipeline_fixture_manifest_v1",
+  "fixtures": [
+    {"profile": "rfc", "path": "rfc_excerpt.txt", "sha256": "fbe7114b6c180d10d78861232ea447c461f70eed2a1e7e3e5e4a1c5943e0b966"},
+    {"profile": "html", "path": "html_page.html", "sha256": "8afb0f52b2738d05fd04747c7c2d014b634525a0e9b4b5124a716c4f5bffdbe6"},
+    {"profile": "pdf_table", "path": "pdf_table_canonical_v2.json", "sha256": "5b2b141f08df00a624e4c4bc25ccadd0f66a8034ed48675f33d3e85f9dc0c115"},
+    {"profile": "openapi_yaml", "path": "peeringdb_openapi.yaml", "sha256": "4986ed8e974bf681b3648b060b82dbb3eb57794acda21f61c4472c32b6ce0336"},
+    {"profile": "duplicate_template", "path": "duplicate_templates.json", "sha256": "837c798141b8a1dff00e7912579ee313b6d5831f516a19de225523e0a4431bf3"},
+    {"profile": "prompt_injection", "path": "prompt_injection.txt", "sha256": "3c2411a6d8c20807733a11399e03bcb2cdbc96f99a59cf44291fe6e301862441"}
+  ]
+}

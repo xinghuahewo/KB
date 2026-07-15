@@ -240,23 +240,47 @@ class RerankerHttpProvider(_HttpProvider):
     def rerank(self, query, documents, top_n):
         started = time.monotonic()
         try:
-            body = self._post({"model": self.model, "query": query, "documents": documents, "top_n": top_n})
-            results = body.get("results")
-            if not isinstance(results, list) or len(results) != top_n or top_n > len(documents):
+            original_document_count = len(documents)
+            requested_top_n = min(top_n, original_document_count)
+            service_documents = list(documents)
+            service_top_n = requested_top_n
+            if 0 < original_document_count < 5:
+                service_documents.extend(
+                    ["[BGPKB_RERANK_PADDING]"] * (5 - original_document_count)
+                )
+                service_top_n = 5
+            body = self._post({
+                "model": self.model,
+                "query": query,
+                "documents": service_documents,
+                "top_n": service_top_n,
+            })
+            service_results = body.get("results")
+            if (
+                not isinstance(service_results, list)
+                or len(service_results) != service_top_n
+                or service_top_n > len(service_documents)
+            ):
                 raise ValueError("invalid_response: results 数量错误")
-            if any(not isinstance(item, dict) for item in results):
+            if any(not isinstance(item, dict) for item in service_results):
                 raise ValueError("invalid_response: result 必须是对象")
-            indices = [item.get("index") for item in results]
-            if any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(documents) for index in indices):
+            indices = [item.get("index") for item in service_results]
+            if any(isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < len(service_documents) for index in indices):
                 raise ValueError("invalid_response: index 越界")
             if len(set(indices)) != len(indices):
                 raise ValueError("invalid_response: index 必须唯一")
-            scores = [item.get("relevance_score") for item in results]
+            scores = [item.get("relevance_score") for item in service_results]
             if any(
                 isinstance(score, bool) or not isinstance(score, (int, float)) or not math.isfinite(score)
                 for score in scores
             ):
                 raise ValueError("invalid_response: relevance_score 必须是 finite number")
+            results = [
+                item for item in service_results
+                if item["index"] < original_document_count
+            ]
+            if len(results) != requested_top_n:
+                raise ValueError("invalid_response: padding 过滤后 results 数量错误")
         except Exception as exc:
             return self._error(exc, started)
         return {

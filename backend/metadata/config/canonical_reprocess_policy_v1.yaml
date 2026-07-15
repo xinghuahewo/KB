@@ -1,0 +1,10 @@
+schema_version: canonical_reprocess_policy_v1
+policy_version: canonical_reprocess_policy_v1.0.0
+affected_source_ids: []
+docling:
+  ssh_target: root@10.99.8.28
+  gpu_index: 1
+  device: nvidia.com/gpu=1
+  network: none
+  image: bgpkb-docling-v2:2.107.0-cu128
+  image_digest: sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2

@@ -35,6 +35,11 @@ REQUIRED_BLOCK_FIELDS = {
     "review_status",
     "generated_by",
 }
+STRICT_SCHEMA_STATUS_FIELDS = {
+    "parse_status",
+    "content_quality_status",
+    "asset_refs",
+}
 
 
 def load_contracts():
@@ -74,7 +79,11 @@ def test_v2_schemas_are_closed_and_require_traceable_structures():
 
     assert set(SCHEMA_NAMES) == set(schemas)
     assert all(schema["additionalProperties"] is False for schema in schemas.values())
-    assert REQUIRED_BLOCK_FIELDS <= set(schemas["block"]["required"])
+    # 旧 contracts 模块仍服务显式只读迁移；新生产 Schema 已拆分状态语义。
+    assert (REQUIRED_BLOCK_FIELDS - {"review_status"}) | STRICT_SCHEMA_STATUS_FIELDS <= set(
+        schemas["block"]["required"]
+    )
+    assert "review_status" not in schemas["block"]["properties"]
     assert {"table", "code", "formula", "picture"} <= set(
         schemas["block"]["properties"]["block_type"]["enum"]
     )

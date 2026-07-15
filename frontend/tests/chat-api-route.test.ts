@@ -23,10 +23,28 @@ vi.mock("@/lib/bgp-rag-client", () => ({
         answer: "Route leak 是错误传播路由的事件。",
         answer_status: "answered",
         generated: true,
-        citations: [{ source_id: "src-1", chunk_id: "chunk-1", title: "Route Leak" }],
+        grounding_status: "validated",
+        claims: [{
+          schema_version: "grounded_claim_v1",
+          claim_type: "factual",
+          text: "Route leak 是错误传播路由的事件。",
+          evidence_ids: ["evidence-1", "evidence-2"],
+          confidence: 0.9,
+        }],
+        evidence: [
+          { evidence_id: "evidence-1", chunk_id: "chunk-1", source_ref: "rfc7908#2" },
+          { evidence_id: "evidence-2", chunk_id: "chunk-2", source_ref: "rfc9234#4" },
+        ],
+        citations: [
+          { source_id: "src-1", source_ref: "rfc7908#2", chunk_id: "chunk-1", title: "Route Leak" },
+          { source_id: "src-2", source_ref: "rfc9234#4", chunk_id: "chunk-2", title: "OTC" },
+        ],
         context_pack: {
-          results: [{ chunk_id: "chunk-1", retrieval_method: "mock_hybrid", score: 0.91 }],
-          citations: ["chunk-1"],
+          results: [
+            { chunk_id: "chunk-1", retrieval_method: "mock_hybrid", score: 0.91 },
+            { chunk_id: "chunk-2", retrieval_method: "mock_hybrid", score: 0.89 },
+          ],
+          citations: ["chunk-1", "chunk-2"],
         },
       };
     }),
@@ -61,8 +79,12 @@ describe("POST /api/chat", () => {
       content: "Route leak 是错误传播路由的事件。",
     });
     expect(payload.answerStatus).toBe("answered");
-    expect(payload.citations).toHaveLength(1);
-    expect(payload.retrieval.resultCount).toBe(1);
+    expect(payload.citations).toHaveLength(2);
+    expect(payload.retrieval.resultCount).toBe(2);
+    expect(payload.claims[0].evidence_ids).toEqual(["evidence-1", "evidence-2"]);
+    expect(payload.evidence).toHaveLength(2);
+    expect(payload.groundingStatus).toBe("validated");
+    expect(payload.raw.context_pack.results).toHaveLength(2);
   });
 
   it("returns a refusal message for no_evidence without fabricating an answer", async () => {

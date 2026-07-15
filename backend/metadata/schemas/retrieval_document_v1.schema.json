@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/retrieval-document-v1.json",
+  "title": "RetrievalDocumentV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "retrieval_doc_id",
+    "chunk_id",
+    "doc_id",
+    "source_id",
+    "source_snapshot_id",
+    "document_profile",
+    "title",
+    "section_path",
+    "semantic_unit",
+    "retrieval_text",
+    "retrieval_text_hash",
+    "retrieval_text_version",
+    "template_version",
+    "template_fingerprint",
+    "content_preview",
+    "content_hash",
+    "source_ref",
+    "source_refs",
+    "governance",
+    "eligibility"
+  ],
+  "properties": {
+    "schema_version": {"const": "retrieval_document_v1"},
+    "retrieval_doc_id": {"type": "string", "pattern": "^retrieval_document_v1_[0-9a-f]{64}$"},
+    "chunk_id": {"type": "string", "pattern": "^semantic_chunk_v3_[0-9a-f]{64}$"},
+    "doc_id": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "source_snapshot_id": {"type": "string", "pattern": "^snapshot_[0-9a-f]{64}$"},
+    "document_profile": {"type": "string", "minLength": 1},
+    "title": {"type": "string", "minLength": 1},
+    "section_path": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "semantic_unit": {"type": "string", "minLength": 1},
+    "retrieval_text": {"type": "string", "minLength": 1},
+    "retrieval_text_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "retrieval_text_version": {"const": "retrieval_text_v1"},
+    "template_version": {"type": "string", "minLength": 1},
+    "template_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "content_preview": {"type": "string", "maxLength": 240},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "source_ref": {"type": "string", "minLength": 1},
+    "source_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "object_id",
+        "object_type",
+        "parse_status",
+        "content_quality_status",
+        "source_trust_status",
+        "semantic_review_status",
+        "retrieval_eligibility",
+        "status_provenance",
+        "migration_audit"
+      ],
+      "properties": {
+        "schema_version": {"const": "evidence_governance_state_v1"},
+        "object_id": {"type": "string", "minLength": 1},
+        "object_type": {"const": "semantic_chunk"},
+        "parse_status": {"enum": ["parsed", "failed", "quarantined", "unknown"]},
+        "content_quality_status": {
+          "enum": ["approved", "pending_review", "rejected", "quarantined", "unknown"]
+        },
+        "source_trust_status": {
+          "enum": ["trusted", "trusted_with_caution", "untrusted", "pending", "unknown"]
+        },
+        "semantic_review_status": {"enum": ["approved", "pending", "rejected", "unknown"]},
+        "retrieval_eligibility": {"$ref": "#/$defs/retrievalEligibility"},
+        "status_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "parse_status",
+            "content_quality_status",
+            "source_trust_status",
+            "semantic_review_status"
+          ],
+          "properties": {
+            "parse_status": {"type": "string", "minLength": 1},
+            "content_quality_status": {"type": "string", "minLength": 1},
+            "source_trust_status": {"type": "string", "minLength": 1},
+            "semantic_review_status": {"type": "string", "minLength": 1}
+          }
+        },
+        "migration_audit": {"type": "array", "items": {"type": "object"}}
+      }
+    },
+    "eligibility": {
+      "$ref": "#/$defs/retrievalEligibility"
+    }
+  },
+  "$defs": {
+    "retrievalEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "rule_id", "policy_version", "reason", "audit"],
+      "properties": {
+        "status": {"enum": ["eligible", "eligible_with_caution"]},
+        "rule_id": {"type": "string", "minLength": 1},
+        "policy_version": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["actor", "decision_method", "input_fingerprint", "policy_fingerprint"],
+          "properties": {
+            "actor": {"const": "system:retrieval_eligibility_policy"},
+            "decision_method": {"const": "deterministic_policy"},
+            "input_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            "policy_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          }
+        }
+      }
+    }
+  }
+}

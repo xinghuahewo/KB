@@ -64,8 +64,8 @@ docker buildx build \
 ## 部署顺序
 
 1. 检查磁盘、GPU、端口、screen 和回滚版本。
-2. 验证候选代码测试与构建。
-3. 用明确 release id 执行 `verify-artifacts` 和 artifact gate。
+2. 按 [RAG 五阶段流水线](pipeline.md) 完成候选构建和 `verify-release`，确认没有 `fail` 或 `skipped_blocking`。
+3. 用明确 release id 执行 `verify-artifacts` 和 artifact gate，核对代码/制品成对回滚点。
 4. 部署代码到版本目录，不覆盖当前运行目录。
 5. 原子切换代码与制品指针，重启既有 screen 会话。
 6. 验证前端、FastAPI、embedding、reranker 和真实问答。

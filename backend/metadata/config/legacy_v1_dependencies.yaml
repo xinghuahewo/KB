@@ -1,0 +1,44 @@
+version: legacy_v1_dependencies_v1
+policy: >-
+  下列入口属于当前 release 的历史构建、迁移或审计兼容面；只能只读，不能作为
+  rag-evidence-pipeline-v2 新 release 的生产输入，并在对应检查点替换或退役。
+deprecated_paths:
+  - path: backend/src/bgpkb/indexing/build_chunks.py
+    reason: 旧 chunk 构建器；由检查点 B 的 semantic-build 替换
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/ingestion/assess_corpus_ocr_quality.py
+    reason: 历史 cleaned 语料画像；Canonical 质量诊断接管后退役
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/ingestion/build_cleaning_v2_migration.py
+    reason: v1 到 Canonical 的显式迁移工具
+    retire_by: one_verified_release_after_checkpoint_e
+  - path: backend/src/bgpkb/ingestion/extract_case_observations.py
+    reason: 历史案例证据只读适配；新候选不得进入治理决定
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/ingestion/parse_documents.py
+    reason: 旧解析入口；由五阶段 canonicalize 替换
+    retire_by: checkpoint_d
+  - path: backend/src/bgpkb/ingestion/profile_cleaned_corpus.py
+    reason: 历史 cleaned/chunks 画像；由 SemanticChunk v3 画像替换
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/ingestion/quality_check.py
+    reason: 当前 release 兼容门禁；新 release 使用 v3 门禁
+    retire_by: checkpoint_d
+  - path: backend/src/bgpkb/ingestion/resolve_cleaning_v2_migration.py
+    reason: v1 人工迁移裁决工具
+    retire_by: one_verified_release_after_checkpoint_e
+  - path: backend/src/bgpkb/publishing/build_artifact_manifest.py
+    reason: 当前 release v1/v2 manifest 兼容构建器
+    retire_by: checkpoint_d
+  - path: backend/src/bgpkb/publishing/build_coverage_report.py
+    reason: 当前 release 的历史 v1 覆盖画像；由 v3 覆盖门禁替换
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/publishing/build_entity_source_evidence.py
+    reason: 历史治理证据只读适配；不得形成新批准状态
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/publishing/build_human_review_evidence_extracts.py
+    reason: 历史 chunk 审计摘录；不得进入新 serving bundle
+    retire_by: checkpoint_b
+  - path: backend/src/bgpkb/publishing/build_source_processing_status.py
+    reason: 当前 v1 处理状态报告；由五阶段 manifest 终态替换
+    retire_by: checkpoint_d

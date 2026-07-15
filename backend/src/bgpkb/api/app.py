@@ -1,14 +1,14 @@
 import json
 import queue
 import threading
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from bgpkb import paths
 
@@ -22,6 +22,24 @@ Limit = Annotated[int, Query(ge=1, le=100)]
 class RagAnswerRequest(BaseModel):
     query: str = Field(..., min_length=1)
     limit: int = Field(8, ge=1, le=20)
+
+
+class RagAnswerResponse(BaseModel):
+    """兼容旧字段并声明 grounding v1 的可选扩展。"""
+
+    model_config = ConfigDict(extra="allow")
+
+    query: str
+    answer: str
+    answer_status: str
+    generated: bool = False
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    context_pack: dict[str, Any]
+    claims: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    grounding_status: str = "unknown"
+    model: str = ""
+    model_revision: str = ""
 
 app = FastAPI(
     title="BGP 知识库服务",
@@ -151,7 +169,7 @@ def api_hybrid_context_pack(
     )
 
 
-@app.post("/api/v1/rag/answer")
+@app.post("/api/v1/rag/answer", response_model=RagAnswerResponse)
 def api_rag_answer(request: RagAnswerRequest):
     return repository.rag_answer_payload(request.query, limit=request.limit)
 

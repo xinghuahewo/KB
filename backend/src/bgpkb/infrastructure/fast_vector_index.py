@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 
-SCHEMA_VERSION = "fast_vector_index_v1"
+SCHEMA_VERSION = "fast_vector_index_v2"
 
 
 @dataclass(frozen=True)
@@ -62,14 +64,19 @@ class FastVectorIndex:
         return int(self.matrix.shape[1])
 
     @classmethod
-    def load(cls, index_path: Path | str) -> "FastVectorIndex | None":
+    def load(
+        cls,
+        index_path: Path | str,
+        *,
+        validate_source_hash: bool = True,
+    ) -> "FastVectorIndex | None":
         artifacts = FastVectorIndexArtifacts.from_index_path(index_path)
         if not artifacts.exists():
             return None
         manifest = _read_json(artifacts.manifest_path)
         if manifest.get("schema_version") != SCHEMA_VERSION:
             return None
-        if not _source_matches_manifest(artifacts.source_path, manifest):
+        if validate_source_hash and not _source_matches_manifest(artifacts.source_path, manifest):
             return None
 
         matrix = np.load(artifacts.matrix_path, mmap_mode="r")
@@ -133,7 +140,9 @@ def load_cached_fast_vector_index(index_path: Path | str) -> FastVectorIndex | N
     cached = _FAST_INDEX_CACHE.get(key)
     if cached and cached[0] == signature:
         return cached[1]
-    loaded = FastVectorIndex.load(artifacts.source_path)
+    # 线上 release 在激活前已执行源 hash 门禁，运行期只加载不可变 mmap，
+    # 避免冷启动重新顺序读取大型 JSONL。直接 load/发布验证仍默认校验源 hash。
+    loaded = FastVectorIndex.load(artifacts.source_path, validate_source_hash=False)
     if loaded is None:
         return None
     _FAST_INDEX_CACHE[key] = (signature, loaded)
@@ -146,11 +155,12 @@ def build_fast_vector_index(index_path: Path | str) -> FastVectorIndexArtifacts:
     if not index_path.exists():
         raise FileNotFoundError(index_path)
 
-    metadata_rows: list[dict[str, Any]] = []
-    vectors: list[list[float]] = []
     dimension: int | None = None
     total_rows = 0
     skipped_non_chunk = 0
+    record_count = 0
+    eligible_chunk_ids: list[str] = []
+    retrieval_input_manifest_hashes: set[str] = set()
 
     with index_path.open(encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
@@ -166,27 +176,75 @@ def build_fast_vector_index(index_path: Path | str) -> FastVectorIndexArtifacts:
                 dimension = len(vector)
             elif len(vector) != dimension:
                 raise FastVectorIndexError(f"索引第 {line_number} 行向量维度不一致")
-            metadata_rows.append(_metadata_row(record, line_number))
-            vectors.append(vector)
+            metadata = _metadata_row(record, line_number)
+            eligible_chunk_ids.append(metadata["chunk_id"])
+            if record.get("retrieval_input_manifest_hash"):
+                retrieval_input_manifest_hashes.add(record["retrieval_input_manifest_hash"])
+            record_count += 1
 
-    if not vectors or dimension is None:
+    if not record_count or dimension is None:
         raise FastVectorIndexError("Dense JSONL 索引没有可用 chunk 向量")
-
-    matrix = np.asarray(vectors, dtype=np.float32)
-    norms = np.linalg.norm(matrix, axis=1)
-    if not np.isfinite(norms).all() or np.any(norms == 0.0):
-        raise FastVectorIndexError("Dense JSONL 索引包含零范数或非 finite 向量")
-    matrix = matrix / norms[:, None]
+    if len(set(eligible_chunk_ids)) != len(eligible_chunk_ids):
+        raise FastVectorIndexError("Dense JSONL 索引包含重复 chunk_id")
+    if len(retrieval_input_manifest_hashes) > 1:
+        raise FastVectorIndexError("Dense JSONL 索引混用了 retrieval input manifest")
 
     artifacts.matrix_path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_save_npy(artifacts.matrix_path, matrix)
-    _atomic_write_jsonl(artifacts.metadata_path, metadata_rows)
+    matrix_tmp = artifacts.matrix_path.with_name(f".{artifacts.matrix_path.name}.tmp")
+    metadata_tmp = artifacts.metadata_path.with_name(f".{artifacts.metadata_path.name}.tmp")
+    for temporary in (matrix_tmp, metadata_tmp):
+        if temporary.exists():
+            temporary.unlink()
+    matrix = np.lib.format.open_memmap(
+        matrix_tmp,
+        mode="w+",
+        dtype=np.float32,
+        shape=(record_count, dimension),
+    )
+    row_index = 0
+    try:
+        with index_path.open(encoding="utf-8") as source, metadata_tmp.open("w", encoding="utf-8") as metadata_handle:
+            for line_number, line in enumerate(source, start=1):
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if record.get("kind", "chunk") != "chunk":
+                    continue
+                vector = np.asarray(_validated_vector(record.get("vector"), line_number), dtype=np.float32)
+                if vector.shape != (dimension,):
+                    raise FastVectorIndexError(f"索引第 {line_number} 行向量维度不一致")
+                norm = float(np.linalg.norm(vector))
+                if not math.isfinite(norm) or norm == 0.0:
+                    raise FastVectorIndexError("Dense JSONL 索引包含零范数或非 finite 向量")
+                matrix[row_index] = vector / norm
+                metadata_handle.write(
+                    json.dumps(_metadata_row(record, line_number), ensure_ascii=False, separators=(",", ":")) + "\n"
+                )
+                row_index += 1
+            metadata_handle.flush()
+            os.fsync(metadata_handle.fileno())
+        matrix.flush()
+        if row_index != record_count:
+            raise FastVectorIndexError("快索引两阶段读取的记录数不一致")
+        del matrix
+        matrix = None
+        matrix_tmp.replace(artifacts.matrix_path)
+        metadata_tmp.replace(artifacts.metadata_path)
+    except Exception:
+        if matrix is not None:
+            del matrix
+        for temporary in (matrix_tmp, metadata_tmp):
+            if temporary.exists():
+                temporary.unlink()
+        raise
+
     stat = index_path.stat()
     _atomic_write_json(
         artifacts.manifest_path,
         {
             "schema_version": SCHEMA_VERSION,
             "source_path": str(index_path),
+            "source_index_sha256": _sha256_file(index_path),
             "source_size_bytes": stat.st_size,
             "source_mtime_ns": stat.st_mtime_ns,
             "matrix_file": artifacts.matrix_path.name,
@@ -194,9 +252,14 @@ def build_fast_vector_index(index_path: Path | str) -> FastVectorIndexArtifacts:
             "dtype": "float32",
             "normalized": True,
             "dimension": dimension,
-            "record_count": len(metadata_rows),
+            "record_count": record_count,
             "source_row_count": total_rows,
             "skipped_non_chunk_count": skipped_non_chunk,
+            "eligible_chunk_ids_hash": _string_set_hash(eligible_chunk_ids),
+            "retrieval_input_manifest_hash": next(iter(retrieval_input_manifest_hashes), None),
+            "build_strategy": "two_pass_preallocated_memmap_v1",
+            "matrix_sha256": _sha256_file(artifacts.matrix_path),
+            "metadata_sha256": _sha256_file(artifacts.metadata_path),
         },
     )
     clear_fast_vector_index_cache()
@@ -230,11 +293,59 @@ def _validated_vector(vector: Any, line_number: int) -> list[float]:
 def _source_matches_manifest(source_path: Path, manifest: dict[str, Any]) -> bool:
     if not source_path.exists():
         return True
-    stat = source_path.stat()
-    return (
-        manifest.get("source_size_bytes") == stat.st_size
-        and manifest.get("source_mtime_ns") == stat.st_mtime_ns
-    )
+    return manifest.get("source_index_sha256") == _sha256_file(source_path)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return "sha256:" + digest.hexdigest()
+
+
+def _string_set_hash(values: Any) -> str:
+    encoded = json.dumps(sorted(set(values)), ensure_ascii=False, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def verify_fast_vector_artifacts(
+    index_path: Path | str,
+    *,
+    eligible_chunk_ids: set[str],
+) -> dict[str, Any]:
+    artifacts = FastVectorIndexArtifacts.from_index_path(index_path)
+    required = {
+        "matrix": artifacts.matrix_path,
+        "metadata": artifacts.metadata_path,
+        "manifest": artifacts.manifest_path,
+    }
+    for name, path in required.items():
+        if not path.is_file():
+            raise FastVectorIndexError(f"缺少 fast {name} artifact：{path}")
+    if not artifacts.source_path.is_file():
+        raise FastVectorIndexError(f"缺少 fast source index：{artifacts.source_path}")
+    manifest = _read_json(artifacts.manifest_path)
+    if manifest.get("source_index_sha256") != _sha256_file(artifacts.source_path):
+        raise FastVectorIndexError("fast manifest source index hash 已过期")
+    loaded = FastVectorIndex.load(artifacts.source_path, validate_source_hash=False)
+    if loaded is None:
+        raise FastVectorIndexError("fast index 无法按当前 schema 与源 hash 加载")
+    actual_ids = {str(item.get("chunk_id", "")) for item in loaded.metadata}
+    if actual_ids != set(eligible_chunk_ids):
+        raise FastVectorIndexError(
+            "fast index eligibility 集合不一致："
+            f"missing={sorted(set(eligible_chunk_ids) - actual_ids)[:5]}, "
+            f"extra={sorted(actual_ids - set(eligible_chunk_ids))[:5]}"
+        )
+    expected_hash = _string_set_hash(eligible_chunk_ids)
+    if manifest.get("eligible_chunk_ids_hash") != expected_hash:
+        raise FastVectorIndexError("fast manifest eligibility hash 不一致")
+    if manifest.get("matrix_sha256") != _sha256_file(artifacts.matrix_path):
+        raise FastVectorIndexError("fast matrix hash 不一致")
+    if manifest.get("metadata_sha256") != _sha256_file(artifacts.metadata_path):
+        raise FastVectorIndexError("fast metadata hash 不一致")
+    return manifest
 
 
 def _file_signature(path: Path) -> tuple[str, int, int]:

@@ -1,0 +1,302 @@
+schema_version: source_registry_v1
+registry_version: 2026-07-14-v1
+sources:
+  - &rfc
+    source_id: rfc4271
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc4271.txt"}
+    source_type: standard
+    document_profile: rfc
+    authority_org: RFC Editor
+    language: en
+    license: &license_unknown {status: unknown, identifier: null, notes: 待逐来源完成许可证确认}
+    expected_content_types: [text/plain]
+    legacy_path: standards/rfc4271.txt
+    required: true
+  - <<: *rfc
+    source_id: rfc6480
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc6480.txt"}
+    legacy_path: standards/rfc6480.txt
+  - <<: *rfc
+    source_id: rfc6811
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc6811.txt"}
+    legacy_path: standards/rfc6811.txt
+  - <<: *rfc
+    source_id: rfc7908
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc7908.txt"}
+    legacy_path: standards/rfc7908.txt
+  - <<: *rfc
+    source_id: rfc8205
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc8205.txt"}
+    legacy_path: standards/rfc8205.txt
+  - <<: *rfc
+    source_id: rfc8210
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc8210.txt"}
+    legacy_path: standards/rfc8210.txt
+  - <<: *rfc
+    source_id: rfc9234
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc9234.txt"}
+    legacy_path: standards/rfc9234.txt
+  - <<: *rfc
+    source_id: rfc2622
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc2622.txt"}
+    legacy_path: standards/rfc2622.txt
+  - <<: *rfc
+    source_id: rfc3912
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc3912.txt"}
+    legacy_path: standards/rfc3912.txt
+  - <<: *rfc
+    source_id: rfc9082
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc9082.txt"}
+    legacy_path: standards/rfc9082.txt
+  - <<: *rfc
+    source_id: rfc9083
+    acquisition: {method: http, origin_locator: "https://www.rfc-editor.org/rfc/rfc9083.txt"}
+    legacy_path: standards/rfc9083.txt
+
+  - &data_html
+    source_id: routeviews_api_doc
+    acquisition: {method: http, origin_locator: "https://api.routeviews.org/docs"}
+    source_type: data_doc
+    document_profile: html
+    authority_org: RouteViews
+    language: en
+    license: *license_unknown
+    expected_content_types: [text/html]
+    legacy_path: data_docs/routeviews_api_doc.html
+    required: true
+  - <<: *data_html
+    source_id: routeviews_archive_index
+    acquisition: {method: http, origin_locator: "https://archive.routeviews.org/"}
+    legacy_path: data_docs/routeviews_archive_index.html
+  - <<: *data_html
+    source_id: ripe_ris_docs
+    acquisition: {method: http, origin_locator: "https://ris.ripe.net/docs/"}
+    authority_org: RIPE NCC
+    legacy_path: data_docs/ripe_ris_docs.html
+  - <<: *data_html
+    source_id: ripe_ris_route_collectors
+    acquisition: {method: http, origin_locator: "https://ris.ripe.net/docs/route-collectors/"}
+    authority_org: RIPE NCC
+    legacy_path: data_docs/ripe_ris_route_collectors.html
+  - <<: *data_html
+    source_id: ripe_ris_raw_data
+    acquisition: {method: http, origin_locator: "https://ris.ripe.net/docs/mrt/"}
+    authority_org: RIPE NCC
+    legacy_path: data_docs/ripe_ris_raw_data.html
+  - <<: *data_html
+    source_id: bgpstream_docs
+    acquisition: {method: http, origin_locator: "https://bgpstream.caida.org/docs"}
+    source_type: tool_doc
+    authority_org: CAIDA
+    legacy_path: tools_docs/bgpstream_docs.html
+  - <<: *data_html
+    source_id: bgpstream_tutorials
+    acquisition: {method: http, origin_locator: "https://bgpstream.caida.org/docs/tutorials"}
+    source_type: tool_doc
+    authority_org: CAIDA
+    legacy_path: tools_docs/bgpstream_tutorials.html
+  - <<: *data_html
+    source_id: caida_as_relationships
+    acquisition: {method: http, origin_locator: "https://www.caida.org/catalog/datasets/as-relationships/"}
+    authority_org: CAIDA
+    legacy_path: data_docs/caida_as_relationships.html
+  - <<: *data_html
+    source_id: caida_asrank_api
+    acquisition: {method: http, origin_locator: "https://asrank.caida.org/doc"}
+    authority_org: CAIDA
+    legacy_path: data_docs/caida_asrank_api.html
+  - <<: *data_html
+    source_id: ripestat_api_docs
+    acquisition: {method: http, origin_locator: "https://stat.ripe.net/docs/02.data-api"}
+    authority_org: RIPE NCC
+    legacy_path: data_docs/ripestat_api_docs.html
+  - <<: *data_html
+    source_id: peeringdb_api_docs
+    acquisition: {method: http, origin_locator: "https://www.peeringdb.com/s/2.79.0/api-schema.yaml"}
+    document_profile: openapi_yaml
+    authority_org: PeeringDB
+    expected_content_types: [application/yaml, text/yaml]
+    legacy_path: data_docs/peeringdb_api_docs.yaml
+  - <<: *data_html
+    source_id: manrs_measurement_framework
+    acquisition: {method: http, origin_locator: "https://manrs.org/manrs-observatory/measurement-framework/"}
+    authority_org: MANRS
+    legacy_path: data_docs/manrs_measurement_framework.html
+  - <<: *data_html
+    source_id: manrs_observatory_faq
+    acquisition: {method: http, origin_locator: "https://manrs.org/manrs-observatory/observatory-faq/"}
+    authority_org: MANRS
+    legacy_path: data_docs/manrs_observatory_faq.html
+  - <<: *data_html
+    source_id: manrs_netops_actions
+    acquisition: {method: http, origin_locator: "https://www.manrs.org/wp-content/uploads/2021/02/MANRS-Network-Operators-Actions-v2.4.4.pdf"}
+    document_profile: pdf_table
+    authority_org: MANRS
+    expected_content_types: [application/pdf]
+    legacy_path: data_docs/manrs_netops_actions.pdf
+  - <<: *data_html
+    source_id: arin_aspa_doc
+    acquisition: {method: http, origin_locator: "https://www.arin.net/resources/manage/rpki/aspa/"}
+    authority_org: ARIN
+    legacy_path: data_docs/arin_aspa_doc.html
+  - <<: *data_html
+    source_id: ripe_aspa_doc
+    acquisition: {method: http, origin_locator: "https://www.ripe.net/manage-ips-and-asns/resource-management/rpki/aspa/"}
+    authority_org: RIPE NCC
+    legacy_path: data_docs/ripe_aspa_doc.html
+
+  - &paper_pdf
+    source_id: bear_2025
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/2506.04514"}
+    source_type: paper
+    document_profile: pdf_table
+    authority_org: arXiv
+    language: en
+    license: *license_unknown
+    expected_content_types: [application/pdf]
+    legacy_path: papers/bear_2025.pdf
+    required: true
+  - <<: *paper_pdf
+    source_id: beam_2024
+    acquisition: {method: http, origin_locator: "https://www.usenix.org/system/files/usenixsecurity24-chen-yihao.pdf"}
+    authority_org: USENIX
+    legacy_path: papers/beam_2024.pdf
+  - <<: *paper_pdf
+    source_id: bgpshield_2025
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/2511.14467"}
+    legacy_path: papers/bgpshield_2025.pdf
+  - <<: *paper_pdf
+    source_id: artemis_2018
+    acquisition: {method: http, origin_locator: "https://www-old.caida.org/publications/papers/2018/artemis/artemis.pdf"}
+    authority_org: CAIDA
+    legacy_path: papers/artemis_2018.pdf
+  - <<: *paper_pdf
+    source_id: bgp2vec_2020
+    acquisition: {method: http, origin_locator: "https://www.eng.tau.ac.il/~shavitt/pub/NetAI2020.pdf"}
+    authority_org: Tel Aviv University
+    legacy_path: papers/bgp2vec_2020.pdf
+  - <<: *paper_pdf
+    source_id: ap2vec_2022
+    acquisition: {method: http, origin_locator: "https://talshapira.github.io/publication/ap2vec_tnsm"}
+    document_profile: html
+    authority_org: Author publication page
+    expected_content_types: [text/html]
+    legacy_path: papers/ap2vec_2022.html
+  - <<: *paper_pdf
+    source_id: aswatch_2015
+    acquisition: {method: http, origin_locator: "https://collaborate.princeton.edu/en/publications/aswatch-an-as-reputation-system-to-expose-bulletproof-hosting-ase"}
+    document_profile: html
+    authority_org: Princeton University
+    expected_content_types: [text/html]
+    legacy_path: papers/aswatch_2015.html
+  - <<: *paper_pdf
+    source_id: cair_2016
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/1605.00618"}
+    legacy_path: papers/cair_2016.pdf
+  - <<: *paper_pdf
+    source_id: bursty_announcements_2019
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/1905.05835"}
+    legacy_path: papers/bursty_announcements_2019.pdf
+  - <<: *paper_pdf
+    source_id: peerlock_2020
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/2006.06576"}
+    legacy_path: papers/peerlock_2020.pdf
+  - <<: *paper_pdf
+    source_id: global_bgp_attacks_2024
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/2408.09622"}
+    legacy_path: papers/global_bgp_attacks_2024.pdf
+  - <<: *paper_pdf
+    source_id: oscilloscope_2023
+    acquisition: {method: http, origin_locator: "https://arxiv.org/pdf/2301.12843"}
+    legacy_path: papers/oscilloscope_2023.pdf
+  - <<: *paper_pdf
+    source_id: practical_defenses_2007
+    acquisition: {method: http, origin_locator: "https://docs.lib.purdue.edu/ecetr/364/"}
+    document_profile: html
+    authority_org: Purdue University
+    expected_content_types: [text/html]
+    legacy_path: papers/practical_defenses_2007.html
+
+  - &case_html
+    source_id: youtube_hijack_google_2008
+    acquisition: {method: http, origin_locator: "https://research.google/pubs/youtube-hijacking-february-24th-2008-analysis-of-bgp-routing-dynamics/"}
+    source_type: case_report
+    document_profile: html
+    authority_org: Google Research
+    language: en
+    license: *license_unknown
+    expected_content_types: [text/html]
+    legacy_path: cases/youtube_hijack_google_2008.html
+    required: true
+  - <<: *case_html
+    source_id: facebook_outage_cloudflare_2021
+    acquisition: {method: http, origin_locator: "https://blog.cloudflare.com/october-2021-facebook-outage"}
+    authority_org: Cloudflare
+    legacy_path: cases/facebook_outage_cloudflare_2021.html
+  - <<: *case_html
+    source_id: facebook_outage_meta_2021
+    acquisition: {method: http, origin_locator: "https://engineering.fb.com/2021/10/04/networking-traffic/outage/"}
+    authority_org: Meta Engineering
+    legacy_path: cases/facebook_outage_meta_2021.html
+  - <<: *case_html
+    source_id: indosat_route_leak_2014
+    acquisition: {method: http, origin_locator: "https://www.theregister.com/2014/04/03/indosat_fatthumbs_route_announcements_again/"}
+    authority_org: The Register
+    legacy_path: cases/indosat_route_leak_2014.html
+  - <<: *case_html
+    source_id: cloudflare_verizon_route_leak_2019
+    acquisition: {method: http, origin_locator: "https://blog.cloudflare.com/how-verizon-and-a-bgp-optimizer-knocked-large-parts-of-the-internet-offline-today"}
+    authority_org: Cloudflare
+    legacy_path: cases/cloudflare_verizon_route_leak_2019.html
+  - <<: *case_html
+    source_id: mainone_google_cloudflare_route_leak_2018
+    acquisition: {method: http, origin_locator: "https://blog.cloudflare.com/how-a-nigerian-isp-knocked-google-offline/"}
+    authority_org: Cloudflare
+    legacy_path: cases/mainone_google_cloudflare_route_leak_2018.html
+  - <<: *case_html
+    source_id: aws_route53_crypto_hijack_2018
+    acquisition: {method: http, origin_locator: "https://blog.cloudflare.com/bgp-leaks-and-crypto-currencies/"}
+    authority_org: Cloudflare
+    legacy_path: cases/aws_route53_crypto_hijack_2018.html
+  - <<: *case_html
+    source_id: fastly_rpki_hijack_2024
+    acquisition: {method: http, origin_locator: "https://labs.ripe.net/author/job_snijders/war-story-rpki-is-working-as-intended/"}
+    authority_org: RIPE Labs
+    legacy_path: cases/fastly_rpki_hijack_2024.html
+  - <<: *case_html
+    source_id: cloudflare_outage_2026
+    acquisition: {method: http, origin_locator: "https://blog.cloudflare.com/cloudflare-outage-february-20-2026/"}
+    authority_org: Cloudflare
+    legacy_path: cases/cloudflare_outage_2026.html
+  - <<: *case_html
+    source_id: manrs_bgp_2020_review
+    acquisition: {method: http, origin_locator: "https://manrs.org/2021/02/bgp-rpki-and-manrs-2020-in-review/"}
+    authority_org: MANRS
+    legacy_path: cases/manrs_bgp_2020_review.html
+  - <<: *case_html
+    source_id: manrs_regional_bgp_incidents_2020
+    acquisition: {method: http, origin_locator: "https://manrs.org/2021/03/a-regional-look-into-bgp-incidents-in-2020/"}
+    authority_org: MANRS
+    legacy_path: cases/manrs_regional_bgp_incidents_2020.html
+  - <<: *case_html
+    source_id: china_telecom_europe_route_leak_2019
+    acquisition: {method: http, origin_locator: "https://arstechnica.com/information-technology/2019/06/bgp-mishap-sends-european-mobile-traffic-through-china-telecom-for-2-hours/"}
+    authority_org: Ars Technica
+    legacy_path: cases/china_telecom_europe_route_leak_2019.html
+  - <<: *case_html
+    source_id: cert_eu_china_telecom_route_leak_2019
+    acquisition: {method: http, origin_locator: "https://www.cert.europa.eu/publications/threat-intelligence/threat-memo-190611-1/pdf"}
+    document_profile: pdf_table
+    authority_org: CERT-EU
+    expected_content_types: [application/pdf]
+    legacy_path: cases/cert_eu_china_telecom_route_leak_2019.pdf
+  - source_id: context_2026
+    acquisition: {method: local_import, origin_locator: "internal:context_2026"}
+    source_type: internal
+    document_profile: plain_text
+    authority_org: BGP knowledge base project
+    language: zh
+    license: {status: known, identifier: "LicenseRef-Internal-Project", notes: 项目内部可追溯上下文}
+    expected_content_types: [text/markdown]
+    legacy_path: notes/context_2026.md
+    required: true

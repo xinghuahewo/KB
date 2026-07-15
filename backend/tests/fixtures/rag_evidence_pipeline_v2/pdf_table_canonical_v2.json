@@ -1,0 +1,56 @@
+{
+  "schema_version": "canonical_document_v2",
+  "doc_id": "fixture_pdf_table",
+  "source": {
+    "source_id": "fixture_pdf_table",
+    "snapshot_id": "snapshot_fixture_pdf_table",
+    "content_sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "runtime": {"pipeline_revision": "fixture-v1"},
+  "blocks": [
+    {
+      "block_id": "block_v2_1111111111111111111111111111111111111111111111111111111111111111",
+      "doc_id": "fixture_pdf_table",
+      "page_id": "page-3",
+      "page_number": 3,
+      "parent_block_id": null,
+      "block_type": "heading",
+      "heading_level": 2,
+      "reading_order": 0,
+      "bbox": {"left": 72, "top": 96, "right": 520, "bottom": 122, "coord_origin": "top_left"},
+      "raw_text": "Table 2: Route validation outcomes",
+      "cleaned_text": "Table 2: Route validation outcomes",
+      "language": "en",
+      "quality": {"text_quality": "approved"},
+      "provenance": {"source_anchor": "#/pages/3/headings/1"},
+      "parse_status": "parsed",
+      "content_quality_status": "approved",
+      "generated_by": "fixture-v1"
+    },
+    {
+      "block_id": "block_v2_2222222222222222222222222222222222222222222222222222222222222222",
+      "doc_id": "fixture_pdf_table",
+      "page_id": "page-3",
+      "page_number": 3,
+      "parent_block_id": "block_v2_1111111111111111111111111111111111111111111111111111111111111111",
+      "block_type": "table",
+      "heading_level": null,
+      "reading_order": 1,
+      "bbox": {"left": 72, "top": 134, "right": 520, "bottom": 310, "coord_origin": "top_left"},
+      "raw_text": "State | Meaning\nValid | ROA matches\nInvalid | ROA conflicts\nNotFound | No covering ROA",
+      "cleaned_text": "State | Meaning\nValid | ROA matches\nInvalid | ROA conflicts\nNotFound | No covering ROA",
+      "language": "en",
+      "quality": {"table_structure": "approved"},
+      "provenance": {"source_anchor": "#/pages/3/tables/1"},
+      "parse_status": "parsed",
+      "content_quality_status": "approved",
+      "table": {
+        "columns": ["State", "Meaning"],
+        "rows": [["Valid", "ROA matches"], ["Invalid", "ROA conflicts"], ["NotFound", "No covering ROA"]]
+      },
+      "generated_by": "fixture-v1"
+    }
+  ],
+  "assets": [],
+  "diagnostics": []
+}

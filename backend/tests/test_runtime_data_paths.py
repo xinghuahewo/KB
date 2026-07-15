@@ -6,10 +6,56 @@ import pytest
 
 from bgpkb import paths
 from bgpkb.infrastructure import database
+from bgpkb.infrastructure import serving_bundle
 from bgpkb.retrieval import retrieval_framework
 from bgpkb.retrieval import hybrid_retrieval
 from bgpkb.retrieval.retrieval_data import PublishedArtifactRetrievalData
 from bgpkb.retrieval.retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
+
+
+def _serving_document():
+    text = "RFC 4271 Border Gateway Protocol complete retrieval text"
+    chunk_id = "semantic_chunk_v3_" + "1" * 64
+    return {
+        "retrieval_doc_id": "retrieval_doc_v1_" + "2" * 64,
+        "chunk_id": chunk_id,
+        "doc_id": "rfc4271",
+        "source_id": "rfc4271",
+        "title": "RFC 4271",
+        "document_profile": "rfc",
+        "section_path": ["BGP"],
+        "semantic_unit": "paragraph",
+        "source_ref": "raw/rfc4271.txt#bgp",
+        "retrieval_text": text,
+        "retrieval_text_hash": "sha256:" + "3" * 64,
+        "retrieval_text_version": "retrieval_text_v1",
+        "content_preview": text,
+        "governance": {
+            "parse_status": "parsed",
+            "content_quality_status": "approved",
+            "source_trust_status": "trusted",
+            "semantic_review_status": "approved",
+        },
+        "eligibility": {
+            "status": "eligible",
+            "policy_version": "retrieval_eligibility_v1",
+            "rule_id": "retrieval.eligible_reviewed_source",
+            "reason": "eligible",
+            "audit": {},
+        },
+    }
+
+
+def _write_serving_database(published_dir, *, entities=()):
+    published_dir.mkdir(parents=True, exist_ok=True)
+    path = published_dir / "serving.sqlite"
+    serving_bundle.build_serving_database(
+        path,
+        release_id="release-test",
+        retrieval_documents=[_serving_document()],
+        entities=list(entities),
+    )
+    return path
 
 
 def test_runtime_data_dir_is_unavailable_without_explicit_configuration(monkeypatch):
@@ -120,21 +166,21 @@ def test_runtime_data_dir_rejects_missing_configured_directory(monkeypatch, tmp_
 
 def test_database_path_uses_configured_runtime_data_directory(monkeypatch, tmp_path):
     data_dir = tmp_path / "release" / "data"
-    data_dir.mkdir(parents=True)
+    _write_serving_database(data_dir / "published")
     monkeypatch.setenv("BGPKB_DATA_DIR", str(data_dir))
 
-    assert database.runtime_database_path() == data_dir / "published" / "bgp_knowledge_base.sqlite"
+    assert database.runtime_database_path() == data_dir / "published" / "serving.sqlite"
 
 
 def test_retrievers_use_configured_runtime_data_directory_by_default(monkeypatch, tmp_path):
     data_dir = tmp_path / "release" / "data"
     published_dir = data_dir / "published"
     published_dir.mkdir(parents=True)
-    (published_dir / "bgp_knowledge_base.sqlite").touch()
+    _write_serving_database(published_dir)
     (published_dir / "bge_m3_vector_index.jsonl").touch()
     monkeypatch.setenv("BGPKB_DATA_DIR", str(data_dir))
 
-    assert Bm25Retriever().db_path == data_dir / "published" / "bgp_knowledge_base.sqlite"
+    assert Bm25Retriever().db_path == data_dir / "published" / "serving.sqlite"
     assert DenseRetriever(provider=object()).index_path == data_dir / "published" / "bge_m3_vector_index.jsonl"
 
 
@@ -170,24 +216,18 @@ def test_published_artifact_retrieval_data_loads_runtime_metadata(monkeypatch, t
     datasets_dir = data_dir / "derived" / "datasets"
     published_dir.mkdir(parents=True)
     datasets_dir.mkdir(parents=True)
-    (datasets_dir / "entity_source_evidence.jsonl").write_text(
-        '{"entity_review_status":"approved","chunk_sample_ids":["chunk-1"]}\n',
-        encoding="utf-8",
-    )
-    (published_dir / "source_catalog.jsonl").write_text(
-        '{"source_id":"rfc4271","processing_status":"complete_deterministic","trust_level":"high"}\n',
-        encoding="utf-8",
-    )
-    (published_dir / "entity_catalog.jsonl").write_text(
-        '{"entity_id":"approved","review_status":"approved"}\n'
-        '{"entity_id":"pending","review_status":"pending"}\n',
-        encoding="utf-8",
+    _write_serving_database(
+        published_dir,
+        entities=[
+            {"entity_id": "approved", "review_status": "approved"},
+            {"entity_id": "pending", "review_status": "pending"},
+        ],
     )
     monkeypatch.setenv("BGPKB_DATA_DIR", str(data_dir))
 
     retrieval_data = PublishedArtifactRetrievalData.from_environment()
 
-    assert retrieval_data.trusted_chunk_ids() == {"chunk-1"}
+    assert retrieval_data.trusted_chunk_ids() == {_serving_document()["chunk_id"]}
     assert retrieval_data.eligible_doc_ids() == {"rfc4271"}
     assert retrieval_data.excluded_by_policy() == [
         {"entity_id": "pending", "reason": "not_approved", "review_status": "pending"}
@@ -201,15 +241,15 @@ def test_retrieval_data_owns_all_runtime_catalog_and_index_paths(tmp_path):
     published_dir.mkdir(parents=True)
     datasets_dir.mkdir(parents=True)
     for path in (
-        published_dir / "bgp_knowledge_base.sqlite",
         published_dir / "bge_m3_vector_index.jsonl",
         published_dir / "chunk_catalog.jsonl",
         datasets_dir / "section_catalog.jsonl",
     ):
         path.touch()
+    _write_serving_database(published_dir)
     retrieval_data = PublishedArtifactRetrievalData(data_dir)
 
-    assert retrieval_data.database_path() == published_dir / "bgp_knowledge_base.sqlite"
+    assert retrieval_data.database_path() == published_dir / "serving.sqlite"
     assert retrieval_data.vector_index_path() == published_dir / "bge_m3_vector_index.jsonl"
     assert retrieval_data.chunk_catalog_path() == published_dir / "chunk_catalog.jsonl"
     assert retrieval_data.section_catalog_path() == datasets_dir / "section_catalog.jsonl"
@@ -219,12 +259,12 @@ def test_retrieval_data_owns_all_runtime_catalog_and_index_paths(tmp_path):
     )
 
 
-def test_retrieval_data_fails_closed_when_required_metadata_is_missing(tmp_path):
+def test_retrieval_data_fails_closed_when_serving_database_is_missing(tmp_path):
     data_dir = tmp_path / "release" / "data"
     data_dir.mkdir(parents=True)
     retrieval_data = PublishedArtifactRetrievalData(data_dir)
 
-    with pytest.raises(FileNotFoundError, match="entity_source_evidence"):
+    with pytest.raises(FileNotFoundError, match="serving.sqlite"):
         retrieval_data.trusted_chunk_ids()
 
 

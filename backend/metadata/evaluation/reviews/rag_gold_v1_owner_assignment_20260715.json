@@ -1,0 +1,15 @@
+{
+  "schema_version": "rag_gold_approval_evidence_v1",
+  "approval_id": "rag-gold-v1-owner-reviewer-authorization-20260715",
+  "owner": "吴柏橦",
+  "reviewer": "兴华",
+  "datasets": [
+    "answer_gold",
+    "retrieval_gold"
+  ],
+  "authorization_method": "用户在当前 Codex 任务中明确指定 owner、独立 reviewer 和本地审核凭据",
+  "scope": "登记黄金集责任人并授权其用于 rag-evidence-pipeline-v2 候选发布评测",
+  "recorded_at": "2026-07-15T00:00:00+08:00",
+  "recorded_by": "Codex 代记录",
+  "limitations": "本记录忠实记录本次用户授权，不声明存在加密签名，也不冒充 reviewer 的独立书面签名。"
+}

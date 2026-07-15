@@ -26,6 +26,14 @@
       "type": "array",
       "items": {"$ref": "context_unit.schema.json"}
     },
+    "evidence": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "context_groups": {
+      "type": "array",
+      "items": {"type": "object"}
+    },
     "provider": {"type": ["string", "null"]},
     "model": {"type": ["string", "null"]},
     "degraded": {"type": "boolean"},

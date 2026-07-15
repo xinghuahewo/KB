@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.ingestion.legacy_canonical_adapter import read_legacy_read_only
 
 
 ROOT = paths.PROJECT_ROOT
@@ -85,12 +86,15 @@ def entity_terms(workbook_record, packet_record):
 def load_chunks_by_id():
     chunks = {}
     for path in sorted(CHUNK_DIR.rglob("*.jsonl")):
-        for record in load_jsonl(path):
+        legacy = read_legacy_read_only(path, allow_legacy=True)
+        for record in legacy["content"]:
             chunk_id = record.get("chunk_id")
             if chunk_id:
                 chunks[chunk_id] = {
                     **record,
                     "chunk_file": path.relative_to(ROOT).as_posix(),
+                    "input_mode": legacy["mode"],
+                    "legacy_diagnostic_code": legacy["diagnostic"]["code"],
                 }
     return chunks
 
@@ -185,6 +189,8 @@ def build_records():
                 "excerpt_char_count": len(excerpt),
                 "needs_llm": False,
                 "llm_skip_reason": "不需要 LLM；本记录只做确定性 chunk 摘录和词项匹配，不判断证据充分性。",
+                "input_mode": chunk.get("input_mode", ""),
+                "legacy_diagnostic_code": chunk.get("legacy_diagnostic_code", ""),
                 "generated_by": "src/bgpkb/pipeline/build_human_review_evidence_extracts.py",
             })
     return records, missing_chunks
@@ -219,6 +225,8 @@ def write_csv(records):
         "excerpt_char_count",
         "needs_llm",
         "llm_skip_reason",
+        "input_mode",
+        "legacy_diagnostic_code",
         "generated_by",
     ]
     with CSV_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
@@ -242,6 +250,7 @@ def write_report(records, missing_chunks):
         "## 范围",
         "",
         "本报告从人工复核工作簿、实体复核包和现有 chunks 机械生成。它只摘录 chunk 文本并记录词项匹配，不判断来源是否支持实体字段。",
+        "现有 chunks 通过显式 legacy 只读适配器读取，仅供历史审计，不得形成新的批准状态。",
         "",
         "## 摘要",
         "",

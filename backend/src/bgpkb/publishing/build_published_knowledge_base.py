@@ -328,6 +328,21 @@ def build_chunk_catalog(
                 "content_preview": " ".join(content.split())[:240],
                 "chunk_file": chunk_file,
         }
+        if chunk.get("governance") is not None:
+            record["governance"] = chunk["governance"]
+            record["parse_status"] = chunk["governance"].get("parse_status", "unknown")
+            record["content_quality_status"] = chunk["governance"].get(
+                "content_quality_status", "unknown"
+            )
+            record["source_trust_status"] = chunk["governance"].get(
+                "source_trust_status", "unknown"
+            )
+            record["semantic_review_status"] = chunk["governance"].get(
+                "semantic_review_status", "unknown"
+            )
+            record["retrieval_eligibility"] = chunk["governance"].get(
+                "retrieval_eligibility"
+            )
         if corpus_version == "v2":
             for field in (
                 "schema_version", "parent_section_id", "chunk_order", "previous_chunk_id",

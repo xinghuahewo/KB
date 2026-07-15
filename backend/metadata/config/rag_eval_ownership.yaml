@@ -1,0 +1,20 @@
+schema_version: rag_eval_ownership_v1
+datasets:
+  retrieval_gold:
+    owner_status: assigned
+    owner: 吴柏橦
+    reviewers: [兴华]
+    change_control: pull_request
+    review_frequency: 每次候选 release 和每季度一次
+    approval_evidence: metadata/evaluation/reviews/rag_gold_v1_owner_assignment_20260715.json
+  answer_gold:
+    owner_status: assigned
+    owner: 吴柏橦
+    reviewers: [兴华]
+    change_control: pull_request
+    review_frequency: 每次模型、prompt 或证据契约变化
+    approval_evidence: metadata/evaluation/reviews/rag_gold_v1_owner_assignment_20260715.json
+release_policy:
+  unassigned_owner: skipped_blocking
+  required_reviewers: 1
+  prohibit_self_approval: true

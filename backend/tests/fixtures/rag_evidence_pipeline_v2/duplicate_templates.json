@@ -1,0 +1,14 @@
+{
+  "same_source_exact": [
+    {"source_id": "peeringdb_api_docs", "text": "Retrieve one network by its numeric identifier."},
+    {"source_id": "peeringdb_api_docs", "text": "Retrieve one network by its numeric identifier."}
+  ],
+  "same_source_template_near": [
+    {"source_id": "peeringdb_api_docs", "text": "Retrieve network 42 by its numeric identifier and return JSON."},
+    {"source_id": "peeringdb_api_docs", "text": "Retrieve network 43 by its numeric identifier and return JSON."}
+  ],
+  "cross_source_independent": [
+    {"source_id": "rfc6811", "text": "A route origin is Valid when the ROA authorizes the origin AS."},
+    {"source_id": "manrs_netops_actions", "text": "A route origin is valid when its ROA authorises the originating AS."}
+  ]
+}

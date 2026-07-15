@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.ingestion.legacy_canonical_adapter import read_legacy_read_only
 
 
 ROOT = paths.PROJECT_ROOT
@@ -69,7 +70,9 @@ def extract_observations(source):
     if not path.exists():
         return [], {"source_id": source_id, "status": "missing_cleaned"}
 
-    text = path.read_text(encoding="utf-8", errors="replace")
+    legacy = read_legacy_read_only(path, allow_legacy=True)
+    text = legacy["content"]
+    diagnostic_code = legacy["diagnostic"]["code"]
     seen = set()
     records = []
     for observation_type, pattern in OBSERVATION_PATTERNS:
@@ -87,9 +90,17 @@ def extract_observations(source):
                 "context": context_window(text, match.start(), match.end()),
                 "source_ref": f"data/corpus/cleaned/cases/{source_id}.md",
                 "review_status": "pending",
+                "input_mode": legacy["mode"],
+                "legacy_diagnostic_code": diagnostic_code,
             })
     records.sort(key=lambda item: (item["observation_type"], item["value"]))
-    return records, {"source_id": source_id, "status": "processed", "count": len(records)}
+    return records, {
+        "source_id": source_id,
+        "status": "processed",
+        "count": len(records),
+        "input_mode": legacy["mode"],
+        "diagnostic_code": diagnostic_code,
+    }
 
 
 def write_jsonl(records):
@@ -101,7 +112,10 @@ def write_jsonl(records):
 
 def write_csv(records):
     DATASET_DIR.mkdir(parents=True, exist_ok=True)
-    fields = ["source_id", "title", "observation_type", "value", "context", "source_ref", "review_status"]
+    fields = [
+        "source_id", "title", "observation_type", "value", "context", "source_ref",
+        "review_status", "input_mode", "legacy_diagnostic_code",
+    ]
     with CSV_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
@@ -122,6 +136,7 @@ def write_report(records, case_statuses, total_cases):
         "## 范围",
         "",
         "本报告只记录从已清洗案例文本中用正则规则直接抽取到的观察值，不进行语义判断，不推断 AS 角色，不判断攻击者/受害者，不写入结构化 Case 实体。",
+        "这些输入通过显式 legacy 只读适配器读取，只能用于历史审计，不能进入新 release 的治理决定。",
         "",
         "## 摘要",
         "",

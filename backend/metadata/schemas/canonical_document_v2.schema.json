@@ -4,18 +4,41 @@
   "title": "CanonicalDocumentV2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "doc_id", "source", "runtime", "blocks", "assets"],
+  "required": [
+    "schema_version",
+    "doc_id",
+    "source",
+    "runtime",
+    "config_fingerprint",
+    "processing_fingerprint",
+    "parse_status",
+    "content_quality_status",
+    "blocks",
+    "assets",
+    "diagnostics",
+    "parser_mode"
+  ],
   "properties": {
     "schema_version": {"const": "canonical_document_v2"},
     "doc_id": {"type": "string", "minLength": 1},
-    "source": {"type": "object"},
-    "runtime": {"type": "object"},
-    "blocks": {"type": "array", "items": {"type": "object"}},
-    "assets": {"type": "array", "items": {"type": "object"}},
-    "diagnostics": {"type": "array", "items": {"type": "object"}},
-    "parser_mode": {"enum": ["docling", "fallback", "docling_failed"]},
-    "fallback_reason": {"type": ["string", "null"]},
-    "fallback_review_status": {"enum": ["not_applicable", "pending_review", "approved", "rejected"]},
-    "document_status": {"enum": ["parsed", "pending_review", "quarantined"]}
+    "source": {"$ref": "https://w3id.org/bgpkb/schema/source-snapshot-v1.json"},
+    "runtime": {"$ref": "https://w3id.org/bgpkb/schema/canonical-runtime-v1.json"},
+    "config_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "processing_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "parse_status": {"enum": ["parsed", "failed", "quarantined"]},
+    "content_quality_status": {"enum": ["approved", "pending_review", "rejected", "quarantined"]},
+    "blocks": {
+      "type": "array",
+      "items": {"$ref": "https://w3id.org/bgpkb/schema/canonical-block-v2.json"}
+    },
+    "assets": {
+      "type": "array",
+      "items": {"$ref": "https://w3id.org/bgpkb/schema/canonical-asset-v2.json"}
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {"$ref": "https://w3id.org/bgpkb/schema/canonical-diagnostic-v1.json"}
+    },
+    "parser_mode": {"enum": ["docling", "fallback", "docling_failed"]}
   }
 }

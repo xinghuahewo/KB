@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/canonical-runtime-v1.json",
+  "title": "CanonicalRuntimeV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pipeline_revision", "parser", "environment_fingerprint"],
+  "properties": {
+    "schema_version": {"const": "canonical_runtime_v1"},
+    "pipeline_revision": {"type": "string", "minLength": 1},
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "environment_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

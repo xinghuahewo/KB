@@ -1,0 +1,267 @@
+schema_version: converged_pipeline_v2
+pipeline_version: rag_evidence_pipeline_v2.0.0
+compatibility:
+  retained: true
+  fine_grained_pipeline: bgpkb.pipeline.run_pipeline
+  incremental_planner: bgpkb.pipeline.plan_incremental_run
+  note: 旧入口仅用于细粒度诊断与迁移兼容，不再作为五阶段产品入口。
+stages:
+  - name: source-ingest
+    depends_on: []
+    input_manifests:
+      - metadata/sources/source_registry.yaml
+    required_outputs:
+      - data/manifests/source_ingest.json
+    success_criteria:
+      - 来源注册表与快照终态 manifest 完整
+    subtasks:
+      - id: build-source-snapshots
+        module: bgpkb.ingestion.source_ingest
+        write_paths:
+          - "{data_dir}"
+          - "{source_store_dir}"
+        args:
+          - --registry
+          - "{backend_root}/metadata/sources/source_registry.yaml"
+          - --source-store
+          - "{source_store_dir}"
+          - --legacy-root
+          - "{frozen_source_root}"
+          - --manifest
+          - "{candidate_dir}/data/manifests/source_ingest.json"
+
+  - name: canonicalize
+    depends_on:
+      - source-ingest
+    input_manifests:
+      - data/manifests/source_ingest.json
+    required_outputs:
+      - data/manifests/canonical_documents_v2.json
+    success_criteria:
+      - Canonical Document v2 Schema 与来源闭包通过
+    subtasks:
+      - id: build-canonical-documents
+        module: bgpkb.ingestion.canonicalize_candidate
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --source-manifest
+          - "{candidate_dir}/data/manifests/source_ingest.json"
+          - --source-store
+          - "{source_store_dir}"
+          - --frozen-canonical-root
+          - "{frozen_canonical_root}"
+          - --frozen-assets-root
+          - "{frozen_assets_root}"
+          - --output-root
+          - "{data_dir}/corpus/canonical"
+          - --output-assets-root
+          - "{data_dir}/corpus/assets_v2"
+          - --manifest
+          - "{candidate_dir}/data/manifests/canonical_documents_v2.json"
+          - --reprocess-policy
+          - "{backend_root}/metadata/config/canonical_reprocess_policy_v1.yaml"
+          - --release-id
+          - "{release_id}"
+
+  - name: semantic-build
+    depends_on:
+      - canonicalize
+    input_manifests:
+      - data/manifests/canonical_documents_v2.json
+    required_outputs:
+      - data/manifests/semantic_build_v1.json
+      - data/published/semantic_chunks_v3.jsonl
+      - data/published/semantic_excluded_blocks_v3.jsonl
+      - data/published/semantic_chunk_quality_v3.json
+      - data/published/semantic_build_quality_gate_v1.json
+      - data/published/chunk_id_migration.jsonl
+      - data/published/chunk_id_migration_report_v1.json
+      - data/published/evidence_governance_states_v1.jsonl
+      - data/published/retrieval_documents_v1.jsonl
+      - data/published/retrieval_input_manifest_v1.json
+    success_criteria:
+      - SemanticChunk v3、治理状态、旧新 chunk migration 与 Retrieval Document v1 质量门禁通过
+    subtasks:
+      - id: build-semantic-candidate
+        module: bgpkb.ingestion.semantic_build_candidate
+        code_dependencies:
+          - bgpkb.domain.evidence_governance
+          - bgpkb.indexing.retrieval_documents
+          - bgpkb.ingestion.canonical_contract
+          - bgpkb.ingestion.semantic_chunk_quality
+          - bgpkb.ingestion.semantic_chunking_v3
+          - bgpkb.workflows.replay_governance_migration
+        fingerprint_files:
+          - metadata/config/retrieval_eligibility_policy_v1.yaml
+          - metadata/config/retrieval_text_v1.yaml
+          - metadata/config/semantic_chunking_v3.yaml
+          - metadata/schemas/evidence_governance_state_v1.schema.json
+          - metadata/schemas/retrieval_document_v1.schema.json
+          - metadata/schemas/semantic_chunk_v3.schema.json
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --registry
+          - "{backend_root}/metadata/sources/source_registry.yaml"
+          - --source-manifest
+          - "{candidate_dir}/data/manifests/source_ingest.json"
+          - --canonical-manifest
+          - "{candidate_dir}/data/manifests/canonical_documents_v2.json"
+          - --canonical-root
+          - "{data_dir}/corpus/canonical"
+          - --legacy-chunks-root
+          - "{frozen_legacy_chunks_root}"
+          - --source-catalog
+          - "{frozen_source_catalog_path}"
+          - --entity-evidence
+          - "{frozen_entity_evidence_path}"
+          - --output-root
+          - "{data_dir}/published"
+          - --manifest
+          - "{candidate_dir}/data/manifests/semantic_build_v1.json"
+          - --release-id
+          - "{release_id}"
+
+  - name: publish-index
+    depends_on:
+      - semantic-build
+    input_manifests:
+      - data/published/retrieval_documents_v1.jsonl
+    required_outputs:
+      - data/published/source_catalog.jsonl
+      - data/published/chunk_catalog.jsonl
+      - data/published/section_catalog.jsonl
+      - data/published/serving.sqlite
+      - data/published/governance.sqlite
+      - data/published/bge_m3_vector_index.jsonl
+      - data/published/bge_m3_embedding_manifest.json
+      - data/published/bge_m3_vector_matrix.npy
+      - data/published/bge_m3_vector_metadata.jsonl
+      - data/published/bge_m3_vector_fast_manifest.json
+      - data/derived/datasets/artifact_manifest.jsonl
+      - data/published/publish_index_manifest_v1.json
+    closure_artifacts:
+      - data/published/source_catalog.jsonl
+      - data/published/chunk_catalog.jsonl
+      - data/published/section_catalog.jsonl
+      - data/published/retrieval_documents_v1.jsonl
+      - data/published/serving.sqlite
+      - data/published/governance.sqlite
+      - data/published/bge_m3_vector_index.jsonl
+      - data/published/bge_m3_embedding_manifest.json
+      - data/published/bge_m3_vector_matrix.npy
+      - data/published/bge_m3_vector_metadata.jsonl
+      - data/published/bge_m3_vector_fast_manifest.json
+      - data/derived/datasets/artifact_manifest.jsonl
+      - data/published/publish_index_manifest_v1.json
+    success_criteria:
+      - catalog、Retrieval Document、serving/governance DB、FTS、embedding、快索引与 artifact manifest 完成同 release 闭包
+    subtasks:
+      - id: build-candidate-catalogs
+        module: bgpkb.publishing.candidate_publish_index
+        code_dependencies:
+          - bgpkb.ingestion.source_registry
+        fingerprint_files:
+          - metadata/sources/source_registry.yaml
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --data-dir
+          - "{data_dir}"
+          - --registry
+          - "{backend_root}/metadata/sources/source_registry.yaml"
+          - --release-id
+          - "{release_id}"
+      - id: build-serving-database
+        module: bgpkb.publishing.build_sqlite_knowledge_base
+        code_dependencies:
+          - bgpkb.infrastructure.serving_bundle
+        write_paths:
+          - "{data_dir}"
+        args: []
+      - id: build-bge-m3-index
+        module: bgpkb.indexing.build_bge_m3_index
+        code_dependencies:
+          - bgpkb.indexing.retrieval_documents
+          - bgpkb.infrastructure.bge_m3_remote_client
+          - bgpkb.infrastructure.retrieval_model_client
+        fingerprint_files:
+          - metadata/config/retrieval_text_v1.yaml
+          - metadata/schemas/retrieval_document_v1.schema.json
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --model-revision
+          - "5617a9f61b028005a4858fdac845db406aefb181"
+      - id: build-fast-vector-index
+        module: bgpkb.indexing.build_fast_vector_index
+        code_dependencies:
+          - bgpkb.infrastructure.fast_vector_index
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --index-path
+          - "{data_dir}/published/bge_m3_vector_index.jsonl"
+      - id: build-artifact-manifest
+        module: bgpkb.publishing.build_artifact_manifest
+        write_paths:
+          - "{data_dir}"
+        args: []
+      - id: verify-publish-index-closure
+        module: bgpkb.publishing.build_publish_index_manifest
+        code_dependencies:
+          - bgpkb.indexing.retrieval_documents
+          - bgpkb.infrastructure.serving_bundle
+          - bgpkb.publishing.publish_index_closure
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --data-dir
+          - "{data_dir}"
+
+  - name: verify-release
+    depends_on:
+      - publish-index
+    input_manifests:
+      - data/published/bge_m3_vector_fast_manifest.json
+    required_outputs:
+      - data/published/rag_server_performance_report_v1.json
+      - data/published/rag_release_gate_evidence.json
+      - data/published/release_verification_report_v1.json
+    success_criteria:
+      - 完整性、数据质量、真实评测和性能门禁全部通过
+    subtasks:
+      - id: evaluate-server-performance
+        module: bgpkb.pipeline.run_server_rag_performance_gate
+        failure_policy: collect_for_gate
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --data-dir
+          - "{data_dir}"
+      - id: build-release-gate-evidence
+        module: bgpkb.pipeline.build_release_gate_evidence
+        code_dependencies:
+          - bgpkb.domain.evaluation_gold
+          - bgpkb.domain.rag_quality_gates
+          - bgpkb.workflows.release_gate_evidence
+        fingerprint_files:
+          - metadata/config/rag_eval_ownership.yaml
+          - metadata/config/rag_quality_gates_v1.yaml
+          - metadata/evaluation/rag_gold_manifest_v1.yaml
+          - metadata/evaluation/retrieval_gold_v1.jsonl
+          - metadata/evaluation/answer_gold_v1.jsonl
+        failure_policy: collect_for_gate
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --data-dir
+          - "{data_dir}"
+      - id: verify-candidate-release
+        module: bgpkb.pipeline.verify_candidate_release
+        write_paths:
+          - "{data_dir}"
+        args:
+          - --data-dir
+          - "{data_dir}"

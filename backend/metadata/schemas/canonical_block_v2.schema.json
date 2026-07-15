@@ -4,25 +4,84 @@
   "title": "CanonicalBlockV2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["block_id", "doc_id", "page_id", "parent_block_id", "block_type", "heading_level", "reading_order", "bbox", "raw_text", "cleaned_text", "language", "quality", "provenance", "review_status", "generated_by"],
+  "required": [
+    "block_id",
+    "doc_id",
+    "page_id",
+    "page_number",
+    "parent_block_id",
+    "block_type",
+    "heading_level",
+    "reading_order",
+    "bbox",
+    "raw_text",
+    "cleaned_text",
+    "language",
+    "quality",
+    "provenance",
+    "parse_status",
+    "content_quality_status",
+    "asset_refs",
+    "generated_by"
+  ],
   "properties": {
     "block_id": {"type": "string", "pattern": "^block_v2_[0-9a-f]{64}$"},
     "doc_id": {"type": "string", "minLength": 1},
     "page_id": {"type": ["string", "null"]},
     "page_number": {"type": ["integer", "null"], "minimum": 1},
-    "parent_block_id": {"type": ["string", "null"]},
+    "parent_block_id": {"type": ["string", "null"], "pattern": "^block_v2_[0-9a-f]{64}$"},
     "block_type": {"enum": ["title", "heading", "paragraph", "list_item", "table", "code", "formula", "picture", "caption", "footnote", "page_header", "page_footer", "unsupported"]},
     "heading_level": {"type": ["integer", "null"], "minimum": 1, "maximum": 6},
     "reading_order": {"type": "integer", "minimum": 0},
-    "bbox": {"type": ["object", "null"]},
+    "bbox": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["left", "top", "right", "bottom", "coord_origin"],
+          "properties": {
+            "left": {"type": "number"},
+            "top": {"type": "number"},
+            "right": {"type": "number"},
+            "bottom": {"type": "number"},
+            "coord_origin": {"enum": ["top_left", "bottom_left"]}
+          }
+        }
+      ]
+    },
     "raw_text": {"type": "string"},
     "cleaned_text": {"type": "string"},
     "language": {"type": ["string", "null"]},
-    "quality": {"type": "object"},
-    "provenance": {"type": "object"},
-    "review_status": {"enum": ["auto_approved", "approved", "pending_review", "conflict", "quarantined"]},
-    "table": {"type": ["object", "null"]},
-    "asset_refs": {"type": "array", "items": {"type": "string"}},
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confidence", "ocr_used", "issues"],
+      "properties": {
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "ocr_used": {"type": "boolean"},
+        "issues": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_snapshot_id", "source_object_digest", "source_anchor"],
+      "properties": {
+        "source_snapshot_id": {"type": "string", "pattern": "^snapshot_[0-9a-f]{64}$"},
+        "source_object_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "source_anchor": {"type": "string", "minLength": 1}
+      }
+    },
+    "parse_status": {"enum": ["parsed", "failed", "quarantined"]},
+    "content_quality_status": {"enum": ["approved", "pending_review", "rejected", "quarantined"]},
+    "table": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "https://w3id.org/bgpkb/schema/cleaning-v2-table.json"}
+      ]
+    },
+    "asset_refs": {"type": "array", "items": {"type": "string", "pattern": "^asset_v2_[0-9a-f]{64}$"}, "uniqueItems": true},
     "generated_by": {"type": "string", "minLength": 1}
   }
 }

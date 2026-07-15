@@ -86,7 +86,7 @@ def test_verify_artifact_release_rejects_stale_fast_vector_manifest(tmp_path):
     vector_path = data_dir / "published" / "bge_m3_vector_index.jsonl"
     artifacts = build_fast_vector_index(vector_path)
     manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
-    manifest["source_size_bytes"] += 1
+    manifest["source_index_sha256"] = "sha256:" + "0" * 64
     artifacts.manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
     _rewrite_checksums(data_dir)
 

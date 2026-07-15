@@ -12,6 +12,18 @@ if str(ROOT) not in sys.path:
 from bgpkb.infrastructure import llm_client  # noqa: E402
 
 
+def test_deepseek_client_binds_explicit_release_model_revision(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    monkeypatch.setenv("DEEPSEEK_MODEL_REVISION", "deepseek-chat@release-rev-a")
+
+    client = llm_client.DeepSeekClient.from_env()
+
+    assert client.provider == "deepseek"
+    assert client.release_eligible is True
+    assert client.model_revision == "deepseek-chat@release-rev-a"
+
+
 def test_deepseek_client_reports_unavailable_without_api_key(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 

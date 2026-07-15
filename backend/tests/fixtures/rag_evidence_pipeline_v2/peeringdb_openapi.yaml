@@ -1,0 +1,36 @@
+openapi: 3.0.3
+info:
+  title: PeeringDB API fixture
+  version: fixture-v1
+paths:
+  /net/{id}:
+    get:
+      operationId: network_retrieve
+      summary: Retrieve one network
+      description: Returns the network identified by its PeeringDB numeric id.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer}
+        - name: depth
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0, maximum: 3}
+      responses:
+        "200":
+          description: Network response
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Network"}
+        "404":
+          description: Network not found
+components:
+  schemas:
+    Network:
+      type: object
+      required: [id, name, asn]
+      properties:
+        id: {type: integer}
+        name: {type: string}
+        asn: {type: integer}
