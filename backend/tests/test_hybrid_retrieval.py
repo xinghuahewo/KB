@@ -357,7 +357,12 @@ def test_rrf_candidate_pool_caps_each_logical_source_before_global_limit():
     lexical_items = []
     for index in range(25):
         item = _channel_item(f"dominant-{index:02}", index + 1, 1.0)
-        item.update({"doc_id": "dominant-source", "source_ref": "dominant-source#part"})
+        item.update({
+            "doc_id": "dominant-source",
+            "source_ref": "https://example.test/dominant-source#part",
+        })
+        if index < 3:
+            item["source_id"] = "dominant-source"
         lexical_items.append(item)
     tail = _channel_item("independent", 26, 0.1)
     tail.update({"doc_id": "independent-source", "source_ref": "independent-source#part"})
@@ -426,6 +431,57 @@ def test_context_pack_rejects_unsupported_intent_but_preserves_channel_evidence(
         "rule_id": "unsupported_financial_recommendation",
         "reason": "知识库不支持由 BGP 数据推导投资建议",
     }
+
+
+def test_context_pack_uses_the_same_normalized_query_for_recall_and_rerank(monkeypatch):
+    candidate = _channel_item("rfc6811-state", 1, 1.0)
+    candidate.update({"doc_id": "rfc6811", "source_ref": "rfc6811#state"})
+    monkeypatch.setattr(hybrid_retrieval, "search", lambda *args, **kwargs: {
+        "query": "ROV 会把路由起源有效性分成哪些状态？",
+        "normalized_query": "ROV 会把路由起源有效性分成哪些状态？ route origin validation RFC6811",
+        "results": [candidate],
+        "channel_metadata": {},
+        "lexical_count": 1,
+        "vector_count": 1,
+        "vector_status": "complete",
+        "degraded": False,
+    })
+    monkeypatch.setattr(hybrid_retrieval, "_build_structured_context", lambda *args, **kwargs: {
+        "context_units": [],
+        "evidence": [],
+        "context_groups": [],
+        "trim_events": [],
+    })
+
+    class RetrievalData:
+        @staticmethod
+        def excluded_by_policy():
+            return []
+
+    class CapturingReranker:
+        query = None
+
+        def rerank(self, query, documents, top_n, require_model=False):
+            self.query = query
+            return {
+                "ok": True,
+                "provider": "fake",
+                "model": "BAAI/bge-reranker-v2-m3",
+                "revision": "rev",
+                "results": [{"index": 0, "relevance_score": 0.9}],
+            }
+
+    reranker = CapturingReranker()
+    hybrid_retrieval.context_pack(
+        "ROV 会把路由起源有效性分成哪些状态？",
+        top_n=8,
+        query_type="fact",
+        require_model=True,
+        reranker=reranker,
+        retrieval_data=RetrievalData(),
+    )
+
+    assert reranker.query.endswith("route origin validation RFC6811")
 
 
 def test_single_failure_degrades_and_double_failure_raises():

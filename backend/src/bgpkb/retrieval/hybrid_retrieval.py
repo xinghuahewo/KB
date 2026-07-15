@@ -283,10 +283,12 @@ def _rrf_ranked(candidates):
 
 
 def _source_identity(item):
+    if item.get("doc_id"):
+        return str(item["doc_id"])
     if item.get("source_id"):
         return str(item["source_id"])
     source_ref = str(item.get("source_ref", ""))
-    return source_ref.split("#", 1)[0] or str(item.get("doc_id", ""))
+    return source_ref.split("#", 1)[0]
 
 
 def suppress_retrieval_duplicates(
@@ -813,7 +815,7 @@ def context_pack(
                 f"fts={lexical_manifest_hash}, embedding={embedding_manifest_hash}"
             )
     reranked = rerank_candidates(
-        query,
+        recall.get("normalized_query", query),
         recall["results"],
         top_n=effective_top_n,
         reranker=reranker or (_OfflineRerankerFallback() if not require_model else None),
