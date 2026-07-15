@@ -101,6 +101,72 @@ def test_retrieval_gold_rejects_wrong_reranker_revision():
     assert evaluation["failures"][0]["rule_id"] == "retrieval.reranker_binding"
 
 
+def test_retrieval_gold_matches_logical_source_id_when_source_ref_is_canonical_url():
+    from bgpkb.workflows.release_gate_evidence import evaluate_retrieval_gold
+
+    evaluation, metrics = evaluate_retrieval_gold(
+        [{
+            "question_id": "rg-en-fact-010",
+            "query": "What information is returned by the PeeringDB network-object endpoint?",
+            "query_type": "fact",
+            "expected_status": "evidence",
+            "expected_evidence": [{
+                "source_id": "peeringdb_api_docs",
+                "source_ref": "peeringdb_api_docs",
+            }],
+        }],
+        request_fn=lambda *args, **kwargs: {
+            "results": [{
+                "chunk_id": "chunk-peeringdb",
+                "doc_id": "peeringdb_api_docs",
+                "source_id": "peeringdb_api_docs",
+                "source_ref": "https://www.peeringdb.com/api-schema.yaml#/sections/info",
+            }],
+            "provider": "local_http",
+            "model": MODELS["reranker"]["model"],
+            "revision": MODELS["reranker"]["revision"],
+            "rerank_status": "complete",
+            "degraded": False,
+            "channel_metadata": {"vector": {"index_mode": "fast_numpy"}},
+        },
+        expected_reranker=MODELS["reranker"],
+    )
+
+    assert evaluation["status"] == "passed"
+    assert evaluation["samples"][0]["decision"] == "pass"
+    assert evaluation["samples"][0]["matched_source_ids"] == ["peeringdb_api_docs"]
+    assert metrics == {"recall_at_8": 1.0, "mrr": 1.0}
+
+
+def test_retrieval_gold_accepts_zero_candidate_without_fake_reranker_binding():
+    from bgpkb.workflows.release_gate_evidence import evaluate_retrieval_gold
+
+    evaluation, metrics = evaluate_retrieval_gold(
+        [{
+            "question_id": "rg-zh-fact-012",
+            "query": "本知识库是否记录了明天北京逐小时天气？",
+            "query_type": "fact",
+            "expected_status": "no_evidence",
+            "expected_evidence": [],
+        }],
+        request_fn=lambda *args, **kwargs: {
+            "results": [],
+            "provider": "local_http",
+            "model": None,
+            "revision": None,
+            "rerank_status": "empty",
+            "degraded": False,
+            "channel_metadata": {"vector": {"index_mode": "fast_numpy"}},
+        },
+        expected_reranker=MODELS["reranker"],
+    )
+
+    assert evaluation["status"] == "passed"
+    assert evaluation["hard_failure_count"] == 0
+    assert evaluation["samples"][0]["decision"] == "pass"
+    assert metrics == {"recall_at_8": 1.0, "mrr": 1.0}
+
+
 def test_answer_gold_scores_grounding_citations_refusal_and_injection():
     from bgpkb.workflows.release_gate_evidence import evaluate_answer_gold
 
@@ -182,6 +248,54 @@ def test_answer_gold_scores_grounding_citations_refusal_and_injection():
     assert evaluation["samples"][0]["expected_claims"][0][
         "acceptable_evidence_sets"
     ] == [["evidence-rfc7908"]]
+
+
+def test_answer_gold_matches_expected_logical_source_id_through_evidence_doc_id():
+    from bgpkb.workflows.release_gate_evidence import evaluate_answer_gold
+
+    evidence = {
+        "evidence_id": "evidence-peeringdb",
+        "chunk_id": "chunk-peeringdb",
+        "doc_id": "peeringdb_api_docs",
+        "source_ref": "https://www.peeringdb.com/api-schema.yaml#/sections/info",
+    }
+    evaluation, metrics, citation_validity = evaluate_answer_gold(
+        [{
+            "case_id": "ag-en-010",
+            "query": "What does the PeeringDB network endpoint return?",
+            "scenario_tags": ["citation_precision"],
+            "expected_status": "answered",
+            "expected_claims": [{
+                "claim_id": "peeringdb-network-object",
+                "acceptable_evidence_refs": ["peeringdb_api_docs"],
+            }],
+            "attack_payload": None,
+        }],
+        request_fn=lambda *args, **kwargs: {
+            "answer": "The endpoint returns PeeringDB network objects.",
+            "answer_status": "answered",
+            "generated": True,
+            "claims": [{
+                "claim_type": "factual",
+                "text": "The endpoint returns PeeringDB network objects.",
+                "evidence_ids": [evidence["evidence_id"]],
+            }],
+            "citations": [evidence],
+            "context_pack": {"evidence": [evidence]},
+            "grounding_status": "validated",
+            "model": MODELS["llm"]["model"],
+            "model_revision": MODELS["llm"]["revision"],
+        },
+        expected_llm=MODELS["llm"],
+    )
+
+    assert evaluation["status"] == "passed"
+    assert metrics["claim_citation_coverage"] == 1.0
+    assert metrics["citation_precision"] == 1.0
+    assert citation_validity == 1.0
+    assert evaluation["samples"][0]["expected_claims"][0][
+        "acceptable_evidence_sets"
+    ] == [["evidence-peeringdb"]]
 
 
 def test_release_gate_evidence_binds_candidate_reports_models_and_metrics(tmp_path):

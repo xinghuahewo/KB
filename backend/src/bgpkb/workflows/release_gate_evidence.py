@@ -73,9 +73,57 @@ def _source_matches(source_ref: object, expected_ref: object) -> bool:
     return bool(expected_ref) and str(expected_ref) in str(source_ref or "")
 
 
-def _reciprocal_rank(results: Sequence[Mapping[str, object]], expected_refs: list[str]) -> float:
+def _row_matches_source(
+    row: Mapping[str, object],
+    *,
+    expected_source_id: object = "",
+    expected_source_ref: object = "",
+) -> bool:
+    metadata = row.get("metadata", {})
+    metadata = metadata if isinstance(metadata, Mapping) else {}
+    source_ids = {
+        str(value)
+        for value in (
+            row.get("source_id"),
+            row.get("doc_id"),
+            metadata.get("source_id"),
+            metadata.get("doc_id"),
+        )
+        if value
+    }
+    source_refs = [row.get("source_ref"), metadata.get("source_ref")]
+    for owner in (row, metadata):
+        values = owner.get("source_refs", [])
+        if isinstance(values, list):
+            source_refs.extend(values)
+    return (
+        bool(expected_source_id)
+        and str(expected_source_id) in source_ids
+    ) or any(
+        _source_matches(source_ref, expected_source_ref)
+        for source_ref in source_refs
+    )
+
+
+def _expected_evidence_matches(
+    result: Mapping[str, object], expected: Mapping[str, object]
+) -> bool:
+    return _row_matches_source(
+        result,
+        expected_source_id=expected.get("source_id", ""),
+        expected_source_ref=expected.get("source_ref", ""),
+    )
+
+
+def _reciprocal_rank(
+    results: Sequence[Mapping[str, object]],
+    expected_evidence: Sequence[Mapping[str, object]],
+) -> float:
     for rank, result in enumerate(results, start=1):
-        if any(_source_matches(result.get("source_ref"), expected) for expected in expected_refs):
+        if any(
+            _expected_evidence_matches(result, expected)
+            for expected in expected_evidence
+        ):
             return 1.0 / rank
     return 0.0
 
@@ -84,6 +132,12 @@ def _real_binding_failure(
     payload: Mapping[str, object],
     expected: Mapping[str, str],
 ) -> bool:
+    if (
+        payload.get("rerank_status") == "empty"
+        and payload.get("results") == []
+        and payload.get("degraded") is False
+    ):
+        return False
     return (
         payload.get("model") != expected.get("model")
         or payload.get("revision") != expected.get("revision")
@@ -152,22 +206,37 @@ def evaluate_retrieval_gold(
                 "question_id": question.get("question_id"),
             })
             results = []
-        expected_refs = [
-            str(item.get("source_ref", ""))
+        expected_evidence = [
+            item
             for item in question.get("expected_evidence", [])
             if isinstance(item, Mapping)
         ]
-        matched_refs = [
+        expected_refs = [str(item.get("source_ref", "")) for item in expected_evidence]
+        expected_source_ids = [
+            str(item.get("source_id", "")) for item in expected_evidence
+        ]
+        matched_evidence = [
             expected
-            for expected in expected_refs
-            if any(_source_matches(item.get("source_ref"), expected) for item in results[:8])
+            for expected in expected_evidence
+            if any(
+                _expected_evidence_matches(item, expected)
+                for item in results[:8]
+            )
+        ]
+        matched_refs = [str(item.get("source_ref", "")) for item in matched_evidence]
+        matched_source_ids = [
+            str(item.get("source_id", "")) for item in matched_evidence
         ]
         if question.get("expected_status") == "evidence":
-            recall = len(matched_refs) / len(expected_refs) if expected_refs else 0.0
-            rank = _reciprocal_rank(results[:8], expected_refs)
+            recall = (
+                len(matched_evidence) / len(expected_evidence)
+                if expected_evidence
+                else 0.0
+            )
+            rank = _reciprocal_rank(results[:8], expected_evidence)
             evidence_recalls.append(recall)
             reciprocal_ranks.append(rank)
-            decision = "pass" if matched_refs else "fail"
+            decision = "pass" if matched_evidence else "fail"
         else:
             recall = 1.0
             rank = 1.0 if not results else 0.0
@@ -180,8 +249,14 @@ def evaluate_retrieval_gold(
             "recall_at_8": recall,
             "reciprocal_rank": rank,
             "expected_source_refs": expected_refs,
+            "expected_source_ids": expected_source_ids,
             "matched_source_refs": matched_refs,
+            "matched_source_ids": matched_source_ids,
             "returned_source_refs": [item.get("source_ref", "") for item in results[:8]],
+            "returned_source_ids": [
+                item.get("source_id") or item.get("doc_id", "")
+                for item in results[:8]
+            ],
             "returned_chunk_ids": [item.get("chunk_id", "") for item in results[:8]],
             "reranker_model": payload.get("model"),
             "reranker_revision": payload.get("revision"),
@@ -320,7 +395,11 @@ def evaluate_answer_gold(
                 evidence_id
                 for evidence_id, item in evidence_by_id.items()
                 if any(
-                    _source_matches(item.get("source_ref"), expected_ref)
+                    _row_matches_source(
+                        item,
+                        expected_source_id=expected_ref,
+                        expected_source_ref=expected_ref,
+                    )
                     for expected_ref in acceptable_refs
                 )
             }
