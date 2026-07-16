@@ -12,6 +12,9 @@ class ArtifactRegistryError(ValueError):
     pass
 
 
+RELEASE_ID_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?")
+
+
 def validate_release_registry(payload: dict) -> dict:
     if payload.get("schema_version") != 1:
         raise ArtifactRegistryError("不支持的制品注册表 schema_version")
@@ -33,7 +36,7 @@ def validate_release_registry(payload: dict) -> dict:
             raise ArtifactRegistryError("每个 release 必须且只能包含规定字段")
         release_id = release["release_id"]
         release_ids.append(release_id)
-        if not isinstance(release_id, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}-[0-9a-f]{7,40}", release_id):
+        if not isinstance(release_id, str) or RELEASE_ID_PATTERN.fullmatch(release_id) is None:
             raise ArtifactRegistryError(f"release_id 非法：{release_id}")
         if not re.fullmatch(r"[0-9a-f]{7,40}", str(release["source_commit"])):
             raise ArtifactRegistryError(f"source_commit 非法：{release['source_commit']}")

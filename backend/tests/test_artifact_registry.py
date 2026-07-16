@@ -12,15 +12,51 @@ def test_repository_registry_records_current_external_release():
     registry = load_release_registry(REPOSITORY_ROOT / "artifacts" / "releases.yaml")
 
     assert registry["schema_version"] == 1
-    assert registry["current_release_id"] == "2026-07-13-a776240"
+    assert registry["current_release_id"] == "rag-evidence-pipeline-v2-11.1-20260715T073006Z"
     assert registry["releases"][-1] == {
-        "release_id": "2026-07-13-a776240",
-        "source_commit": "a7762401cc48864cd3da63b887c3251501e14f1c",
-        "file_count": 1296,
-        "sha256sums_sha256": "4617da2b38ef3e63e77da55b7a0d641db87f2339c8f1426f84e9d3f3690bec90",
-        "data_path": "/srv/bgpkb/artifacts/releases/2026-07-13-a776240/data",
+        "release_id": "rag-evidence-pipeline-v2-11.1-20260715T073006Z",
+        "source_commit": "2f1957839673f7ef65e1f6dfec332abfcef69972",
+        "file_count": 209,
+        "sha256sums_sha256": "f78d26fd9347617783cebefeec9e17b89e7196b42aadc0d990654dbf581cbfb7",
+        "data_path": "/srv/bgpkb/artifacts/releases/rag-evidence-pipeline-v2-11.1-20260715T073006Z/data",
         "status": "current",
     }
+
+
+def test_registry_accepts_versioned_pipeline_release_id():
+    release_id = "rag-evidence-pipeline-v2-11.1-20260715T073006Z"
+
+    payload = validate_release_registry({
+        "schema_version": 1,
+        "current_release_id": release_id,
+        "releases": [{
+            "release_id": release_id,
+            "source_commit": "2f1957839673f7ef65e1f6dfec332abfcef69972",
+            "file_count": 209,
+            "sha256sums_sha256": "f" * 64,
+            "data_path": f"/srv/bgpkb/artifacts/releases/{release_id}/data",
+            "status": "current",
+        }],
+    })
+
+    assert payload["current_release_id"] == release_id
+
+
+@pytest.mark.parametrize("release_id", ["../escape", "nested/release", "release id", "-release"])
+def test_registry_rejects_unsafe_release_id(release_id):
+    with pytest.raises(ArtifactRegistryError, match="release_id 非法"):
+        validate_release_registry({
+            "schema_version": 1,
+            "current_release_id": release_id,
+            "releases": [{
+                "release_id": release_id,
+                "source_commit": "2f19578",
+                "file_count": 1,
+                "sha256sums_sha256": "f" * 64,
+                "data_path": f"/srv/bgpkb/artifacts/releases/{release_id}/data",
+                "status": "current",
+            }],
+        })
 
 
 def test_registry_rejects_duplicate_release_ids():

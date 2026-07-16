@@ -19,7 +19,7 @@
   previous -> releases/<release-id>
 ```
 
-release id 采用 `YYYY-MM-DD-<source-commit>`。仓库中的 `artifacts/releases.yaml` 只登记 release id、生成提交、文件数、清单哈希、绝对数据路径和状态，不保存制品本体。
+常规 release id 采用 `YYYY-MM-DD-<source-commit>`；五阶段流水线候选可采用包含流水线名、版本号和 UTC 时间戳的稳定标识。release id 只能包含字母、数字、点、下划线和连字符，且首尾必须为字母或数字。仓库中的 `artifacts/releases.yaml` 只登记 release id、生成提交、文件数、清单哈希、绝对数据路径和状态，不保存制品本体。
 
 ## 运行时契约
 
