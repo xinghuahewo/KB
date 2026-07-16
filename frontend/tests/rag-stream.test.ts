@@ -71,4 +71,45 @@ describe("fetchRagAnswerStream", () => {
 
     await expect(request).rejects.toThrow("已停止生成");
   });
+
+  it("dispatches ordered deltas, citations, heartbeat and snapshot while ignoring duplicate sequence", async () => {
+    const received: string[] = [];
+    const fetchImpl = vi.fn(async () => new Response(streamFrom([
+      'data: {"type":"answer_delta","sequence":1,"delta":"路由"}\n\n',
+      'data: {"type":"answer_delta","sequence":1,"delta":"重复"}\n\n',
+      'data: {"type":"citation_delta","sequence":2,"citation_ids":["ev_1"],"label":"1"}\n\n',
+      'data: {"type":"heartbeat","sequence":3}\n\n',
+      'data: {"type":"answer_snapshot","sequence":4,"answer":"路由[1]","answer_parts":[]}\n\n',
+      'data: {"type":"done","sequence":5,"payload":{"query":"q","answer":"路由[1]","answer_status":"answered","citations":[],"context_pack":{}}}\n\n',
+    ]), { status: 200 })) as unknown as typeof fetch;
+
+    const payload = await fetchRagAnswerStream("q", {
+      fetchImpl,
+      onAnswerDelta: (event) => received.push(event.delta),
+      onCitationDelta: (event) => received.push(`[${event.label}]`),
+      onHeartbeat: () => received.push("heartbeat"),
+      onAnswerSnapshot: (event) => received.push(event.answer),
+    });
+
+    expect(received).toEqual(["路由", "[1]", "heartbeat", "路由[1]"]);
+    expect(payload.answer).toBe("路由[1]");
+  });
+
+  it("resumes after the previous sequence and exposes partial error snapshots", async () => {
+    const fetchImpl = vi.fn(async () => new Response(streamFrom([
+      'data: {"type":"answer_delta","sequence":8,"delta":"旧"}\n\n',
+      'data: {"type":"answer_delta","sequence":9,"delta":"新"}\n\n',
+      'data: {"type":"error","sequence":10,"message":"中断","partial_answer":"部分回答"}\n\n',
+    ]), { status: 200 })) as unknown as typeof fetch;
+    const deltas: string[] = [];
+
+    const promise = fetchRagAnswerStream("q", {
+      fetchImpl,
+      initialSequence: 8,
+      onAnswerDelta: (event) => deltas.push(event.delta),
+    });
+
+    await expect(promise).rejects.toMatchObject({ event: { partial_answer: "部分回答" } });
+    expect(deltas).toEqual(["新"]);
+  });
 });

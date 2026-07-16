@@ -24,6 +24,14 @@ EXPECTED_OPERATIONS = {
     ("/api/v1/rag/answer", "post"),
     ("/api/v1/rag/answer/stream", "post"),
     ("/api/v1/progress", "get"),
+    ("/api/v1/conversations", "post"),
+    ("/api/v1/conversations", "get"),
+    ("/api/v1/conversations/import", "post"),
+    ("/api/v1/conversations/{conversation_id}", "get"),
+    ("/api/v1/conversations/{conversation_id}", "delete"),
+    ("/api/v1/conversations/{conversation_id}/turns/stream", "post"),
+    ("/api/v1/conversations/{conversation_id}/turns/{request_id}/stop", "post"),
+    ("/api/v1/conversations/{conversation_id}/messages/{message_id}/evidence/{citation_id}", "get"),
 }
 
 

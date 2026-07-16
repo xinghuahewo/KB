@@ -75,6 +75,11 @@ class ChunkStore:
             raise ChunkStoreError("section_not_found", f"找不到 section：{section_id}")
         return dict(section)
 
+    def list_sections_for_document(self, doc_id: str) -> list[dict[str, Any]]:
+        sections = [dict(section) for section in self._sections.values() if section.get("doc_id") == doc_id]
+        sections.sort(key=lambda item: (int(item.get("section_order", 0)), item.get("section_id", "")))
+        return sections
+
     def _collect_section_chunks(self, section_id: str, chunks: list[dict[str, Any]], seen_sections: set[str]) -> None:
         if section_id in seen_sections:
             raise ChunkStoreError("section_cycle", f"section 子树存在环：{section_id}")

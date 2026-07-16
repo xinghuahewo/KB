@@ -56,6 +56,7 @@ def test_deepseek_client_builds_traceable_openai_compatible_payload(monkeypatch)
     assert "必须基于引用证据回答" in payload["messages"][0]["content"]
     assert "chunk_001" in payload["messages"][1]["content"]
     assert "rfc7908" in payload["messages"][1]["content"]
+    assert "[[cite:ev_1]]" in payload["messages"][0]["content"]
 
 
 def test_deepseek_client_builds_dedicated_structured_mapping_prompt():
@@ -127,3 +128,30 @@ def test_deepseek_classify_and_summarize_report_missing_key_without_network():
     assert classified["error_code"] == "missing_api_key"
     assert summarized["ok"] is False
     assert summarized["error_code"] == "missing_api_key"
+
+
+def test_sse_parser_handles_utf8_split_usage_and_error_frames():
+    raw = (
+        'data: {"choices":[{"delta":{"content":"路由"}}]}\n\n'
+        'data: {"choices":[],"usage":{"total_tokens":12}}\n\n'
+        'data: [DONE]\n\n'
+    ).encode("utf-8")
+    split = raw.index("路".encode("utf-8")) + 1
+
+    frames = list(llm_client._iter_sse_json([raw[:split], raw[split:]]))
+
+    assert frames[0]["choices"][0]["delta"]["content"] == "路由"
+    assert frames[1]["usage"]["total_tokens"] == 12
+
+
+def test_stream_answer_marks_upstream_errors_without_raising(monkeypatch):
+    client = llm_client.DeepSeekClient(api_key="test-key")
+
+    def fail(*args, **kwargs):
+        raise OSError("network down")
+
+    monkeypatch.setattr(llm_client.urllib.request, "urlopen", fail)
+    frames = list(client.stream_answer("问题", [{"citation_id": "ev_1", "content_preview": "证据"}]))
+
+    assert frames[-1]["type"] == "error"
+    assert frames[-1]["error_code"] == "request_failed"

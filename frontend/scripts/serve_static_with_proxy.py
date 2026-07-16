@@ -34,11 +34,17 @@ class StaticProxyHandler(SimpleHTTPRequestHandler):
             return
         self.send_error(404, "Not found")
 
+    def do_DELETE(self):  # noqa: N802
+        if self._should_proxy():
+            self._proxy()
+            return
+        self.send_error(404, "Not found")
+
     def do_OPTIONS(self):  # noqa: N802
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "content-type,x-bgp-client-id")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
         self.end_headers()
 
     def _should_proxy(self) -> bool:
