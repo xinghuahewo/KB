@@ -11,7 +11,7 @@ case "${1:-}" in
     (cd "$FRONTEND_DIR" && corepack yarn install --immutable)
     ;;
   test)
-    (cd "$BACKEND_DIR" && uv run pytest -q -m 'not artifact and not legacy_documentation')
+    (cd "$BACKEND_DIR" && uv run pytest -q -m 'not artifact and not serving_artifact and not legacy_documentation')
     (cd "$FRONTEND_DIR" && corepack yarn test)
     ;;
   test-artifacts)

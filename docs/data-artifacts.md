@@ -32,6 +32,8 @@ make verify-artifacts
 
 候选构建必须先形成 `publish_index_manifest_v1.json`，再通过统一 `verify-release`；完整的候选目录、catalog/DB/FTS/embedding/fast index 闭包和失败关闭条件见 [RAG 五阶段流水线](pipeline.md)。正式 release 仍必须使 `SHA256SUMS` 与实际文件集合完全一致，并通过 SQLite、向量和 release 注册表校验。
 
+部署 artifact 门禁按发布 schema 选择测试集：旧全量数据 release 运行 `artifact` 集成测试；`serving_sqlite_v1` 只读在线闭包运行 `serving_artifact` 健康、只读连接和可追溯检索测试。两类测试都先后校验源 release，且只在隔离 overlay 中执行，不得用旧全量目录假设否决或修改 serving bundle。
+
 ## 发布与回滚
 
 发布四元组为：代码提交、前端构建标识、制品 release id、`SHA256SUMS` 哈希。部署切换代码和制品指针前必须通过校验；失败时保持 `current` 和线上会话不变。

@@ -31,6 +31,7 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 markers = [
     "artifact: 需要已验证发布制品的集成或端到端测试。",
+    "serving_artifact: 需要只读 serving bundle 的运行时兼容测试。",
     "legacy_documentation: 待文档收敛移除或替换的历史阶段文档检查。",
 ]
 

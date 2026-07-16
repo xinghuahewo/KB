@@ -19,6 +19,12 @@ def test_pure_runtime_path_contract_is_not_selected_for_the_artifact_gate():
     ) is None
 
 
+def test_v2_read_only_runtime_checks_use_serving_artifact_gate():
+    assert marker_for(
+        "tests/test_serving_artifact_runtime.py::test_serving_artifact_health_and_database_are_read_only"
+    ) == "serving_artifact"
+
+
 def test_stale_historical_document_checks_are_separated_from_the_pr_baseline():
     assert marker_for(
         "tests/test_stage_b_server_routing.py::test_stage_b_design_documents_new_server_and_gpu_safety_boundaries"

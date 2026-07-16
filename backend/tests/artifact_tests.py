@@ -46,6 +46,11 @@ ARTIFACT_TEST_NODEIDS = frozenset({
     "tests/test_standard_mapping_candidates.py::test_real_mock_candidates_are_stable_sorted_and_traceable",
 })
 
+SERVING_ARTIFACT_TEST_NODEIDS = frozenset({
+    "tests/test_serving_artifact_runtime.py::test_serving_artifact_health_and_database_are_read_only",
+    "tests/test_serving_artifact_runtime.py::test_serving_artifact_keeps_traceable_retrieval_api",
+})
+
 LEGACY_DOCUMENTATION_TEST_NODEIDS = frozenset({
     "tests/test_stage_b_server_routing.py::test_current_server_routing_documents_do_not_retain_retired_server_assumptions",
     "tests/test_stage_b_server_routing.py::test_stage_b_design_documents_new_server_and_gpu_safety_boundaries",
@@ -56,6 +61,8 @@ LEGACY_DOCUMENTATION_TEST_NODEIDS = frozenset({
 def marker_for(nodeid: str) -> str | None:
     if nodeid in ARTIFACT_TEST_NODEIDS:
         return "artifact"
+    if nodeid in SERVING_ARTIFACT_TEST_NODEIDS:
+        return "serving_artifact"
     if nodeid in LEGACY_DOCUMENTATION_TEST_NODEIDS:
         return "legacy_documentation"
     return None
