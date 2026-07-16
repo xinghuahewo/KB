@@ -10,8 +10,9 @@ flowchart LR
     I --> X["indexing 分块与索引"]
     X --> P["publishing 不可变 release"]
     P --> R["retrieval 检索与证据组装"]
-    R --> A["FastAPI"]
-    A --> F["React/Next.js 前端"]
+    R --> A["FastAPI 与 SSE"]
+    A --> F["React/Next.js 对话工作台"]
+    A --> C["独立会话 SQLite"]
 ```
 
 ## 目录职责
@@ -49,7 +50,32 @@ retrieval ← api ← workflows
 
 ## 在线边界
 
-FastAPI 契约在本次整理中保持不变。运行时必须通过 `BGPKB_DATA_DIR` 选择一个已验证 release；检索请求中的 SQLite、向量索引、catalog 和信任元数据必须来自同一制品适配器。
+在线服务明确分成两类数据边界：
+
+- 发布知识库保持只读。运行时通过 `BGPKB_DATA_DIR` 选择一个已验证 release；检索请求中的 SQLite、向量索引、catalog 和信任元数据必须来自同一制品适配器。
+- 会话历史写入独立的 `BGP_CHAT_DB_PATH`。它不属于 release，不随代码或知识库制品切换而删除，并以 SQLite WAL、外键和 schema version 管理。
+
+`X-BGP-Client-ID` 经加盐哈希后只用于匿名会话命名空间隔离，不是账号或身份认证。浏览器保存原始随机标识，服务端只持久化哈希。任何需要多用户权限控制的部署都必须在该边界之外增加正式认证。
+
+回答链路通过 SSE 依次发送阶段、正文增量、引用增量和最终快照。`done` 只能在助手消息、终态、耗时和证据快照完成事务写入后发送。相同 `request_id` 的重试恢复既有轮次，并以递增 `sequence` 去重。结构化 `answer_parts` 把正文与 citation 分离，前端点击 citation 后只允许读取该助手消息作用域内的证据。
+
+```mermaid
+sequenceDiagram
+    participant U as 浏览器
+    participant A as FastAPI
+    participant K as 只读知识库 release
+    participant C as 会话 SQLite
+    U->>A: turn/stream + request_id
+    A->>C: 写入用户消息与 pending 助手消息
+    A->>K: 召回、精排、组装上下文
+    A-->>U: stage / answer_delta / citation_delta
+    A->>C: 保存回答、耗时与证据快照
+    A-->>U: done 最终快照
+    U->>A: 消息作用域 citation 详情
+    A->>C: 校验所属消息与快照
+    A->>K: 读取当前章节或分页全文
+    A-->>U: 文档内容与 release 差异提示
+```
 
 ## 离线边界
 

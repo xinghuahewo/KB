@@ -16,5 +16,20 @@ export function createClientId(prefix = "id") {
       .join("")}-${hex.slice(10, 16).join("")}`;
   }
 
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const fallbackRandom = Array.from({ length: 4 }, () => Math.random().toString(36).slice(2, 10)).join("");
+  return `${prefix}-${Date.now().toString(36)}-${fallbackRandom}`;
+}
+
+const CLIENT_ID_KEY = "bgp-chat-client-id";
+
+export function getOrCreateClientId(storage: Pick<Storage, "getItem" | "setItem"> | undefined = browserStorage()) {
+  const existing = storage?.getItem(CLIENT_ID_KEY);
+  if (existing && existing.length >= 32) return existing;
+  const created = createClientId("client");
+  storage?.setItem(CLIENT_ID_KEY, created);
+  return created;
+}
+
+function browserStorage() {
+  return typeof window === "undefined" ? undefined : window.localStorage;
 }

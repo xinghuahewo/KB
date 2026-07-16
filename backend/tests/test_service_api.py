@@ -200,7 +200,7 @@ def test_rag_answer_stream_api_returns_progress_and_done_events(monkeypatch):
             "guardrails": {},
         }
 
-    monkeypatch.setattr("bgpkb.api.app.repository.rag_answer_payload", fake_payload)
+    monkeypatch.setattr("bgpkb.api.app.repository.rag_answer_stream_payload", fake_payload)
 
     response = client.post("/api/v1/rag/answer/stream", json={"query": "route leak", "limit": 3})
 

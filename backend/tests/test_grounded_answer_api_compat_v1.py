@@ -88,12 +88,12 @@ def test_fastapi_answer_keeps_old_fields_and_returns_multiple_grounded_reference
 
 
 def test_fastapi_sse_keeps_stage_order_and_done_payload_extensions(monkeypatch):
-    def fake_payload(query, limit=8, progress=None):
+    def fake_payload(query, limit=8, progress=None, **_kwargs):
         for stage in ("retrieval", "rerank", "context_pack", "generation"):
-            progress({"stage": stage, "status": "complete", "message": stage})
+            progress({"type": "stage", "stage": stage, "status": "complete", "message": stage})
         return _payload(query)
 
-    monkeypatch.setattr("bgpkb.api.app.repository.rag_answer_payload", fake_payload)
+    monkeypatch.setattr("bgpkb.api.app.repository.rag_answer_stream_payload", fake_payload)
 
     response = client.post("/api/v1/rag/answer/stream", json={"query": "route leak", "limit": 3})
     events = [

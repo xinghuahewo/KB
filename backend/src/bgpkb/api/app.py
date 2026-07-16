@@ -1,9 +1,11 @@
 import json
+import os
 import queue
 import threading
+import time
 from typing import Annotated, Any, Literal, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,10 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from bgpkb import paths
 
 from bgpkb.infrastructure import database
+from bgpkb.infrastructure.chat_store import ChatRepository, hash_client_id
 from bgpkb.retrieval import repository
+from bgpkb.retrieval.evidence_detail import evidence_detail
+
+from .chat_models import ConversationCreateRequest, LegacyConversationImportRequest, TurnStreamRequest
 
 
 Limit = Annotated[int, Query(ge=1, le=100)]
+ClientIdHeader = Annotated[str, Header(alias="X-BGP-Client-ID", min_length=32, max_length=160)]
 
 
 class RagAnswerRequest(BaseModel):
@@ -41,6 +48,11 @@ class RagAnswerResponse(BaseModel):
     model: str = ""
     model_revision: str = ""
 
+
+_ACTIVE_TURNS: dict[tuple[str, str], threading.Event] = {}
+_ACTIVE_TURNS_LOCK = threading.Lock()
+_SSE_HEARTBEAT_SECONDS = float(os.environ.get("BGP_SSE_HEARTBEAT_SECONDS", "15"))
+
 app = FastAPI(
     title="BGP 知识库服务",
     description="面向已发布 SQLite 知识库的只读查询服务。",
@@ -59,9 +71,93 @@ def _connect_or_503():
         raise HTTPException(status_code=503, detail=f"database unavailable: {exc}") from exc
 
 
+def _client_hash(client_id: ClientIdHeader) -> str:
+    if not client_id[0].isalnum() or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for character in client_id):
+        raise HTTPException(status_code=422, detail="X-BGP-Client-ID 格式无效")
+    return hash_client_id(client_id)
+
+
+def _chat_repository_or_503() -> ChatRepository:
+    try:
+        chat_repository = ChatRepository()
+        chat_repository.initialize()
+        return chat_repository
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"chat history unavailable: {exc}") from exc
+
+
 @app.get("/health")
 def health():
-    return database.health_status()
+    payload = database.health_status()
+    try:
+        payload["chat_history"] = ChatRepository().health()
+    except Exception as exc:  # 会话库故障不得覆盖发布知识库健康状态
+        payload["chat_history"] = {"writable": False, "error": str(exc)}
+    return payload
+
+
+@app.post("/api/v1/conversations", status_code=201)
+def api_create_conversation(request: ConversationCreateRequest, client_id: ClientIdHeader):
+    return _chat_repository_or_503().create_conversation(_client_hash(client_id), request.title)
+
+
+@app.get("/api/v1/conversations")
+def api_list_conversations(
+    client_id: ClientIdHeader,
+    cursor: str | None = None,
+    limit: int = Query(default=20, ge=1, le=100),
+):
+    try:
+        return _chat_repository_or_503().list_conversations(_client_hash(client_id), limit=limit, cursor=cursor)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="会话分页游标无效") from exc
+
+
+@app.get("/api/v1/conversations/{conversation_id}")
+def api_get_conversation(conversation_id: str, client_id: ClientIdHeader):
+    payload = _chat_repository_or_503().get_conversation(_client_hash(client_id), conversation_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    return payload
+
+
+@app.get("/api/v1/conversations/{conversation_id}/messages/{message_id}/evidence/{citation_id}")
+def api_get_message_evidence(
+    conversation_id: str,
+    message_id: str,
+    citation_id: str,
+    client_id: ClientIdHeader,
+    scope: Literal["section", "document"] = "section",
+    cursor: int = Query(default=0, ge=0),
+    section_limit: int = Query(default=3, ge=1, le=10),
+):
+    chat_repository = _chat_repository_or_503()
+    citation = chat_repository.get_scoped_evidence(
+        _client_hash(client_id), conversation_id, message_id, citation_id
+    )
+    if citation is None:
+        raise HTTPException(status_code=404, detail="evidence not found")
+    return evidence_detail(citation, scope=scope, cursor=cursor, section_limit=section_limit)
+
+
+@app.delete("/api/v1/conversations/{conversation_id}", status_code=204)
+def api_delete_conversation(conversation_id: str, client_id: ClientIdHeader):
+    deleted = _chat_repository_or_503().delete_conversation(_client_hash(client_id), conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    return Response(status_code=204)
+
+
+@app.post("/api/v1/conversations/import", status_code=201)
+def api_import_legacy_conversation(request: LegacyConversationImportRequest, client_id: ClientIdHeader):
+    messages = [message.model_dump(exclude_none=True) for message in request.messages]
+    first_question = next((message["content"] for message in messages if message["role"] == "user"), "历史会话")
+    return _chat_repository_or_503().import_legacy(
+        _client_hash(client_id),
+        import_key=f"local-v2:{request.id}",
+        title=request.title or first_question,
+        messages=messages,
+    )
 
 
 @app.get("/api/v1/stats")
@@ -179,28 +275,245 @@ def api_rag_answer_stream(request: RagAnswerRequest):
     return StreamingResponse(
         _rag_answer_event_stream(request),
         media_type="text/event-stream",
-        headers={"cache-control": "no-store"},
+        headers={
+            "cache-control": "no-store, no-transform",
+            "x-accel-buffering": "no",
+            "connection": "keep-alive",
+        },
     )
 
 
 def _rag_answer_event_stream(request: RagAnswerRequest):
-    events = queue.Queue()
-    sentinel = object()
-
-    def emit(payload):
-        events.put({"type": "stage", **payload})
-
-    def worker():
-        try:
+    def work(emit):
             emit({
+                "type": "stage",
                 "stage": "accepted",
                 "status": "started",
                 "message": "问题已提交，正在进入知识库检索",
             })
-            payload = repository.rag_answer_payload(request.query, limit=request.limit, progress=emit)
-            events.put({"type": "done", "payload": payload})
+            payload = repository.rag_answer_stream_payload(request.query, limit=request.limit, progress=emit)
+            emit({"type": "done", "payload": payload, "timings": payload.get("timings", {})})
+
+    yield from _event_stream(work)
+
+
+@app.post("/api/v1/conversations/{conversation_id}/turns/stream")
+def api_conversation_turn_stream(
+    conversation_id: str,
+    request: TurnStreamRequest,
+    client_id: ClientIdHeader,
+):
+    chat_repository = _chat_repository_or_503()
+    client_hash = _client_hash(client_id)
+    handle = chat_repository.begin_turn(
+        client_hash,
+        conversation_id,
+        request.request_id,
+        request.query,
+        user_message_id=request.user_message_id,
+        assistant_message_id=request.assistant_message_id,
+    )
+    if handle is None:
+        raise HTTPException(status_code=404, detail="conversation not found")
+    return StreamingResponse(
+        _conversation_turn_event_stream(chat_repository, client_hash, handle, request),
+        media_type="text/event-stream",
+        headers={
+            "cache-control": "no-store, no-transform",
+            "x-accel-buffering": "no",
+            "connection": "keep-alive",
+        },
+    )
+
+
+@app.post("/api/v1/conversations/{conversation_id}/turns/{request_id}/stop")
+def api_stop_conversation_turn(conversation_id: str, request_id: str, client_id: ClientIdHeader):
+    client_hash = _client_hash(client_id)
+    stopped = _chat_repository_or_503().mark_turn_stopped(client_hash, conversation_id, request_id)
+    if not stopped:
+        raise HTTPException(status_code=404, detail="turn not found")
+    with _ACTIVE_TURNS_LOCK:
+        event = _ACTIVE_TURNS.get((conversation_id, request_id))
+    if event is not None:
+        event.set()
+    return {"conversation_id": conversation_id, "request_id": request_id, "status": "stopped"}
+
+
+def _conversation_turn_event_stream(chat_repository, client_hash, handle, request):
+    def work(emit):
+        if handle.existing:
+            _emit_existing_turn_until_terminal(chat_repository, client_hash, handle, emit, request.resume_after_sequence)
+            return
+        stopped = threading.Event()
+        key = (handle.conversation_id, handle.request_id)
+        with _ACTIVE_TURNS_LOCK:
+            _ACTIVE_TURNS[key] = stopped
+        partial: list[str] = []
+        last_sequence = 0
+        last_checkpoint = 0.0
+        started = time.perf_counter_ns()
+
+        def progress(event):
+            nonlocal last_sequence, last_checkpoint
+            if event.get("type") == "answer_delta":
+                partial.append(str(event.get("delta") or ""))
+            elif event.get("type") == "citation_delta":
+                partial.append(f"[{event.get('label', '')}]")
+            last_sequence = emit(event)
+            now = time.monotonic()
+            if event.get("type") in {"answer_delta", "citation_delta"} and (
+                event.get("type") == "citation_delta" or now - last_checkpoint >= 0.25
+            ):
+                chat_repository.checkpoint_turn(
+                    handle.conversation_id,
+                    handle.request_id,
+                    "".join(partial),
+                    last_sequence,
+                )
+                last_checkpoint = now
+
+        try:
+            progress({
+                "type": "stage",
+                "stage": "accepted",
+                "status": "started",
+                "message": "本轮问题已记录，正在进入知识库检索",
+            })
+            payload = repository.rag_answer_stream_payload(
+                request.query,
+                limit=request.limit,
+                progress=progress,
+                stop_requested=stopped.is_set,
+            )
+            if stopped.is_set():
+                payload["answer_status"] = "stopped"
+                payload["answer"] = "".join(partial) or payload.get("answer", "")
+            persistence_started = time.perf_counter_ns()
+            timings = dict(payload.get("timings") or {})
+            message = chat_repository.finalize_turn(
+                handle.conversation_id,
+                handle.request_id,
+                content=payload.get("answer", ""),
+                answer_status=payload.get("answer_status", "error"),
+                timings=timings,
+                stream_mode=payload.get("stream_mode", "buffered"),
+                answer_parts=payload.get("answer_parts", []),
+                citations=payload.get("citations", []),
+                last_sequence=last_sequence,
+                error_code=payload.get("error_code"),
+            )
+            timings["persistence_ms"] = round((time.perf_counter_ns() - persistence_started) / 1_000_000, 3)
+            timings["total_ms"] = round((time.perf_counter_ns() - started) / 1_000_000, 3)
+            chat_repository.update_message_timings(handle.assistant_message_id, timings)
+            payload.update({
+                "conversation_id": handle.conversation_id,
+                "request_id": handle.request_id,
+                "message_id": handle.assistant_message_id,
+                "timings": timings,
+            })
+            if message is not None:
+                message["timings"] = timings
+            emit({"type": "done", "payload": payload, "message": message, "timings": timings})
+        except Exception as exc:  # 保留已确认的部分正文和准确错误终态
+            timings = {"total_ms": round((time.perf_counter_ns() - started) / 1_000_000, 3)}
+            message = chat_repository.finalize_turn(
+                handle.conversation_id,
+                handle.request_id,
+                content="".join(partial),
+                answer_status="stopped" if stopped.is_set() else "error",
+                timings=timings,
+                stream_mode="streaming",
+                answer_parts=[{"type": "text", "text": "".join(partial)}] if partial else [],
+                citations=[],
+                last_sequence=last_sequence,
+                error_code="stopped" if stopped.is_set() else "stream_error",
+            )
+            emit({
+                "type": "error",
+                "status": "stopped" if stopped.is_set() else "error",
+                "message": "已停止生成" if stopped.is_set() else "生成中断，已保留部分回答",
+                "error": str(exc),
+                "partial_answer": "".join(partial),
+                "message_snapshot": message,
+                "timings": timings,
+            })
+        finally:
+            with _ACTIVE_TURNS_LOCK:
+                _ACTIVE_TURNS.pop(key, None)
+
+    yield from _event_stream(work, initial_sequence=request.resume_after_sequence)
+
+
+def _emit_existing_turn_until_terminal(chat_repository, client_hash, handle, emit, resume_after_sequence):
+    last_content = ""
+    deadline = time.monotonic() + 125
+    while time.monotonic() < deadline:
+        turn = chat_repository.get_turn(client_hash, handle.conversation_id, handle.request_id)
+        if turn is None:
+            emit({"type": "error", "message": "turn not found"})
+            return
+        message = turn.get("assistant_message") or {}
+        content = str(message.get("content") or "")
+        if content and content != last_content:
+            last_content = content
+            emit({
+                "type": "answer_snapshot",
+                "answer": content,
+                "answer_parts": message.get("answer_parts") or [{"type": "text", "text": content}],
+                "stream_mode": message.get("stream_mode") or "streaming",
+                "recovered": True,
+            })
+        if turn["status"] != "pending":
+            payload = _stored_turn_payload(handle, message)
+            emit({"type": "done", "payload": payload, "message": message, "timings": message.get("timings") or {}})
+            return
+        time.sleep(0.2)
+    emit({"type": "error", "message": "恢复等待超时", "partial_answer": last_content})
+
+
+def _stored_turn_payload(handle, message):
+    return {
+        "conversation_id": handle.conversation_id,
+        "request_id": handle.request_id,
+        "message_id": handle.assistant_message_id,
+        "query": "",
+        "answer": message.get("content", ""),
+        "answer_parts": message.get("answer_parts", []),
+        "answer_status": message.get("answer_status", handle.status),
+        "stream_mode": message.get("stream_mode") or "streaming",
+        "citations": message.get("citations", []),
+        "context_pack": {},
+        "timings": message.get("timings") or {},
+    }
+
+
+class _EventChannel:
+    def __init__(self, initial_sequence=0):
+        self.events = queue.Queue()
+        self.sentinel = object()
+        self.sequence = initial_sequence
+        self.lock = threading.Lock()
+        self.started = time.perf_counter_ns()
+
+    def send(self, payload):
+        with self.lock:
+            self.sequence += 1
+            sequence = self.sequence
+        event = dict(payload)
+        event["sequence"] = sequence
+        event.setdefault("elapsed_ms", round((time.perf_counter_ns() - self.started) / 1_000_000, 3))
+        self.events.put(event)
+        return sequence
+
+
+def _event_stream(work, initial_sequence=0):
+    channel = _EventChannel(initial_sequence)
+
+    def worker():
+        try:
+            work(channel.send)
         except Exception as exc:  # pragma: no cover - defensive streaming boundary
-            events.put({
+            channel.send({
                 "type": "error",
                 "stage": "error",
                 "status": "failed",
@@ -208,12 +521,16 @@ def _rag_answer_event_stream(request: RagAnswerRequest):
                 "error": str(exc),
             })
         finally:
-            events.put(sentinel)
+            channel.events.put(channel.sentinel)
 
     threading.Thread(target=worker, daemon=True).start()
     while True:
-        event = events.get()
-        if event is sentinel:
+        try:
+            event = channel.events.get(timeout=_SSE_HEARTBEAT_SECONDS)
+        except queue.Empty:
+            channel.send({"type": "heartbeat"})
+            continue
+        if event is channel.sentinel:
             break
         yield _sse(event)
 

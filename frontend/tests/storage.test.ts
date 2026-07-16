@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearStoredConversation, loadStoredConversation, saveStoredConversation } from "@/lib/storage";
+import {
+  clearStoredConversation,
+  loadActiveConversationId,
+  loadStoredConversation,
+  loadUnsyncedTurns,
+  removeUnsyncedTurn,
+  saveActiveConversationId,
+  saveStoredConversation,
+  saveUnsyncedTurn,
+} from "@/lib/storage";
 import type { StoredConversation } from "@/lib/storage";
 
 function createMemoryStorage() {
@@ -76,5 +85,34 @@ describe("conversation storage", () => {
     clearStoredConversation(storage);
 
     expect(loadStoredConversation(storage)).toBeNull();
+  });
+
+  it("只在本地保存活动会话标识和可幂等恢复的未同步请求", () => {
+    const storage = createMemoryStorage();
+    saveActiveConversationId("conversation-2", storage);
+    saveUnsyncedTurn({
+      conversationId: "conversation-2",
+      requestId: "request-1",
+      query: "问题",
+      userMessageId: "u1",
+      assistantMessageId: "a1",
+      lastSequence: 8,
+      createdAt: "now",
+    }, storage);
+    saveUnsyncedTurn({
+      conversationId: "conversation-2",
+      requestId: "request-1",
+      query: "问题",
+      userMessageId: "u1",
+      assistantMessageId: "a1",
+      lastSequence: 9,
+      createdAt: "now",
+    }, storage);
+
+    expect(loadActiveConversationId(storage)).toBe("conversation-2");
+    expect(loadUnsyncedTurns(storage)).toHaveLength(1);
+    expect(loadUnsyncedTurns(storage)[0].lastSequence).toBe(9);
+    removeUnsyncedTurn("request-1", storage);
+    expect(loadUnsyncedTurns(storage)).toEqual([]);
   });
 });

@@ -4,9 +4,13 @@ export function createPendingAssistantMessage(id: string, createdAt: string): Ch
   return {
     id,
     role: "assistant",
-    content: "正在检索与整理本轮证据……",
+    content: "",
     createdAt,
     answerStatus: "pending",
+    answerParts: [],
+    syncStatus: "syncing",
+    streamMode: "streaming",
+    stages: [],
     evidence: { citations: [], retrieval: null, contextPack: null },
   };
 }
@@ -19,5 +23,11 @@ export function completeAssistantMessage(
   retrieval: RetrievalSummary | null,
   contextPack: ContextPack | null,
 ): ChatMessage {
-  return { ...message, content, answerStatus, evidence: { citations, retrieval, contextPack } };
+  return {
+    ...message,
+    content,
+    answerStatus,
+    syncStatus: "synced",
+    evidence: { citations, retrieval, contextPack },
+  };
 }

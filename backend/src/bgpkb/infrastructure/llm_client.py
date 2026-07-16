@@ -1,3 +1,4 @@
+import codecs
 import json
 import os
 import urllib.error
@@ -41,6 +42,7 @@ class DeepSeekClient:
         for item in context_items:
             evidence_lines.append(
                 "\n".join([
+                    f"citation_id: {item.get('citation_id', '')}",
                     f"chunk_id: {item.get('chunk_id', '')}",
                     f"title: {item.get('title', '')}",
                     f"source_ref: {item.get('source_ref', '')}",
@@ -55,7 +57,9 @@ class DeepSeekClient:
                     "role": "system",
                     "content": (
                         "你是 BGP 知识库问答助手。必须基于引用证据回答；"
-                        "不得编造来源；不确定时说明证据不足；回答末尾列出引用 chunk_id 和 source_ref。"
+                        "不得编造来源；不确定时说明证据不足。每个有证据支持的论述后必须使用"
+                        "受控格式 [[cite:ev_1]] 或 [[cite:ev_1,ev_2]]；只能使用输入提供的 citation_id；"
+                        "不要输出内部 chunk_id、source_ref 或其他引用语法。"
                     ),
                 },
                 {
@@ -475,3 +479,94 @@ class DeepSeekClient:
             "content": content,
             "raw_usage": response_payload.get("usage", {}),
         }
+
+    def stream_answer(self, query, context_items):
+        """逐帧解析 OpenAI 兼容 SSE，产生内容增量和最终 usage。"""
+        if not self.api_key:
+            yield {
+                "type": "error",
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "missing_api_key",
+                "error": "DEEPSEEK_API_KEY is not configured.",
+            }
+            return
+        payload = {
+            **self.build_payload(query, context_items),
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+        request = urllib.request.Request(
+            self.base_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                for frame in _iter_sse_json(response):
+                    choices = frame.get("choices") or []
+                    if choices:
+                        choice = choices[0]
+                        delta = choice.get("delta", {}).get("content")
+                        if isinstance(delta, str) and delta:
+                            yield {"type": "delta", "delta": delta}
+                        finish_reason = choice.get("finish_reason")
+                        if finish_reason:
+                            yield {"type": "finish", "finish_reason": finish_reason}
+                    if frame.get("usage"):
+                        yield {"type": "usage", "usage": frame["usage"]}
+        except urllib.error.HTTPError as exc:
+            yield {
+                "type": "error",
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "http_error",
+                "error": f"DeepSeek API returned HTTP {exc.code}.",
+            }
+        except Exception as exc:
+            yield {
+                "type": "error",
+                "provider": "deepseek",
+                "model": self.model,
+                "error_code": "request_failed",
+                "error": str(exc),
+            }
+
+
+def _iter_sse_json(byte_chunks):
+    """用增量 UTF-8 解码器处理任意网络分片边界。"""
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    buffer = ""
+    for chunk in byte_chunks:
+        text = chunk if isinstance(chunk, str) else decoder.decode(chunk, final=False)
+        buffer += text.replace("\r\n", "\n")
+        while "\n\n" in buffer:
+            frame, buffer = buffer.split("\n\n", 1)
+            data = "".join(
+                line[5:].lstrip()
+                for line in frame.splitlines()
+                if line.startswith("data:")
+            )
+            if not data or data == "[DONE]":
+                continue
+            parsed = json.loads(data)
+            if parsed.get("error"):
+                raise RuntimeError(str(parsed["error"]))
+            yield parsed
+    buffer += decoder.decode(b"", final=True)
+    if buffer.strip():
+        data = "".join(
+            line[5:].lstrip()
+            for line in buffer.splitlines()
+            if line.startswith("data:")
+        )
+        if data and data != "[DONE]":
+            parsed = json.loads(data)
+            if parsed.get("error"):
+                raise RuntimeError(str(parsed["error"]))
+            yield parsed

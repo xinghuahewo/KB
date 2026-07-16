@@ -24,7 +24,9 @@ ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28
 | reranker | `10.99.8.28:8012` | 既有模型服务 |
 | nginx | `http://10.99.8.28/` | 反代 `127.0.0.1:39280` |
 
-FastAPI 启动必须设置 `BGP_RAG_REQUIRE_RERANKER=1`，密钥只从服务器环境变量读取。
+FastAPI 启动必须设置 `BGP_RAG_REQUIRE_RERANKER=1`。会话库必须通过 `BGP_CHAT_DB_PATH` 指向代码和知识库 release 之外的持久路径，例如 `/srv/bgpkb/runtime/chat/chat_history.sqlite3`；`BGP_CHAT_CLIENT_SALT` 由外部环境文件提供且不得提交。所有密钥只从服务器环境变量读取。
+
+nginx 对两个 SSE 入口直接反代到 `39281`，必须保留 `proxy_buffering off`、`proxy_cache off`、`X-Accel-Buffering: no` 和 `180s` 读写超时。其他请求仍由 `39280` 的静态前端代理转发。修改配置后先运行 `nginx -t`，成功后再 reload。
 
 ## 日常巡检
 
@@ -37,6 +39,41 @@ ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28 \
 ```
 
 真实问答验收应确认：`answer_status=answered`、`vector_status=complete`、`rerank_status=complete`、`reranker_provider=local_http`、`degraded=False`。
+
+`/health` 的 `chat_history` 节点还应满足：`writable=true`、`integrity_check=ok`、`schema_version=1`。会话库异常不得把只读知识库健康状态伪装成失败，但历史相关接口会返回 `503`。
+
+## 会话库初始化、备份与恢复
+
+首次启动或代码升级前执行幂等迁移：
+
+```bash
+cd /home/wbt/DB/current/backend
+uv run python -m bgpkb.workflows.migrate_chat_database \
+  --database /srv/bgpkb/runtime/chat/chat_history.sqlite3
+```
+
+在线备份使用 SQLite 的一致性备份命令，不直接复制单个主文件，以免遗漏 WAL 中尚未 checkpoint 的事务：
+
+```bash
+CHAT_DB=/srv/bgpkb/runtime/chat/chat_history.sqlite3
+BACKUP_DIR=/srv/bgpkb/backups/chat
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+install -d -m 700 "$BACKUP_DIR"
+sqlite3 "$CHAT_DB" ".backup '$BACKUP_DIR/chat_history-$STAMP.sqlite3'"
+sqlite3 "$BACKUP_DIR/chat_history-$STAMP.sqlite3" 'PRAGMA integrity_check; PRAGMA user_version;'
+```
+
+恢复前停止 FastAPI，保留故障库及其 `-wal`、`-shm` 文件，再把已校验备份复制到一个新路径。先用迁移命令验证新路径，随后只修改 `/etc/bgpkb/runtime.env` 中的 `BGP_CHAT_DB_PATH` 并重启。不要用回滚代码的方式覆盖会话库。
+
+```bash
+screen -S bgpkb_fastapi_wbt -X quit
+install -m 600 /srv/bgpkb/backups/chat/<备份文件> \
+  /srv/bgpkb/runtime/chat/chat_history-restored.sqlite3
+BGP_CHAT_DB_PATH=/srv/bgpkb/runtime/chat/chat_history-restored.sqlite3 \
+  uv run python -m bgpkb.workflows.migrate_chat_database
+```
+
+代码回滚与会话库回滚相互独立：前端或 FastAPI 版本失败时，切回上一代码 generation，仍保留当前会话库；只有确认 schema 不兼容或数据损坏时才切换到已校验的会话备份。当前代码会拒绝打开高于自身支持版本的 schema，防止旧代码误写新库。
 
 ## Docling 路由
 
@@ -70,6 +107,8 @@ docker buildx build \
 5. 原子切换代码与制品指针，重启既有 screen 会话。
 6. 验证前端、FastAPI、embedding、reranker 和真实问答。
 7. 失败时执行统一 rollback，恢复上一代码和制品指针。
+
+部署第 1 步必须同时记录当前 `BGP_CHAT_DB_PATH` 并生成一致性备份；部署第 5 步前先执行会话库迁移。回滚代码时不得删除、覆盖或随 release 移动独立会话库。
 
 ## 稳定入口与首次迁移
 

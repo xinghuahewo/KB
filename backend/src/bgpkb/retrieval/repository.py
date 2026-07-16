@@ -402,3 +402,14 @@ def hybrid_context_pack(query, limit=None, top_n=None, query_type="auto", token_
 
 def rag_answer_payload(query, limit=8, progress=None):
     return rag_answer.answer_question(query, limit=limit, progress=progress)
+
+
+def rag_answer_stream_payload(query, limit=8, progress=None, client=None, stop_requested=None):
+    return rag_answer.answer_question(
+        query,
+        limit=limit,
+        progress=progress,
+        client=client,
+        stream=True,
+        stop_requested=stop_requested,
+    )

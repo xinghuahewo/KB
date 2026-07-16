@@ -10,6 +10,8 @@ export type StoredConversation = {
 };
 
 const STORAGE_KEY = "bgp-chat-conversation";
+const ACTIVE_CONVERSATION_KEY = "bgp-chat-active-conversation";
+const UNSYNCED_TURNS_KEY = "bgp-chat-unsynced-turns-v1";
 
 type ConversationStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -82,6 +84,54 @@ export function saveStoredConversation(
 
 export function clearStoredConversation(storage: ConversationStorage | undefined = getBrowserStorage()) {
   storage?.removeItem(STORAGE_KEY);
+}
+
+export function loadActiveConversationId(storage: ConversationStorage | undefined = getBrowserStorage()) {
+  return storage?.getItem(ACTIVE_CONVERSATION_KEY) || null;
+}
+
+export function saveActiveConversationId(id: string, storage: ConversationStorage | undefined = getBrowserStorage()) {
+  storage?.setItem(ACTIVE_CONVERSATION_KEY, id);
+}
+
+export type UnsyncedTurn = {
+  conversationId: string;
+  requestId: string;
+  query: string;
+  userMessageId: string;
+  assistantMessageId: string;
+  lastSequence: number;
+  createdAt: string;
+};
+
+export function loadUnsyncedTurns(storage: ConversationStorage | undefined = getBrowserStorage()): UnsyncedTurn[] {
+  if (!storage) return [];
+  try {
+    const value = JSON.parse(storage.getItem(UNSYNCED_TURNS_KEY) || "[]") as unknown;
+    return Array.isArray(value) ? value.filter(isUnsyncedTurn) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveUnsyncedTurn(turn: UnsyncedTurn, storage: ConversationStorage | undefined = getBrowserStorage()) {
+  if (!storage) return;
+  const turns = loadUnsyncedTurns(storage).filter((item) => item.requestId !== turn.requestId);
+  turns.push(turn);
+  storage.setItem(UNSYNCED_TURNS_KEY, JSON.stringify(turns));
+}
+
+export function removeUnsyncedTurn(requestId: string, storage: ConversationStorage | undefined = getBrowserStorage()) {
+  if (!storage) return;
+  const turns = loadUnsyncedTurns(storage).filter((item) => item.requestId !== requestId);
+  if (turns.length) storage.setItem(UNSYNCED_TURNS_KEY, JSON.stringify(turns));
+  else storage.removeItem(UNSYNCED_TURNS_KEY);
+}
+
+function isUnsyncedTurn(value: unknown): value is UnsyncedTurn {
+  if (!value || typeof value !== "object") return false;
+  const turn = value as Partial<UnsyncedTurn>;
+  return Boolean(turn.conversationId && turn.requestId && turn.query && turn.userMessageId && turn.assistantMessageId);
 }
 
 function getBrowserStorage() {

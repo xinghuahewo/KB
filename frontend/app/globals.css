@@ -29,8 +29,26 @@ body {
 body {
   margin: 0;
   background: var(--bg);
+  background-image:
+    linear-gradient(rgba(90, 77, 54, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(90, 77, 54, 0.018) 1px, transparent 1px);
+  background-size: 28px 28px;
   color: var(--ink);
   font-family: "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.stream-caret {
+  display: inline-block;
+  width: 0.45rem;
+  height: 1rem;
+  background: var(--green);
+  animation: stream-blink 0.9s steps(1) infinite;
+}
+
+@keyframes stream-blink {
+  50% {
+    opacity: 0.15;
+  }
 }
 
 button,
