@@ -90,3 +90,39 @@ def test_artifact_gate_verifies_release_then_runs_tests_in_isolated_workspace(mo
     assert events[2][2]["cwd"] == paths.PROJECT_ROOT
     assert events[2][2]["env"]["BGPKB_DATA_DIR"] == str(test_dir.resolve())
     assert events[3] == ("verify", data_dir.resolve(), "2026-07-10-93a4c97")
+
+
+def test_artifact_gate_selects_serving_bundle_tests_for_v2_release(monkeypatch, tmp_path):
+    data_dir = tmp_path / "release" / "data"
+    test_dir = tmp_path / "artifact-test-overlay" / "data"
+    data_dir.mkdir(parents=True)
+    test_dir.mkdir(parents=True)
+    monkeypatch.setenv("BGPKB_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BGPKB_ARTIFACT_TEST_DIR", str(test_dir))
+    monkeypatch.setenv("BGPKB_RELEASE_ID", "rag-evidence-pipeline-v2-11.1-20260715T073006Z")
+    commands = []
+
+    monkeypatch.setattr(
+        artifact_gate,
+        "verify_registered_artifact_release",
+        lambda *_: {
+            "release_id": "rag-evidence-pipeline-v2-11.1-20260715T073006Z",
+            "serving_schema_version": "serving_sqlite_v1",
+        },
+    )
+    monkeypatch.setattr(artifact_gate, "verify_artifact_workspace", lambda *_: None)
+
+    def runner(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0)
+
+    artifact_gate.run_artifact_tests(runner=runner)
+
+    assert commands == [[
+        artifact_gate.sys.executable,
+        "-m",
+        "pytest",
+        "-m",
+        "serving_artifact",
+        "-q",
+    ]]

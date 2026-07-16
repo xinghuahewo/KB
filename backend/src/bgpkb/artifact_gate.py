@@ -40,9 +40,14 @@ def run_artifact_tests(runner=subprocess.run) -> dict:
 
     verification = verify_registered_artifact_release(source_data_dir, release_id)
     verify_artifact_workspace(source_data_dir, test_data_dir)
+    test_marker = (
+        "serving_artifact"
+        if verification.get("serving_schema_version") == "serving_sqlite_v1"
+        else "artifact"
+    )
     try:
         completed = runner(
-            [sys.executable, "-m", "pytest", "-m", "artifact", "-q"],
+            [sys.executable, "-m", "pytest", "-m", test_marker, "-q"],
             cwd=paths.PROJECT_ROOT,
             env={**os.environ, "BGPKB_DATA_DIR": str(test_data_dir)},
             check=False,

@@ -27,7 +27,7 @@ def test_project_workflow_keeps_uv_and_corepack_yarn_boundaries():
     workflow = (REPOSITORY_ROOT / "scripts" / "project-workflow").read_text(encoding="utf-8")
 
     assert "uv sync --frozen --all-groups" in workflow
-    assert "uv run pytest -q -m 'not artifact and not legacy_documentation'" in workflow
+    assert "uv run pytest -q -m 'not artifact and not serving_artifact and not legacy_documentation'" in workflow
     assert "scripts/artifact-test-overlay" in workflow
     assert "uv run python -m bgpkb.artifact_verification" in workflow
     assert "corepack yarn install --immutable" in workflow
