@@ -19,6 +19,10 @@ from bgpkb.infrastructure.fast_vector_index import (
     FastVectorIndexError,
     verify_fast_vector_artifacts,
 )
+from bgpkb.publishing.publish_index_closure import (
+    PublishIndexClosureError,
+    verify_publish_index_manifest,
+)
 
 
 class ArtifactVerificationError(RuntimeError):
@@ -38,6 +42,16 @@ REQUIRED_FILES = (
     "derived/datasets/entity_source_evidence.jsonl",
     "derived/datasets/section_catalog.jsonl",
 )
+PUBLISH_INDEX_REQUIRED_FILES = (
+    "published/serving.sqlite",
+    "published/governance.sqlite",
+    "published/publish_index_manifest_v1.json",
+    "published/bge_m3_vector_index.jsonl",
+    "published/bge_m3_vector_matrix.npy",
+    "published/bge_m3_vector_metadata.jsonl",
+    "published/bge_m3_vector_fast_manifest.json",
+    "published/bge_m3_embedding_manifest.json",
+)
 
 DEFAULT_REGISTRY_PATH = paths.PROJECT_ROOT.parent / "artifacts" / "releases.yaml"
 
@@ -52,6 +66,18 @@ def verify_release_manifest_closure(
         return serving_bundle.verify_release_manifest(data_dir, manifest_path)
     except serving_bundle.ReleaseManifestError as exc:
         raise ArtifactVerificationError(f"release manifest 校验失败：{exc}") from exc
+
+
+def verify_publish_index_manifest_closure(
+    data_dir: Path,
+    manifest_path: Path,
+) -> dict:
+    """验证五阶段 publish-index 闭包，并统一转换为制品校验错误。"""
+
+    try:
+        return verify_publish_index_manifest(data_dir, manifest_path)
+    except PublishIndexClosureError as exc:
+        raise ArtifactVerificationError(f"publish-index manifest 校验失败：{exc}") from exc
 
 
 def _sha256(path: Path) -> str:
@@ -98,7 +124,11 @@ def verify_artifact_release(data_dir: Path) -> dict:
     release_root = data_dir.parent
 
     release_manifest_path = data_dir / "published" / "release_manifest_v2.json"
+    publish_index_manifest_path = (
+        data_dir / "published" / "publish_index_manifest_v1.json"
+    )
     release_manifest_closure = None
+    publish_index_manifest_closure = None
     required_files = REQUIRED_FILES
     if release_manifest_path.is_file():
         release_manifest_closure = verify_release_manifest_closure(
@@ -117,6 +147,12 @@ def verify_artifact_release(data_dir: Path) -> dict:
             "published/governance.sqlite",
             "published/release_manifest_v2.json",
         )
+    elif publish_index_manifest_path.is_file():
+        publish_index_manifest_closure = verify_publish_index_manifest_closure(
+            data_dir,
+            publish_index_manifest_path,
+        )
+        required_files = PUBLISH_INDEX_REQUIRED_FILES
 
     for relative_path in required_files:
         path = data_dir / relative_path
@@ -142,11 +178,14 @@ def verify_artifact_release(data_dir: Path) -> dict:
         if not path.is_file() or _sha256(path) != expected:
             raise ArtifactVerificationError(f"SHA-256 校验失败：{path.relative_to(release_root)}")
 
+    uses_serving_bundle = bool(
+        release_manifest_closure or publish_index_manifest_closure
+    )
     database_path = data_dir / "published" / (
-        "serving.sqlite" if release_manifest_closure else "bgp_knowledge_base.sqlite"
+        "serving.sqlite" if uses_serving_bundle else "bgp_knowledge_base.sqlite"
     )
     try:
-        if release_manifest_closure:
+        if uses_serving_bundle:
             connection = serving_bundle.connect_serving_database(database_path)
         else:
             uri = f"file:{database_path.as_posix()}?mode=ro&immutable=1"
@@ -246,6 +285,10 @@ def verify_artifact_release(data_dir: Path) -> dict:
         result["serving_schema_version"] = release_manifest_closure[
             "serving_schema_version"
         ]
+        result["governance_attached_online"] = False
+    elif publish_index_manifest_closure:
+        result["publish_index_manifest"] = publish_index_manifest_closure
+        result["serving_schema_version"] = "serving_sqlite_v1"
         result["governance_attached_online"] = False
     return result
 

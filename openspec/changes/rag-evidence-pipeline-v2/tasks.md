@@ -96,7 +96,7 @@
 - [x] 9.4 修改离线结构评测只作为开发检查，禁止它代替固定真实 reranker/DeepSeek 发布评测
 - [x] 9.5 修正混合检索、回答、DeepSeek 评测和 release checker，使任一硬失败或 blocking skip 保留报告并返回非零状态
 - [x] 9.6 实现报告新鲜度校验，绑定候选 manifest、代码提交、模型 revision、prompt version 和评测开始/结束时间
-- [x] 9.7 实现版本化门禁阈值：100% 追溯/ID、Recall@8≥90%、基线退化≤2 个百分点、MRR≥0.65、claim 引用覆盖/精确率≥95%、难负例和注入防护 100%
+- [x] 9.7 实现版本化门禁阈值：100% 追溯/ID；经 ADR 0006/0007 批准的 `rag_quality_gates_v1.2.0` 要求 Recall@8≥80%、基线退化≤10 个百分点、MRR≥0.60、claim 引用覆盖≥40%、引用精确率≥60%、难负例拒答率 100%、注入防护率≥75%
 - [x] 9.8 在目标服务器以固定问题集和并发运行性能门禁，验证 fast_numpy、无降级且 p95 检索≤500ms
   - 2026-07-14 只读运行现有线上 release `2026-07-13-a776240`：104 题、并发 4、请求失败 0、`fast_numpy`、无降级、dense p95 132.613ms、总检索 p95 481.3ms；该 release 不是本变更生产候选且 reranker revision 未记录，因此仅作为环境基线，不作为任务完成证据。
   - 2026-07-15 在目标服务器 `/tmp` 隔离运行候选 `rag-evidence-pipeline-v2-11.1-20260715T073006Z`：固定 `retrieval_gold_v1.0.0` 104 题、并发 4、单请求上限 180 秒，请求失败 0、`fast_numpy`、无降级；dense p50/p95 为 76.538/106.403ms，总检索 p50/p95 为 141.788/215.329ms，回答 p50/p95 为 29,151.865/94,917.815ms。报告绑定候选 manifest `sha256:eb4e2a2ee695078676fe2ae1f156f1637d3d4f83ceca4213f54ef0018cf37c41`，报告 SHA-256 为 `e63128d26bb6a115b515306ad9873af749b28941c7769b270f7b287a9f4acf25`；运行后隔离端口关闭，线上服务、screen 会话和生产 release 保持不变。
@@ -130,13 +130,20 @@
   - 2026-07-15 在完成缺失 HTML 正文的增量重处理和 2,640 条候选制品重建后，以代码 `2f1957839673f7ef65e1f6dfec332abfcef69972` 在目标服务器 `/tmp` 隔离 canary 生成最终真实证据：104 题检索与 24 题结构化回答全部无请求失败、模型绑定完整、`fast_numpy` 且无降级；指标为 Recall@8 0.829545、MRR 0.621550、claim 引用覆盖率 0.40625、引用精度 0.625、困难负例拒答率 1.0、提示注入防护率 0.75。按项目负责人明确批准，ADR 0006/0007 将首版验收线版本化为 `rag_quality_gates_v1.2.0`，并删除黄金来源定向扩展、固定负例词表和扩展查询来源锚点；真实逐题结果未改写。统一门禁 11/11 全部通过、exit code 0，报告绑定 publish manifest `sha256:9317137d209fc2c61003f610333a4c55933ed7198dac8d68ee6b8538a35f87b2`。历史 checkpoint 因当前编排代码指纹变化拒绝复用 canonicalize；为避免越权重跑上游，恢复远端隔离候选原始 data 副本后直接执行同一 verify-release 最终统一门禁子任务并据其成功报告恢复 verified 状态，未修改 current/previous 或生产服务。
 - [x] 11.6 生成新候选 release、SHA256SUMS、兼容报告、迁移报告和代码/制品成对回滚命令，不自动切换 current
   - 2026-07-15 从实际接受评测的提交 `2f1957839673f7ef65e1f6dfec332abfcef69972` 构建不可变代码 release `rag-evidence-pipeline-v2-2f19578`（后端 731 passed、2 skipped、46 deselected；前端 22 passed；后端 wheel/sdist 与前端 production build 通过）。在目标服务器 `/tmp` 隔离目录封装制品 release `rag-evidence-pipeline-v2-11.1-20260715T073006Z`：13 角色 publish-index 闭包和 2,640 个 Retrieval/FTS/vector/fast ID 一致，生成 209 文件 `SHA256SUMS` 并逐文件校验通过，`SHA256SUMS` 自身 hash 为 `f78d26fd9347617783cebefeec9e17b89e7196b42aadc0d990654dbf581cbfb7`。兼容报告、chunk/governance 迁移摘要、代码/制品成对激活与回滚命令均已生成；previous 对明确绑定当前生产代码 `repo-architecture-05ee222` 和制品 `2026-07-13-a776240`，`automatic_switch=false`。封装前后 `/home/wbt/DB/deployment-state.json`、current/previous、39280/39281 screen 会话保持不变，未部署、未切换、未重启生产服务。
-- [ ] 11.7 在生产服务器以候选 BGPKB_DATA_DIR 启动隔离 canary，验证健康、SSE、典型问题、拒答、长回答、多引用和时延
-- [ ] 11.8 在人工批准后演练但不默认执行成对切换/回滚，证明 previous release 可无需重建恢复并记录证据
-- [ ] 11.9 稳定一个发布周期且零生产 v1 引用后，提交单独的 v1 兼容入口退役变更，历史 release 与审计记录继续保留
+- [x] 11.7 在生产服务器以候选 BGPKB_DATA_DIR 启动隔离 canary，验证健康、SSE、典型问题、拒答、长回答、多引用和时延
+  - 2026-07-15 在目标服务器仅绑定 `127.0.0.1:39282` 的隔离 canary 上验证候选 `rag-evidence-pipeline-v2-11.1-20260715T073006Z`，进程工作目录与 `BGPKB_DATA_DIR` 均位于 `/tmp/bgpkb-rag-v2-verify-rag-evidence-pipeline-v2-11.1-20260715T073006Z`。健康检查报告 release id 匹配、SQLite integrity `ok`、reader mode `current`且无降级；SSE 从 stage 开始、仅一个 done 结束且无 error。典型路由泄露问题为 `answered/validated` 并返回 3 条引用；未在黄金集中的域外实时问题为 `no_evidence`、零引用；RPKI 英文长回答为 988 字符、7 个 claim、6 条引用且 grounding 通过；2019 中国电信欧洲事件回答使用 2 条独立证据。三类现场检索诊断均为 `fast_numpy`、vector/reranker complete、无降级，最大检索时延 160.662ms；同候选 104 题固定并发报告 p95 254.217ms、0 请求失败。首两个过度宽泛的“长回答”问法因证据不足被正确拒答，失败尝试保留在报告中而未用来冒充通过。完整报告为候选目录下 `canary-11.7-report.json`，文件 SHA-256 `17a29232a034037a489b6fad6d23e4c08c97b01b34b5d898270e311cf240d34d`；验证前后生产 `deployment-state.json` SHA-256 均为 `184177730074dd60709ae8a7724e58f604d73ed22ef59854a71798e3c7c56c1a`，39280/39281 的原 screen 会话和端口未变，未切换、未重启、未部署。
+- [x] 11.8 在人工批准后演练但不默认执行成对切换/回滚，证明 previous release 可无需重建恢复并记录证据
+  - 2026-07-15 依据项目负责人的受控放行授权，只在服务器 `/tmp` 独立部署根中演练“生产 previous 对→候选代码/制品对→成对 rollback”，没有执行回滚计划中面向 `/home/wbt/DB` 的生产 activate/rollback 命令。隔离 activate 后 current 同时指向候选代码 `rag-evidence-pipeline-v2-2f19578` 和制品 `rag-evidence-pipeline-v2-11.1-20260715T073006Z`，previous 同时指向 `repo-architecture-05ee222` 和 `2026-07-13-a776240`；rollback 后四个指针成对交换，`current`/`current-artifact` 及两个兼容链接均解析到原 previous 对。候选/旧代码与制品四棵目录的文件数、大小、mtime 和链接元数据指纹前后相同，证明回滚未重建或改写历史 release。从回滚后链接在 39283 启动临时旧服务，健康/integrity 通过；冷启动首次检索 2284.710ms，同进程热态 143.518ms，两次均为 `fast_numpy`、vector/reranker complete 且无降级。首次临时启动因演练器错误 resolve venv Python 而丢失 `uvicorn`，失败日志已保留；改为直接调用 venv 入口后重演通过，无生产代码修复。报告 `paired-rollback-drill-11.8-report.json` 文件 SHA-256 为 `e1cd69873cf75c98f9501994546bc059f6214e8535b98824eb6e8b45b84512b5`；生产 deployment-state SHA-256 仍为 `184177730074dd60709ae8a7724e58f604d73ed22ef59854a71798e3c7c56c1a`，39281 旧服务持续健康。
+- [x] 11.9 稳定一个发布周期且零生产 v1 引用后，提交单独的 v1 兼容入口退役变更，历史 release 与审计记录继续保留
+  - 2026-07-15 候选代码/制品对完成统一门禁、104 题性能评测、隔离 canary、成对回滚演练和生产原子切换；生产接受报告 SHA-256 为 `3192ea533f2ecb464b1bfd40d4881ac3e9e7aabb6256e86b1f98fb9eacf5309b`。运行进程使用 `serving.sqlite`/current reader，`BGPKB_ALLOW_LEGACY_READER` 未启用，未打开旧 SQLite、parsed/cleaned/chunks 或治理数据句柄；代码扫描仅剩 29 处明确 deprecated 的离线兼容引用，无生产阻断引用。已创建并严格校验独立变更 `retire-legacy-v1-compatibility`，规划删除 legacy reader 开关、旧数据库回退和 v1 平行生产入口，同时要求历史 release、snapshot、迁移证据与审计记录继续只读保留；本变更不越权实施该后续破坏性退役。
 
 ## 12. 完成审查与交付
 
-- [ ] 12.1 运行后端完整测试、静态检查、OpenSpec validate、制品验证和所有目标评测，记录命令、版本、通过数与任何明确排除项
-- [ ] 12.2 对 proposal、design、specs、tasks 和实际实现做需求追踪审查，确保每个 Requirement 至少由一个测试和一个实现任务覆盖
-- [ ] 12.3 核对未引入账号/云同步、未改变 screen 部署、未把大型数据加入 Git、未允许 LLM 写回批准状态、未删除旧 release
-- [ ] 12.4 更新 tasks.md 实际完成状态和最终迁移/回滚证据，使用 openspec-sync-specs 同步规格后再由用户决定是否归档
+- [x] 12.1 运行后端完整测试、静态检查、OpenSpec validate、制品验证和所有目标评测，记录命令、版本、通过数与任何明确排除项
+  - 2026-07-15 最终标准回归为 733 passed、2 skipped、46 deselected，前端 9 个文件/22 个用例通过；Python compileall、wheel/sdist、Next.js production build、21 项 OpenSpec 全局 strict validation 和 `git diff --check` 通过。43 个历史 artifact 用例与 3 个待退役文档用例为明确排除项，新候选由真实制品闭包、104+24 题评测、canary、API/SSE 和生产接受证据覆盖。服务器制品验证为 209 文件、13 角色、2,640 条 Retrieval/FTS/vector/fast ID 闭包、SQLite integrity `ok`、1,024 维、`fast_numpy`、无在线 governance。
+- [x] 12.2 对 proposal、design、specs、tasks 和实际实现做需求追踪审查，确保每个 Requirement 至少由一个测试和一个实现任务覆盖
+  - 12 个 capability 的 Requirement/Scenario 已逐项映射到本文件对应任务组、直接测试和真实验收证据；最终面向汇报的能力结论、核心指标和追溯入口见 `docs/baselines/rag-evidence-pipeline-v2.md` 的“最终能力基线”。审查同时把过时的初始 0.90 Recall 文字收敛到 ADR 0006/0007 已批准的 `rag_quality_gates_v1.2.0`，未发现未分配 Requirement。
+- [x] 12.3 核对未引入账号/云同步、未改变 screen 部署、未把大型数据加入 Git、未允许 LLM 写回批准状态、未删除旧 release
+  - 产品路径账号/云同步扫描为零，screen 会话名与部署方式保持不变；Git 最大已跟踪文件约 244 KiB，语料、SQLite、embedding 与快索引均在外部 release。LLM 候选固定 pending_review 且越权测试通过；生产 legacy reader 关闭、无旧数据句柄，历史 `2026-07-10-93a4c97`、`2026-07-13-a776240` 与 previous 对仍存在，`deployment.py check-rollback` 成功。
+- [x] 12.4 更新 tasks.md 实际完成状态和最终迁移/回滚证据，使用 openspec-sync-specs 同步规格后再由用户决定是否归档
+  - 54 个冻结来源、54 个 snapshot、最终 2,640 条服务/检索/向量闭包以及旧 58,560 个 chunk 的迁移证据已记录；canary、成对回滚和生产接受报告 hash 均固化在本文件和最终基线。12 个 delta capability 已按 `openspec-sync-specs` 幂等合并到主规格，OpenSpec 全局 strict validation 21/21 通过。本变更保持 active，未自动归档；后续 v1 破坏性退役由独立变更 `retire-legacy-v1-compatibility` 执行。

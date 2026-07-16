@@ -1,4 +1,10 @@
-## ADDED Requirements
+# RAG 质量门禁规格
+
+## Purpose
+
+定义生产候选必须执行的真实检索与结构化回答黄金集、版本化质量阈值、硬失败非零传播、评测证据新鲜度、模型版本绑定以及目标服务器快索引性能门禁。
+
+## Requirements
 
 ### Requirement: 系统维护版本化真实评测基线
 系统 SHALL 维护检索和回答黄金集，覆盖中英文、事实、过程、政策、全局、同义表达、难负例、来源冲突和提示注入；基线 MUST 记录数据版本、expected evidence、人工签署者、embedding/reranker/LLM 模型及 revision、prompt version 和评分规则。
