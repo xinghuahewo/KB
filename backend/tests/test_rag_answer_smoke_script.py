@@ -12,12 +12,27 @@ SCRIPT = paths.PIPELINE_DIR / "run_rag_answer_smoke_test.py"
 class FakeClient:
     model = "deepseek-chat"
 
-    def generate_answer(self, query, context_items):
+    def generate_grounded_answer(self, query, evidence, context_groups, repair=None):
+        answer = f"测试回答：{query}，证据数 {len(evidence)}。"
+        evidence_ids = [item["evidence_id"] for item in evidence]
         return {
             "ok": True,
             "provider": "deepseek",
             "model": self.model,
-            "content": f"测试回答：{query}，证据数 {len(context_items)}。",
+            "content": json.dumps({
+                "schema_version": "grounded_answer_v1",
+                "answer": answer,
+                "claims": [{
+                    "schema_version": "grounded_claim_v1",
+                    "claim_type": "factual",
+                    "text": answer,
+                    "evidence_ids": evidence_ids,
+                    "confidence": 0.9,
+                }],
+                "evidence_ids": evidence_ids,
+                "confidence": 0.9,
+                "insufficient_evidence": False,
+            }, ensure_ascii=False),
             "raw_usage": {"total_tokens": 12},
         }
 

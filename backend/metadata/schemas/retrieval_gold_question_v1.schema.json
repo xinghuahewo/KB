@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/retrieval-gold-question-v1.json",
+  "title": "RetrievalGoldQuestionV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "question_id",
+    "language",
+    "query_type",
+    "query",
+    "query_features",
+    "difficulty",
+    "expected_status",
+    "expected_evidence",
+    "conflict_group",
+    "owner_ref",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {"const": "retrieval_gold_question_v1"},
+    "dataset_version": {"const": "retrieval_gold_v1.0.0"},
+    "question_id": {"type": "string", "pattern": "^rg-(zh|en)-(fact|process|policy|global)-[0-9]{3}$"},
+    "language": {"enum": ["zh", "en"]},
+    "query_type": {"enum": ["fact", "process", "policy", "global"]},
+    "query": {"type": "string", "minLength": 8},
+    "query_features": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["direct", "synonym", "source_conflict", "hard_negative"]}
+    },
+    "difficulty": {"enum": ["basic", "intermediate", "advanced", "adversarial"]},
+    "expected_status": {"enum": ["evidence", "no_evidence"]},
+    "expected_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "source_ref", "support"],
+        "properties": {
+          "source_id": {"type": "string", "minLength": 1},
+          "source_ref": {"type": "string", "minLength": 1},
+          "support": {"type": "string", "minLength": 3}
+        }
+      }
+    },
+    "conflict_group": {"type": ["string", "null"], "minLength": 1},
+    "owner_ref": {"const": "metadata/config/rag_eval_ownership.yaml#retrieval_gold"},
+    "notes": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"expected_status": {"const": "evidence"}}},
+      "then": {"properties": {"expected_evidence": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"expected_status": {"const": "no_evidence"}}},
+      "then": {"properties": {"expected_evidence": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"query_features": {"contains": {"const": "source_conflict"}}}},
+      "then": {"properties": {"conflict_group": {"type": "string"}}}
+    }
+  ]
+}

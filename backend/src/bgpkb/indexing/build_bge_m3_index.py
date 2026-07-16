@@ -6,21 +6,19 @@ import hashlib
 import json
 import math
 import os
+from pathlib import Path
 import tempfile
 
 from bgpkb import paths
 from bgpkb.infrastructure.retrieval_model_client import EmbeddingProviderChain
+from bgpkb.indexing.retrieval_documents import build_retrieval_input_manifest, embedding_cache_key
 
 
-CHUNKS_PATH = paths.PUBLISHED_DIR / "chunk_catalog.jsonl"
-ENTITIES_PATH = paths.PUBLISHED_DIR / "entity_catalog.jsonl"
-GLOSSARY_PATH = paths.DATASETS_DIR / "glossary.jsonl"
-EVIDENCE_TEMPLATES_PATH = paths.ENTITIES_DIR / "evidence_templates.jsonl"
-ENTITY_EVIDENCE_PATH = paths.DATASETS_DIR / "entity_source_evidence.jsonl"
-SOURCE_CATALOG_PATH = paths.PUBLISHED_DIR / "source_catalog.jsonl"
+RETRIEVAL_DOCUMENTS_PATH = paths.PUBLISHED_DIR / "retrieval_documents_v1.jsonl"
 INDEX_PATH = paths.PUBLISHED_DIR / "bge_m3_vector_index.jsonl"
 MANIFEST_PATH = paths.PUBLISHED_DIR / "bge_m3_embedding_manifest.json"
 REPORT_PATH = paths.GENERATED_REPORTS_DIR / "rag" / "bge_m3_embedding_report.md"
+CHECKPOINT_PATH = paths.GENERATED_DIR / "checkpoints" / "bge_m3_embedding_checkpoint.json"
 
 
 def load_jsonl(path):
@@ -29,157 +27,59 @@ def load_jsonl(path):
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def _join(values):
-    return ", ".join(str(value) for value in values or [] if value)
-
-
-def _document(doc_id, kind, text, record, source_refs=None, trusted=False, trust_basis=""):
-    refs = source_refs or []
-    return {
-        "doc_id": doc_id,
-        "kind": kind,
-        "text": text.strip(),
-        "source_ref": refs[0] if refs else record.get("source_ref", ""),
-        "source_refs": refs,
-        "source_type": record.get("source_type", kind),
-        "review_status": record.get("review_status", ""),
-        "lifecycle_status": record.get("lifecycle_status", "approved" if trusted else "candidate"),
-        "trusted": trusted,
-        "trust_basis": trust_basis,
-        "metadata": record,
-    }
-
-
 def build_embedding_documents(
-    chunks,
-    entities,
-    glossary,
-    evidence_templates,
-    trusted_chunk_ids=None,
-    trusted_doc_ids=None,
+    *,
+    retrieval_documents,
+    input_manifest,
 ):
-    trusted_chunk_ids = set(trusted_chunk_ids or [])
-    trusted_doc_ids = set(trusted_doc_ids or [])
     documents = []
-    for item in chunks:
-        chunk_id = item.get("chunk_id", "")
-        text = "\n".join([
-            f"title: {item.get('title', '')}",
-            f"kind: chunk",
-            f"source_type: {item.get('source_type', '')}",
-            f"topics: {_join(item.get('topics', []))}",
-            f"section: {_join(item.get('section_path', []))}",
-            f"content: {item.get('content_preview', '')}",
-        ])
-        if item.get("review_status") == "approved":
-            trust_basis = "approved_record"
-        elif chunk_id in trusted_chunk_ids:
-            trust_basis = "approved_entity_evidence"
-        elif item.get("doc_id") in trusted_doc_ids:
-            trust_basis = "processed_source_with_traceability"
-        else:
-            trust_basis = ""
-        trusted = bool(trust_basis)
-        documents.append(_document(
-            f"chunk:{chunk_id}",
-            "chunk",
-            text,
-            item,
-            source_refs=[item.get("source_ref", "")] if item.get("source_ref") else [],
-            trusted=trusted,
-            trust_basis=trust_basis,
-        ))
-
-    for item in entities:
-        payload = item.get("entity_payload", {})
-        aliases = item.get("aliases") or payload.get("aliases", [])
-        refs = item.get("source_refs") or payload.get("source_refs", [])
-        text = "\n".join([
-            f"name: {item.get('name', '')}",
-            f"kind: entity",
-            f"entity_type: {item.get('entity_type', '')}",
-            f"category: {item.get('category', '')}",
-            f"aliases: {_join(aliases)}",
-            f"definition: {payload.get('definition', '')}",
-            f"related_concepts: {_join(payload.get('related_concepts', []))}",
-        ])
-        documents.append(_document(
-            f"entity:{item.get('entity_id', '')}",
-            "entity",
-            text,
-            item,
-            source_refs=refs,
-            trusted=item.get("review_status") == "approved",
-            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
-        ))
-
-    for item in glossary:
-        refs = item.get("source_refs", [])
-        text = "\n".join([
-            f"term: {item.get('term', '')}",
-            f"kind: glossary",
-            f"entity_type: {item.get('entity_type', '')}",
-            f"aliases: {_join(item.get('aliases', []))}",
-            f"definition: {item.get('definition', '')}",
-        ])
-        documents.append(_document(
-            f"glossary:{item.get('term_id', '')}",
-            "glossary",
-            text,
-            item,
-            source_refs=refs,
-            trusted=item.get("review_status") == "approved",
-            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
-        ))
-
-    for item in evidence_templates:
-        refs = item.get("source_refs", [])
-        text = "\n".join([
-            f"name: {item.get('id', '')}",
-            f"kind: evidence_template",
-            f"applies_to: {item.get('applies_to', '')}",
-            f"required_evidence: {_join(item.get('required_evidence', []))}",
-            f"optional_evidence: {_join(item.get('optional_evidence', []))}",
-            f"false_positive_checks: {_join(item.get('false_positive_checks', []))}",
-        ])
-        documents.append(_document(
-            f"evidence_template:{item.get('id', '')}",
-            "evidence_template",
-            text,
-            item,
-            source_refs=refs,
-            trusted=item.get("review_status") == "approved",
-            trust_basis="approved_record" if item.get("review_status") == "approved" else "",
-        ))
+    expected_version = input_manifest.get("retrieval_text_version")
+    expected_hash = input_manifest.get("input_manifest_hash")
+    for item in retrieval_documents:
+        if item.get("schema_version") != "retrieval_document_v1":
+            raise ValueError("Embedding 只接受 Retrieval Document v1，禁止 content_preview 输入")
+        if item.get("retrieval_text_version") != expected_version:
+            raise ValueError("Retrieval Document 与 embedding input manifest 版本不一致")
+        text = item.get("retrieval_text")
+        text_hash = item.get("retrieval_text_hash")
+        if not isinstance(text, str) or "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest() != text_hash:
+            raise ValueError("Retrieval Document retrieval_text hash 非法")
+        governance = item.get("governance")
+        eligibility = item.get("eligibility")
+        if not isinstance(governance, dict) or not isinstance(eligibility, dict):
+            raise ValueError("Retrieval Document 缺少独立治理状态或资格审计")
+        documents.append({
+            "doc_id": item["retrieval_doc_id"],
+            "kind": "chunk",
+            "text": text,
+            "retrieval_text_hash": text_hash,
+            "retrieval_text_version": item["retrieval_text_version"],
+            "retrieval_input_manifest_hash": expected_hash,
+            "source_ref": item["source_ref"],
+            "source_refs": item["source_refs"],
+            "source_type": item["document_profile"],
+            "review_status": "",
+            "lifecycle_status": eligibility["status"],
+            "trusted": (
+                eligibility["status"] == "eligible"
+                and governance.get("source_trust_status") == "trusted"
+            ),
+            "trust_basis": eligibility["rule_id"],
+            "governance": governance,
+            "eligibility": eligibility,
+            "metadata": item,
+        })
     return documents
 
 
-def trusted_chunk_ids(entity_evidence):
-    trusted = set()
-    for item in entity_evidence:
-        if item.get("entity_review_status") == "approved":
-            trusted.update(item.get("chunk_sample_ids", []))
-    return trusted
-
-
-def retrieval_eligible_doc_ids(sources):
-    return {
-        item.get("source_id", "")
-        for item in sources
-        if item.get("processing_status") == "complete_deterministic"
-        and item.get("trust_level") in {"high", "medium"}
-    }
-
-
 def load_documents():
-    evidence = load_jsonl(ENTITY_EVIDENCE_PATH)
+    retrieval_documents = load_jsonl(RETRIEVAL_DOCUMENTS_PATH)
+    if not retrieval_documents:
+        raise ValueError(f"缺少 Retrieval Document v1：{RETRIEVAL_DOCUMENTS_PATH}")
+    input_manifest = build_retrieval_input_manifest(retrieval_documents)
     return build_embedding_documents(
-        chunks=load_jsonl(CHUNKS_PATH),
-        entities=load_jsonl(ENTITIES_PATH),
-        glossary=load_jsonl(GLOSSARY_PATH),
-        evidence_templates=load_jsonl(EVIDENCE_TEMPLATES_PATH),
-        trusted_chunk_ids=trusted_chunk_ids(evidence),
-        trusted_doc_ids=retrieval_eligible_doc_ids(load_jsonl(SOURCE_CATALOG_PATH)),
+        retrieval_documents=retrieval_documents,
+        input_manifest=input_manifest,
     )
 
 
@@ -196,6 +96,11 @@ def input_hash(documents):
         digest.update(item["doc_id"].encode("utf-8"))
         digest.update(item["text"].encode("utf-8"))
     return digest.hexdigest()
+
+
+def _fingerprint(payload):
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def write_json(path, payload):
@@ -272,22 +177,137 @@ def _provider_chain(result, fallback):
     return names
 
 
-def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST_PATH, report_path=REPORT_PATH, batch_size=32):
+def _load_checkpoint(path):
+    if not path.exists():
+        return {"schema_version": "embedding_checkpoint_v1", "entries": {}}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"schema_version": "embedding_checkpoint_v1", "entries": {}}
+    if payload.get("schema_version") != "embedding_checkpoint_v1" or not isinstance(payload.get("entries"), dict):
+        return {"schema_version": "embedding_checkpoint_v1", "entries": {}}
+    return payload
+
+
+def _write_checkpoint(path, checkpoint, completed_count):
+    checkpoint["completed_count"] = completed_count
+    _atomic_write(path, json.dumps(checkpoint, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+
+
+def _vector_error(vectors, expected_count, expected_dimension=0):
+    if not isinstance(vectors, list) or len(vectors) != expected_count:
+        return "Embedding 数量与输入不一致"
+    dimension = len(vectors[0]) if vectors and isinstance(vectors[0], list) else 0
+    if expected_dimension and dimension != expected_dimension:
+        return "不同批次的向量维度不一致"
+    if not dimension or any(
+        not isinstance(vector, list) or len(vector) != dimension
+        or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in vector)
+        or not any(float(value) != 0.0 for value in vector)
+        for vector in vectors
+    ):
+        return "Embedding 向量维度、数值或范数无效"
+    return ""
+
+
+def _failed_build(manifest, result, index_path, manifest_path, report_path):
+    manifest.update({
+        "status": "failed",
+        "error_code": result.get("error_code", "embedding_failed"),
+        "error": result.get("error", "Embedding provider 不可用"),
+        "real_model_execution": False,
+        "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
+    })
+    if not manifest["preserved_previous_artifacts"]:
+        _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+        _atomic_write(report_path, render_report(manifest))
+    return manifest
+
+
+def _index_record(document, vector):
+    return {
+        "doc_id": document["doc_id"],
+        "kind": document["kind"],
+        "source_ref": document["source_ref"],
+        "source_refs": document["source_refs"],
+        "source_type": document["source_type"],
+        "review_status": document["review_status"],
+        "lifecycle_status": document["lifecycle_status"],
+        "trusted": document["trusted"],
+        "trust_basis": document["trust_basis"],
+        "governance": document["governance"],
+        "eligibility": document["eligibility"],
+        "text": document["text"],
+        "text_hash": hashlib.sha256(document["text"].encode("utf-8")).hexdigest(),
+        "retrieval_text_hash": document["retrieval_text_hash"],
+        "retrieval_text_version": document["retrieval_text_version"],
+        "retrieval_input_manifest_hash": document["retrieval_input_manifest_hash"],
+        "metadata": document["metadata"],
+        "vector": vector,
+        "generated_by": "src/bgpkb/pipeline/build_bge_m3_index.py",
+    }
+
+
+def build_index(
+    documents,
+    client,
+    index_path=INDEX_PATH,
+    manifest_path=MANIFEST_PATH,
+    report_path=REPORT_PATH,
+    batch_size=32,
+    checkpoint_path=None,
+    model_revision=None,
+):
+    versions = {item.get("retrieval_text_version") for item in documents}
+    input_manifest_hashes = {item.get("retrieval_input_manifest_hash") for item in documents}
+    if versions != {"retrieval_text_v1"} or len(input_manifest_hashes) != 1 or None in input_manifest_hashes:
+        raise ValueError("Embedding 输入必须来自同一份 Retrieval Document v1 manifest")
+    if not documents:
+        raise ValueError("Embedding 输入不能为空")
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     counts = dict(sorted(Counter(item["kind"] for item in documents).items()))
+    model = getattr(client, "model", "BAAI/bge-m3")
+    resolved_revision = model_revision or getattr(client, "model_revision", "") or getattr(client, "revision", "")
+    if not resolved_revision:
+        raise ValueError("Embedding 构建必须固定 model revision")
+    normalization = "l2_v1"
+    provider_contract = getattr(
+        client,
+        "provider_contract",
+        f"embedding_provider_chain_v1:{getattr(client, 'provider', 'provider_chain')}",
+    )
+    provider_contract_fingerprint = _fingerprint({"provider_contract": provider_contract})
+    if checkpoint_path:
+        checkpoint_path = Path(checkpoint_path)
+    elif Path(index_path).resolve() == INDEX_PATH.resolve():
+        checkpoint_path = CHECKPOINT_PATH
+    else:
+        checkpoint_path = Path(index_path).with_name("bge_m3_embedding_checkpoint.json")
+    checkpoint = _load_checkpoint(checkpoint_path)
+    cache_entries = checkpoint["entries"]
+    completed_cache_keys = set()
     manifest = {
         "status": "complete",
         "generated_at": generated_at,
         "generated_by": "src/bgpkb/pipeline/build_bge_m3_index.py",
         "provider": getattr(client, "provider", "provider_chain"),
-        "model": getattr(client, "model", "BAAI/bge-m3"),
-        "model_revision": "",
+        "model": model,
+        "model_revision": resolved_revision,
         "model_hash": "",
         "provider_chain": [],
         "degraded_reason": None,
         "dimension": 0,
         "input_count": len(documents),
         "input_hash": input_hash(documents),
+        "retrieval_text_version": versions.pop(),
+        "retrieval_input_manifest_hash": input_manifest_hashes.pop(),
+        "normalization": normalization,
+        "normalization_fingerprint": _fingerprint({"algorithm": "l2", "version": "v1"}),
+        "provider_contract": provider_contract,
+        "provider_contract_fingerprint": provider_contract_fingerprint,
+        "checkpoint_schema_version": "embedding_checkpoint_v1",
+        "cache_hit_count": 0,
+        "embedded_count": 0,
         "source_counts": counts,
         "real_model_execution": not bool(getattr(client, "is_fake", False)),
         "local_model_enabled": True,
@@ -295,80 +315,74 @@ def build_index(documents, client, index_path=INDEX_PATH, manifest_path=MANIFEST
     records = []
     for offset in range(0, len(documents), batch_size):
         batch = documents[offset:offset + batch_size]
-        result = client.embed_texts([item["text"] for item in batch])
-        if not result.get("ok"):
+        keyed = []
+        missing = []
+        for document in batch:
+            key = embedding_cache_key(
+                document=document,
+                model=model,
+                model_revision=resolved_revision,
+                normalization=normalization,
+                provider_contract=provider_contract,
+            )
+            cached = cache_entries.get(key)
+            vector = cached.get("vector") if isinstance(cached, dict) else None
+            if _vector_error([vector], 1, manifest["dimension"]):
+                missing.append((document, key))
+                keyed.append((document, key, None))
+            else:
+                manifest["cache_hit_count"] += 1
+                manifest["dimension"] = manifest["dimension"] or len(vector)
+                completed_cache_keys.add(key)
+                keyed.append((document, key, vector))
+
+        if missing:
+            result = client.embed_texts([document["text"] for document, _ in missing])
+            if not result.get("ok"):
+                return _failed_build(manifest, result, index_path, manifest_path, report_path)
+            if result.get("revision") and result["revision"] != resolved_revision:
+                return _failed_build(manifest, {
+                    "error_code": "model_revision_mismatch",
+                    "error": f"Embedding revision 不一致：{result['revision']} != {resolved_revision}",
+                }, index_path, manifest_path, report_path)
+            vectors = result.get("vectors")
+            error = _vector_error(vectors, len(missing), manifest["dimension"])
+            if error:
+                return _failed_build(manifest, {
+                    "error_code": "dimension_mismatch" if "不同批次" in error else "invalid_embeddings",
+                    "error": error,
+                }, index_path, manifest_path, report_path)
+            dimension = len(vectors[0])
             manifest.update({
-                "status": "failed",
-                "error_code": result.get("error_code", "embedding_failed"),
-                "error": result.get("error", "Embedding provider 不可用"),
-                "real_model_execution": False,
-                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
+                "provider": result.get("provider", manifest["provider"]),
+                "model": result.get("model", manifest["model"]),
+                "model_hash": result.get("model_hash", result.get("model_sha256", manifest["model_hash"])),
+                "provider_chain": _provider_chain(result, manifest["provider"]),
+                "degraded_reason": result.get("degraded_reason") or manifest["degraded_reason"],
+                "dimension": dimension,
+                "embedded_count": manifest["embedded_count"] + len(missing),
             })
-            if not manifest["preserved_previous_artifacts"]:
-                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-                _atomic_write(report_path, render_report(manifest))
-            return manifest
-        vectors = result.get("vectors")
-        if not isinstance(vectors, list) or len(vectors) != len(batch):
-            result = {"ok": False, "error_code": "invalid_embeddings", "error": "Embedding 数量与输入不一致"}
-            manifest.update({
-                "status": "failed", "error_code": result["error_code"], "error": result["error"],
-                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
-            })
-            if not manifest["preserved_previous_artifacts"]:
-                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-                _atomic_write(report_path, render_report(manifest))
-            return manifest
-        dimension = result.get("dimension") or (len(vectors[0]) if vectors else 0)
-        if not dimension or any(
-            not isinstance(vector, list) or len(vector) != dimension
-            or any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) for value in vector)
-            or not any(float(value) != 0.0 for value in vector)
-            for vector in vectors
-        ):
-            manifest.update({
-                "status": "failed", "error_code": "invalid_embeddings", "error": "Embedding 向量维度、数值或范数无效",
-                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
-            })
-            if not manifest["preserved_previous_artifacts"]:
-                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-                _atomic_write(report_path, render_report(manifest))
-            return manifest
-        if manifest["dimension"] and manifest["dimension"] != dimension:
-            manifest.update({
-                "status": "failed", "error_code": "dimension_mismatch", "error": "不同批次的向量维度不一致",
-                "preserved_previous_artifacts": _complete_artifacts(index_path, manifest_path, report_path),
-            })
-            if not manifest["preserved_previous_artifacts"]:
-                _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
-                _atomic_write(report_path, render_report(manifest))
-            return manifest
-        manifest.update({
-            "provider": result.get("provider", manifest["provider"]),
-            "model": result.get("model", manifest["model"]),
-            "model_revision": result.get("revision", manifest["model_revision"]),
-            "model_hash": result.get("model_hash", result.get("model_sha256", manifest["model_hash"])),
-            "provider_chain": _provider_chain(result, manifest["provider"]),
-            "degraded_reason": result.get("degraded_reason") or manifest["degraded_reason"],
-            "dimension": dimension,
-        })
-        for document, vector in zip(batch, result["vectors"]):
-            records.append({
-                "doc_id": document["doc_id"],
-                "kind": document["kind"],
-                "source_ref": document["source_ref"],
-                "source_refs": document["source_refs"],
-                "source_type": document["source_type"],
-                "review_status": document["review_status"],
-                "lifecycle_status": document["lifecycle_status"],
-                "trusted": document["trusted"],
-                "trust_basis": document["trust_basis"],
-                "text": document["text"],
-                "text_hash": hashlib.sha256(document["text"].encode("utf-8")).hexdigest(),
-                "metadata": document["metadata"],
-                "vector": normalize_vector(vector),
-                "generated_by": "src/bgpkb/pipeline/build_bge_m3_index.py",
-            })
+            embedded = {}
+            for (document, key), vector in zip(missing, vectors):
+                normalized = normalize_vector(vector)
+                embedded[key] = normalized
+                cache_entries[key] = {
+                    "retrieval_doc_id": document["doc_id"],
+                    "retrieval_text_hash": document["retrieval_text_hash"],
+                    "model": model,
+                    "model_revision": resolved_revision,
+                    "normalization": normalization,
+                    "provider_contract": provider_contract,
+                    "vector": normalized,
+                }
+                completed_cache_keys.add(key)
+            keyed = [
+                (document, key, embedded.get(key, vector))
+                for document, key, vector in keyed
+            ]
+            _write_checkpoint(checkpoint_path, checkpoint, len(completed_cache_keys))
+
+        records.extend(_index_record(document, vector) for document, _, vector in keyed)
     index_content = "".join(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n" for record in records)
     _atomic_write(index_path, index_content)
     _atomic_write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
@@ -381,7 +395,15 @@ def main():
     parser.add_argument("--provider", choices=["siliconflow_bge_m3", "aliyun_eas_bge_m3"], default="siliconflow_bge_m3")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--model-revision",
+        default=os.environ.get("BGP_EMBEDDING_MODEL_REVISION", ""),
+        help="固定的 embedding 模型 revision；也可通过 BGP_EMBEDDING_MODEL_REVISION 设置",
+    )
+    parser.add_argument("--checkpoint-path", type=Path, default=None)
     args = parser.parse_args()
+    if not args.model_revision:
+        parser.error("必须通过 --model-revision 或 BGP_EMBEDDING_MODEL_REVISION 固定模型 revision")
 
     documents = load_documents()
     if args.limit > 0:
@@ -390,6 +412,8 @@ def main():
         documents=documents,
         client=EmbeddingProviderChain.from_env(),
         batch_size=args.batch_size,
+        checkpoint_path=args.checkpoint_path,
+        model_revision=args.model_revision,
     )
     print(json.dumps(manifest, ensure_ascii=False, sort_keys=True))
 

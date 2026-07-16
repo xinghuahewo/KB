@@ -30,14 +30,7 @@ BGPKB_DATA_DIR=/srv/bgpkb/artifacts/releases/<release-id>/data \
 make verify-artifacts
 ```
 
-校验至少覆盖：
-
-- `SHA256SUMS` 与实际文件集合完全一致；
-- 每个文件的 SHA-256；
-- SQLite `integrity_check`；
-- 向量索引 JSONL、记录数和维度；
-- 必需运行目录和 catalog；
-- 注册表中的 release id、路径、文件数和清单哈希。
+候选构建必须先形成 `publish_index_manifest_v1.json`，再通过统一 `verify-release`；完整的候选目录、catalog/DB/FTS/embedding/fast index 闭包和失败关闭条件见 [RAG 五阶段流水线](pipeline.md)。正式 release 仍必须使 `SHA256SUMS` 与实际文件集合完全一致，并通过 SQLite、向量和 release 注册表校验。
 
 ## 发布与回滚
 

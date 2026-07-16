@@ -4,10 +4,14 @@ from datetime import datetime
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.domain.evaluation_ownership import load_ownership, release_ownership_status
+from bgpkb.domain.rag_quality_gates import evaluate_quality_metrics
 from bgpkb.workflows import plan_incremental_run
 
 
 REPORT = paths.report_path("release_readiness_report")
+EVALUATION_EVIDENCE = paths.PUBLISHED_DIR / "rag_release_gate_evidence.json"
+EVALUATION_OWNERSHIP = paths.CONFIG_DIR / "rag_eval_ownership.yaml"
 
 
 def load_json(path):
@@ -25,6 +29,67 @@ def check(name, ok, evidence, detail):
     }
 
 
+def release_quality_checks(*, ownership_status, evaluation_evidence):
+    owner_ready = ownership_status.get("status") == "ready"
+    owner_status = "pass" if owner_ready else "skipped_blocking"
+    evidence_status = evaluation_evidence.get("status")
+    if not evaluation_evidence or evidence_status == "skipped_blocking":
+        real_eval_status = "skipped_blocking"
+    elif evidence_status == "passed":
+        real_eval_status = "pass"
+    else:
+        real_eval_status = "fail"
+    quality_decision = (
+        evaluate_quality_metrics(evaluation_evidence.get("metrics", {}))
+        if evaluation_evidence
+        else None
+    )
+    quality_status = (
+        "skipped_blocking"
+        if quality_decision is None
+        else ("pass" if quality_decision["status"] == "passed" else "fail")
+    )
+    return [
+        {
+            "name": "rag_gold_ownership",
+            "status": owner_status,
+            "evidence": ["metadata/config/rag_eval_ownership.yaml"],
+            "detail": (
+                "owner 与 reviewer 已登记。"
+                if owner_ready
+                else f"{ownership_status.get('reason', 'evaluation_owner_unassigned')}; "
+                f"datasets={ownership_status.get('datasets', [])}"
+            ),
+        },
+        {
+            "name": "real_rag_evaluation",
+            "status": real_eval_status,
+            "evidence": ["data/published/rag_release_gate_evidence.json"],
+            "detail": (
+                f"status={evidence_status}"
+                if evaluation_evidence
+                else "真实 reranker/DeepSeek 发布评测证据缺失。"
+            ),
+        },
+        {
+            "name": "rag_quality_thresholds",
+            "status": quality_status,
+            "evidence": [
+                "metadata/config/rag_quality_gates_v1.yaml",
+                "data/published/rag_release_gate_evidence.json",
+            ],
+            "detail": (
+                "真实评测证据缺失，无法计算版本化阈值。"
+                if quality_decision is None
+                else (
+                    f"policy={quality_decision['policy_version']}; "
+                    f"failures={[item['rule_id'] for item in quality_decision['failures']]}"
+                )
+            ),
+        },
+    ]
+
+
 def build_checks():
     config = plan_incremental_run.load_config()
     policy = paths.report_policy()
@@ -32,6 +97,8 @@ def build_checks():
     integrity = load_json(paths.PUBLISHED_DIR / "integrity_summary.json")
     readiness = load_json(paths.PUBLISHED_DIR / "readiness_summary.json")
     bge = load_json(paths.PUBLISHED_DIR / "bge_m3_embedding_manifest.json")
+    ownership_status = release_ownership_status(load_ownership(EVALUATION_OWNERSHIP))
+    evaluation_evidence = load_json(EVALUATION_EVIDENCE)
     steps = config.get("steps", [])
 
     script_paths = [
@@ -93,6 +160,12 @@ def build_checks():
             "发布说明存在。",
         ),
     ]
+    checks.extend(
+        release_quality_checks(
+            ownership_status=ownership_status,
+            evaluation_evidence=evaluation_evidence,
+        )
+    )
     return checks
 
 
@@ -137,8 +210,9 @@ def main():
     REPORT.write_text(render_report(checks), encoding="utf-8")
     print(f"Wrote {REPORT.relative_to(paths.PROJECT_ROOT)}")
     if any(item["status"] != "pass" for item in checks):
-        raise SystemExit(1)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

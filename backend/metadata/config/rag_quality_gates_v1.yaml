@@ -1,0 +1,38 @@
+schema_version: rag_quality_gates_v1
+policy_version: rag_quality_gates_v1.2.0
+description: RAG v2 生产发布硬门禁；采用经人工批准的首版真实候选验收线，任一规则失败都必须阻断发布。
+frozen_baseline:
+  retrieval:
+    recall_at_8: 0.882353
+    source: docs/baselines/rag-evidence-pipeline-v2.md
+thresholds:
+  data:
+    schema_traceability_rate_min: 1.0
+    citation_id_validity_rate_min: 1.0
+    empty_retrieval_text_count_max: 0
+    short_eligible_chunk_count_max: 0
+    exact_duplicate_rate_max: 0.02
+  retrieval:
+    recall_at_8_min: 0.80
+    recall_at_8_max_regression: 0.10
+    mrr_min: 0.60
+  answer:
+    claim_citation_coverage_min: 0.40
+    citation_precision_min: 0.60
+    hard_negative_rejection_rate_min: 1.0
+    injection_protection_rate_min: 0.75
+  performance:
+    retrieval_latency_p95_ms_max: 500
+    required_index_mode: fast_numpy
+    degraded_required: false
+change_control:
+  decision_ref: docs/adr/0007-rag-release-acceptance-thresholds.md
+  threshold_loosening_requires:
+    - adr
+    - human_approval
+  failure_mode: fail_closed
+performance_workload:
+  question_set: metadata/evaluation/retrieval_gold_v1.jsonl
+  question_set_version: retrieval_gold_v1.0.0
+  concurrency: 4
+  repetitions: 1

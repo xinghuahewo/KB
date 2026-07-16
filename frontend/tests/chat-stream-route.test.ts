@@ -9,10 +9,28 @@ vi.mock("@/lib/bgp-rag-client", () => ({
       answer: "Route leak 是错误传播路由的事件。",
       answer_status: "answered",
       generated: true,
-      citations: [{ source_ref: "raw/standards/rfc7908.txt#6", chunk_id: "chunk-1", title: "RFC 7908" }],
+      grounding_status: "validated",
+      claims: [{
+        schema_version: "grounded_claim_v1",
+        claim_type: "factual",
+        text: "Route leak 是错误传播路由的事件。",
+        evidence_ids: ["evidence-1", "evidence-2"],
+        confidence: 0.9,
+      }],
+      evidence: [
+        { evidence_id: "evidence-1", chunk_id: "chunk-1", source_ref: "raw/standards/rfc7908.txt#6" },
+        { evidence_id: "evidence-2", chunk_id: "chunk-2", source_ref: "raw/standards/rfc9234.txt#4" },
+      ],
+      citations: [
+        { evidence_id: "evidence-1", source_ref: "raw/standards/rfc7908.txt#6", chunk_id: "chunk-1", title: "RFC 7908" },
+        { evidence_id: "evidence-2", source_ref: "raw/standards/rfc9234.txt#4", chunk_id: "chunk-2", title: "RFC 9234" },
+      ],
       context_pack: {
-        results: [{ chunk_id: "chunk-1", retrieval_method: "mock_hybrid", score: 0.9 }],
-        citations: ["chunk-1"],
+        results: [
+          { chunk_id: "chunk-1", retrieval_method: "mock_hybrid", score: 0.9 },
+          { chunk_id: "chunk-2", retrieval_method: "mock_hybrid", score: 0.88 },
+        ],
+        citations: ["chunk-1", "chunk-2"],
       },
     })),
   }),
@@ -43,8 +61,11 @@ describe("POST /api/chat/stream", () => {
     expect(events.at(-1)).toMatchObject({
       type: "done",
       answerStatus: "answered",
-      citations: [{ chunk_id: "chunk-1" }],
-      retrieval: { resultCount: 1, method: "mock_hybrid" },
+      citations: [{ chunk_id: "chunk-1" }, { chunk_id: "chunk-2" }],
+      retrieval: { resultCount: 2, method: "mock_hybrid" },
+      claims: [{ evidence_ids: ["evidence-1", "evidence-2"] }],
+      evidence: [{ evidence_id: "evidence-1" }, { evidence_id: "evidence-2" }],
+      groundingStatus: "validated",
     });
   });
 });

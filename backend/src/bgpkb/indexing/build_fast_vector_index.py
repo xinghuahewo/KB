@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 
 from bgpkb import paths
-from bgpkb.infrastructure.fast_vector_index import build_fast_vector_index
+from bgpkb.infrastructure.fast_vector_index import (
+    FastVectorIndex,
+    build_fast_vector_index,
+    verify_fast_vector_artifacts,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,6 +25,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     artifacts = build_fast_vector_index(args.index_path)
+    loaded = FastVectorIndex.load(args.index_path, validate_source_hash=False)
+    if loaded is None:
+        raise RuntimeError("快索引构建后无法重新加载")
+    eligible_chunk_ids = {str(item["chunk_id"]) for item in loaded.metadata}
+    verify_fast_vector_artifacts(args.index_path, eligible_chunk_ids=eligible_chunk_ids)
     manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
     print(json.dumps({
         "ok": True,

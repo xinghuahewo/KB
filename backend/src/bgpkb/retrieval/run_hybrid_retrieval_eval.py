@@ -32,10 +32,17 @@ def _reciprocal_rank(expected_refs, results):
 
 def evaluate(questions=None, search_fn=None):
     selected = questions if questions is not None else load_jsonl(QUESTIONS_PATH)
-    active_search = search_fn or hybrid_retrieval.search
     rows = []
     for question in selected:
-        payload = active_search(question["query"], limit=8)
+        if search_fn is not None:
+            payload = search_fn(question["query"], limit=8)
+        else:
+            payload = hybrid_retrieval.context_pack(
+                question["query"],
+                top_n=8,
+                query_type=question.get("query_type", "fact"),
+                require_model=True,
+            )
         results = payload.get("results", [])
         expected_refs = question.get("expected_source_refs", [])
         matched_5 = _matched_refs(expected_refs, results, 5)
@@ -62,6 +69,11 @@ def evaluate(questions=None, search_fn=None):
             "returned_chunk_ids": [item.get("chunk_id", "") for item in results],
             "vector_status": payload.get("vector_status", ""),
             "normalized_query": payload.get("normalized_query", question["query"]),
+            "reranker_provider": payload.get("provider", ""),
+            "reranker_model": payload.get("model", ""),
+            "reranker_revision": payload.get("revision", ""),
+            "rerank_status": payload.get("rerank_status", ""),
+            "degraded": bool(payload.get("degraded", False)),
             "notes": question.get("notes", ""),
         })
     return rows
@@ -141,8 +153,10 @@ def main():
     write_jsonl(RESULTS_PATH, results)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(render_report(results), encoding="utf-8")
-    print(json.dumps(summarize(results), ensure_ascii=False, sort_keys=True))
+    summary = summarize(results)
+    print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+    return 1 if summary["failed"] else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

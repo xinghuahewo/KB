@@ -1,0 +1,8 @@
+{
+  "pairs": [
+    {"id": "exact-template", "left": "Retrieve one network by its numeric identifier.", "right": "Retrieve one network by its numeric identifier.", "same_source": true, "should_collapse": true},
+    {"id": "near-template-id", "left": "Retrieve network 42 by its numeric identifier and return JSON.", "right": "Retrieve network 43 by its numeric identifier and return JSON.", "same_source": true, "should_collapse": true},
+    {"id": "independent-roa", "left": "A route origin is Valid when the ROA authorizes the origin AS.", "right": "A route origin is valid when its ROA authorises the originating AS.", "same_source": false, "should_collapse": false},
+    {"id": "distinct-bgpsec", "left": "RPKI validates route origin authorization.", "right": "BGPsec validates the complete AS path.", "same_source": true, "should_collapse": false}
+  ]
+}

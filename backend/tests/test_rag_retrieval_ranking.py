@@ -33,3 +33,28 @@ def test_chinese_route_leak_expansion_surfaces_route_leak_results():
     assert "route leak" in normalized
     assert results
     assert any("route" in item["content_preview"].lower() or "route" in item["title"].lower() for item in results)
+
+
+def test_query_expansions_do_not_inject_gold_source_names_for_broad_concepts():
+    observability = retrieval_framework.normalize_query(
+        "Which data sources jointly provide global BGP observability?"
+    )
+    incidents = retrieval_framework.normalize_query(
+        "Which common operational risks are reflected by major routing incident cases?"
+    )
+    research = retrieval_framework.normalize_query(
+        "近年来的 BGP 安全研究有哪些主要方向？"
+    )
+
+    assert not {"ROUTEVIEWS", "RIPE", "RIS", "BGPSTREAM"} & set(observability.split())
+    assert not {"YOUTUBE", "VERIZON", "FACEBOOK"} & set(incidents.split())
+    assert not {"BGP2VEC", "OSCILLOSCOPE", "BGPSHIELD"} & set(research.split())
+
+
+def test_ascii_acronym_expansion_requires_a_complete_query_token():
+    assert "RFC6811" not in retrieval_framework.normalize_query(
+        "Which sources provide global observability?"
+    )
+    assert "route origin authorization" not in retrieval_framework.normalize_query(
+        "What road policy applies here?"
+    )

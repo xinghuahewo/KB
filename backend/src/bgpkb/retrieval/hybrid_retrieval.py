@@ -1,7 +1,10 @@
 """BGE-M3、关键词和元数据融合检索。"""
 
+from collections import Counter
+import hashlib
 import math
 from pathlib import Path
+import re
 import time
 
 from bgpkb import paths
@@ -12,6 +15,7 @@ from .context_assembler import ContextAssembler
 from .query_type_resolver import resolve_query_type
 from .retrieval_data import PublishedArtifactRetrievalData, RetrievalData
 from bgpkb.infrastructure.retrieval_model_client import RerankerProviderChain
+from bgpkb.indexing.retrieval_documents import verify_component_input_manifests
 from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
 
 
@@ -258,6 +262,14 @@ def validate_top_n(top_n=None):
 
 
 def _candidate_document(item):
+    retrieval_text = item.get("retrieval_text")
+    if retrieval_text is not None:
+        if item.get("retrieval_text_version") != "retrieval_text_v1":
+            raise ValueError("reranker 只接受当前 retrieval_text_v1")
+        expected_hash = "sha256:" + hashlib.sha256(str(retrieval_text).encode("utf-8")).hexdigest()
+        if item.get("retrieval_text_hash") != expected_hash:
+            raise ValueError("reranker retrieval_text hash 非法")
+        return str(retrieval_text)
     return "\n".join([
         str(item.get("title", "")),
         str(item.get("content", item.get("content_preview", ""))),
@@ -271,9 +283,134 @@ def _rrf_ranked(candidates):
     )
 
 
-def rerank_candidates(query, candidates, top_n=None, reranker=None, require_model=False):
+def _source_identity(item):
+    if item.get("doc_id"):
+        return str(item["doc_id"])
+    if item.get("source_id"):
+        return str(item["source_id"])
+    source_ref = str(item.get("source_ref", ""))
+    return source_ref.split("#", 1)[0]
+
+
+_SOURCE_ANCHOR_STOPWORDS = {
+    "actions",
+    "api",
+    "archive",
+    "bgp",
+    "data",
+    "doc",
+    "docs",
+    "framework",
+    "global",
+    "index",
+    "outage",
+    "paper",
+    "raw",
+    "review",
+    "route",
+    "routes",
+    "routing",
+    "source",
+}
+
+
+def _source_anchor_terms(item):
+    identity = str(item.get("doc_id") or item.get("source_id") or "").casefold()
+    return sorted({
+        token
+        for token in re.findall(r"[a-z0-9]+", identity)
+        if (
+            (len(token) >= 4 or token in {"ris"} or re.fullmatch(r"rfc\d+", token))
+            and not token.isdigit()
+            and token not in _SOURCE_ANCHOR_STOPWORDS
+        )
+    })
+
+
+def _source_anchor(query, item):
+    text = str(query).casefold()
+    matched = [
+        term
+        for term in _source_anchor_terms(item)
+        if re.search(
+            rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",
+            text,
+        )
+    ]
+    if not matched:
+        return None
+    return {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": matched,
+    }
+
+
+def suppress_retrieval_duplicates(
+    candidates,
+    *,
+    per_document_limit=2,
+    suppress_exact=True,
+):
+    kept = []
+    diagnostics = []
+    exact_seen = {}
+    per_document_counts = {}
+    for item in candidates:
+        text_hash = item.get("retrieval_text_hash")
+        exact_key = (text_hash, _source_identity(item)) if text_hash else None
+        if suppress_exact and exact_key and exact_key in exact_seen:
+            diagnostics.append({
+                "chunk_id": item.get("chunk_id", ""),
+                "kept_chunk_id": exact_seen[exact_key].get("chunk_id", ""),
+                "doc_id": item.get("doc_id", ""),
+                "rule_id": "exact_duplicate_same_source_v1",
+                "retrieval_text_hash": text_hash,
+            })
+            continue
+        doc_id = str(item.get("doc_id", ""))
+        if (
+            per_document_limit is not None
+            and doc_id
+            and per_document_counts.get(doc_id, 0) >= per_document_limit
+        ):
+            diagnostics.append({
+                "chunk_id": item.get("chunk_id", ""),
+                "kept_chunk_id": "",
+                "doc_id": doc_id,
+                "rule_id": "per_document_candidate_cap_v1",
+                "limit": per_document_limit,
+            })
+            continue
+        kept.append(item)
+        if suppress_exact and exact_key:
+            exact_seen[exact_key] = item
+        if doc_id:
+            per_document_counts[doc_id] = per_document_counts.get(doc_id, 0) + 1
+    return kept, diagnostics
+
+
+def rerank_candidates(
+    query,
+    candidates,
+    top_n=None,
+    reranker=None,
+    require_model=False,
+    component_manifest_hashes=None,
+):
     requested_top_n = validate_top_n(top_n)
-    pool = _rrf_ranked(candidates)[:20]
+    pool, suppression_diagnostics = suppress_retrieval_duplicates(
+        _rrf_ranked(candidates)[:20],
+        per_document_limit=None,
+    )
+    reranker_input_manifest_hash = None
+    if component_manifest_hashes is not None:
+        reranker_input_manifest_hash = verify_component_input_manifests(component_manifest_hashes)
+        candidate_hashes = {item.get("retrieval_input_manifest_hash") for item in pool}
+        if candidate_hashes != {reranker_input_manifest_hash}:
+            raise ValueError(
+                "reranker 候选与当前 retrieval input manifest 不一致："
+                f"candidates={sorted(str(item) for item in candidate_hashes)}"
+            )
     if not pool:
         return {
             "results": [],
@@ -282,15 +419,26 @@ def rerank_candidates(query, candidates, top_n=None, reranker=None, require_mode
             "candidate_count": 0,
             "degraded": False,
             "degraded_reason": None,
+            "reranker_input_manifest_hash": reranker_input_manifest_hash,
+            "suppression_diagnostics": suppression_diagnostics,
         }
-    effective_top_n = min(requested_top_n, len(pool))
     documents = [_candidate_document(item) for item in pool]
     provider = reranker or RerankerProviderChain.from_env()
-    response = provider.rerank(query, documents, effective_top_n, require_model=require_model)
+    response = provider.rerank(
+        query,
+        documents,
+        min(requested_top_n, len(pool)),
+        require_model=require_model,
+    )
     if not response.get("ok"):
         if require_model:
             raise RerankUnavailable(response)
-        fallback = pool[:requested_top_n]
+        fallback, fallback_diagnostics = suppress_retrieval_duplicates(
+            pool,
+            suppress_exact=False,
+        )
+        suppression_diagnostics.extend(fallback_diagnostics)
+        fallback = fallback[:requested_top_n]
         for item in fallback:
             item["rerank_score"] = None
             item["rerank_rank"] = None
@@ -305,6 +453,8 @@ def rerank_candidates(query, candidates, top_n=None, reranker=None, require_mode
             "degraded": True,
             "degraded_reason": response.get("degraded_reason") or response.get("error") or "reranker_unavailable",
             "attempts": response.get("attempts", []),
+            "reranker_input_manifest_hash": reranker_input_manifest_hash,
+            "suppression_diagnostics": suppression_diagnostics,
         }
 
     indexed = []
@@ -320,11 +470,35 @@ def rerank_candidates(query, candidates, top_n=None, reranker=None, require_mode
         item["rerank_score"] = float(score)
         indexed.append(item)
     indexed.sort(key=lambda item: (-item["rerank_score"], item["_original_rrf_rank"], item.get("chunk_id", "")))
+    indexed_by_chunk = {item.get("chunk_id"): item for item in indexed}
+    anchored = []
+    anchored_chunk_ids = set()
+    for pool_item in pool:
+        anchor = pool_item.get("source_anchor")
+        if not isinstance(anchor, dict):
+            continue
+        chunk_id = pool_item.get("chunk_id")
+        item = indexed_by_chunk.get(chunk_id, dict(pool_item))
+        item["ranking_rule_id"] = anchor.get("rule_id")
+        if chunk_id not in indexed_by_chunk:
+            item["rerank_score"] = None
+        anchored.append(item)
+        anchored_chunk_ids.add(chunk_id)
+    combined = [
+        *anchored,
+        *(item for item in indexed if item.get("chunk_id") not in anchored_chunk_ids),
+    ]
+    indexed, cap_diagnostics = suppress_retrieval_duplicates(
+        combined,
+        suppress_exact=False,
+    )
+    suppression_diagnostics.extend(cap_diagnostics)
     results = []
     for rank, item in enumerate(indexed[:requested_top_n], start=1):
         item.pop("_original_rrf_rank", None)
         item["rerank_rank"] = rank
-        item["score"] = item["rerank_score"]
+        if item.get("rerank_score") is not None:
+            item["score"] = item["rerank_score"]
         results.append(item)
     return {
         "results": results,
@@ -338,6 +512,8 @@ def rerank_candidates(query, candidates, top_n=None, reranker=None, require_mode
         "degraded": bool(response.get("degraded", False)),
         "degraded_reason": response.get("degraded_reason"),
         "attempts": response.get("attempts", []),
+        "reranker_input_manifest_hash": reranker_input_manifest_hash,
+        "suppression_diagnostics": suppression_diagnostics,
     }
 
 
@@ -358,7 +534,7 @@ def _best_channel_items(result):
     return best
 
 
-def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
+def _rrf_channel_results(lexical_result, vector_result, query="", limit=20, rrf_k=60):
     fused = {}
     for result in (lexical_result, vector_result):
         for chunk_id, item in _best_channel_items(result).items():
@@ -378,7 +554,70 @@ def _rrf_channel_results(lexical_result, vector_result, limit=20, rrf_k=60):
         item["fusion_score"] = item["rrf_score"]
         item["retrieval_method"] = "hybrid_rrf"
     items.sort(key=lambda item: (-item["rrf_score"], item["chunk_id"]))
-    return items[:limit]
+    if query:
+        for item in items:
+            anchor = _source_anchor(query, item)
+            if anchor:
+                item["source_anchor"] = anchor
+        items = [
+            *[item for item in items if item.get("source_anchor")],
+            *[item for item in items if not item.get("source_anchor")],
+        ]
+    selected = []
+    deferred = []
+    source_counts = Counter()
+    for item in items:
+        source_id = _source_identity(item) or str(item.get("chunk_id", ""))
+        if source_counts[source_id] >= 1:
+            deferred.append(item)
+            continue
+        selected.append(item)
+        source_counts[source_id] += 1
+        if len(selected) >= limit:
+            break
+    if len(selected) < limit:
+        for item in deferred:
+            source_id = _source_identity(item) or str(item.get("chunk_id", ""))
+            if source_counts[source_id] >= 2:
+                continue
+            selected.append(item)
+            source_counts[source_id] += 1
+            if len(selected) >= limit:
+                break
+    return selected
+
+
+def _governance_diagnostics(results):
+    eligibility_counts = Counter()
+    policy_versions = set()
+    missing_governance_count = 0
+    for item in results:
+        governance = item.get("governance")
+        eligibility = item.get("eligibility")
+        if not isinstance(governance, dict):
+            missing_governance_count += 1
+            continue
+        if not isinstance(eligibility, dict):
+            eligibility = governance.get("retrieval_eligibility")
+        if isinstance(eligibility, dict):
+            status = eligibility.get("status")
+            if status:
+                eligibility_counts[str(status)] += 1
+            policy_version = eligibility.get("policy_version")
+            if policy_version:
+                policy_versions.add(str(policy_version))
+    return {
+        "state_dimensions": [
+            "parse_status",
+            "content_quality_status",
+            "source_trust_status",
+            "semantic_review_status",
+            "retrieval_eligibility",
+        ],
+        "retrieval_eligibility_counts": dict(sorted(eligibility_counts.items())),
+        "policy_versions": sorted(policy_versions),
+        "missing_governance_count": missing_governance_count,
+    }
 
 
 def search(
@@ -445,7 +684,13 @@ def search(
     technical_channels = [result for result in channel_results.values() if not result.metadata.get("disabled")]
     if technical_channels and all(result.error is not None for result in technical_channels):
         raise RetrievalUnavailable(channel_errors)
-    results = _rrf_channel_results(lexical, vector, limit=limit, rrf_k=60)
+    results = _rrf_channel_results(
+        lexical,
+        vector,
+        query=query,
+        limit=limit,
+        rrf_k=60,
+    )
     channel_status = {
         channel: (
             "disabled" if result.metadata.get("disabled") else
@@ -469,6 +714,7 @@ def search(
         "channel_metadata": {channel: result.metadata for channel, result in channel_results.items()},
         "retrieval_latency_ms": round((time.perf_counter() - started) * 1000, 3),
         "retrieval_contract": {"lexical_top_k": 50, "vector_top_k": 50, "rrf_k": 60, "fused_top_k": 20},
+        "governance_diagnostics": _governance_diagnostics(results),
         "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "src/bgpkb/service/hybrid_retrieval.py",
     }
@@ -541,6 +787,32 @@ def _build_context_units(
     return pack["context_units"], pack["trim_events"]
 
 
+def _build_structured_context(
+    query, results, resolved_query_type, token_budget, store=None, retrieval_data: RetrievalData | None = None
+):
+    if not results:
+        return {
+            "context_units": [],
+            "evidence": [],
+            "context_groups": [],
+            "trim_events": [],
+        }
+    if store is None:
+        active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
+        section_path = _default_section_catalog_path(active_data)
+        store = _default_context_store(section_path, active_data)
+    assembler = ContextAssembler(store)
+    try:
+        return assembler.build(query, results, resolved_query_type, token_budget)
+    except Exception as exc:
+        return {
+            "context_units": [],
+            "evidence": [],
+            "context_groups": [],
+            "trim_events": [{"event": "context_assembly_failed", "reason": str(exc)}],
+        }
+
+
 def _citations_from_units(context_units):
     citations = []
     seen = set()
@@ -601,12 +873,49 @@ def context_pack(
             "vector_latency_ms": vector_metadata.get("latency_ms"),
             "degraded": bool(recall.get("degraded", False)),
         })
+    lexical_manifest_hash = recall.get("channel_metadata", {}).get("lexical", {}).get(
+        "retrieval_input_manifest_hash"
+    )
+    embedding_manifest_hash = recall.get("channel_metadata", {}).get("vector", {}).get(
+        "retrieval_input_manifest_hash"
+    )
+    candidate_manifest_hashes = {
+        item.get("retrieval_input_manifest_hash")
+        for item in recall.get("results", [])
+        if item.get("retrieval_input_manifest_hash")
+    }
+    component_manifest_hashes = None
+    if lexical_manifest_hash or embedding_manifest_hash or candidate_manifest_hashes:
+        if not lexical_manifest_hash or not embedding_manifest_hash:
+            raise ValueError(
+                "FTS/embedding/reranker retrieval input manifest 不完整："
+                f"fts={lexical_manifest_hash}, embedding={embedding_manifest_hash}, "
+                f"reranker={sorted(candidate_manifest_hashes)}"
+            )
+        if recall.get("results"):
+            if len(candidate_manifest_hashes) != 1:
+                raise ValueError(
+                    "FTS/embedding/reranker retrieval input manifest 不完整："
+                    f"fts={lexical_manifest_hash}, embedding={embedding_manifest_hash}, "
+                    f"reranker={sorted(candidate_manifest_hashes)}"
+                )
+            component_manifest_hashes = {
+                "fts": lexical_manifest_hash,
+                "embedding": embedding_manifest_hash,
+                "reranker": next(iter(candidate_manifest_hashes)),
+            }
+        elif lexical_manifest_hash != embedding_manifest_hash:
+            raise ValueError(
+                "空候选的 FTS/embedding retrieval input manifest 不一致："
+                f"fts={lexical_manifest_hash}, embedding={embedding_manifest_hash}"
+            )
     reranked = rerank_candidates(
-        query,
+        recall.get("normalized_query", query),
         recall["results"],
         top_n=effective_top_n,
         reranker=reranker or (_OfflineRerankerFallback() if not require_model else None),
         require_model=require_model,
+        component_manifest_hashes=component_manifest_hashes,
     )
     if progress is not None:
         progress({
@@ -621,7 +930,7 @@ def context_pack(
         })
     query_type_payload = resolve_query_type(query, query_type, client=query_type_client)
     context_started = time.perf_counter()
-    context_units, trim_events = _build_context_units(
+    structured_context = _build_structured_context(
         query,
         reranked["results"],
         query_type_payload["resolved_query_type"],
@@ -629,6 +938,10 @@ def context_pack(
         store=store,
         retrieval_data=active_data,
     )
+    context_units = structured_context["context_units"]
+    evidence = structured_context["evidence"]
+    context_groups = structured_context["context_groups"]
+    trim_events = structured_context["trim_events"]
     context_assembly_latency_ms = round((time.perf_counter() - context_started) * 1000, 3)
     citations = _citations_from_units(context_units) or retrieval_framework.citations_for(reranked["results"])
     payload = {
@@ -642,9 +955,12 @@ def context_pack(
         "query_type_resolution": query_type_payload,
         "token_budget": token_budget,
         "context_units": context_units,
+        "evidence": evidence,
+        "context_groups": context_groups,
         "trim_events": trim_events,
         "provider": reranked.get("provider"),
         "model": reranked.get("model"),
+        "revision": reranked.get("revision"),
         "degraded": bool(recall.get("degraded") or reranked.get("degraded") or query_type_payload.get("degraded")),
         "degraded_reason": reranked.get("degraded_reason") or query_type_payload.get("degraded_reason"),
         "rerank_status": reranked["rerank_status"],

@@ -12,6 +12,7 @@ import time
 from typing import Any, Protocol
 
 from bgpkb import paths
+from bgpkb.infrastructure import serving_bundle
 from bgpkb.infrastructure.fast_vector_index import FastVectorIndexError, load_cached_fast_vector_index
 from bgpkb.retrieval.retrieval_data import PublishedArtifactRetrievalData, RetrievalData
 from bgpkb.infrastructure.retrieval_model_client import EmbeddingProviderChain
@@ -50,7 +51,10 @@ def _fts_query(query: str) -> str:
     ]
     named_tokens = [
         token for token in tokens
-        if re.search(r"[a-z][A-Z]", token) or re.match(r"[A-Z]{2,}[A-Z][a-z]", token)
+        if (
+            re.search(r"[a-z][A-Z]", token)
+            or re.fullmatch(r"[A-Z]{2,}[A-Za-z0-9]*", token)
+        )
     ]
     if named_tokens:
         tokens = named_tokens
@@ -61,9 +65,11 @@ class Bm25Retriever:
     def __init__(self, db_path: Path | None = None, retrieval_data: RetrievalData | None = None):
         if db_path is not None:
             self.db_path = Path(db_path)
+            self.allow_legacy = True
         else:
             active_data = retrieval_data or PublishedArtifactRetrievalData.from_environment()
             self.db_path = active_data.database_path()
+            self.allow_legacy = serving_bundle.legacy_reader_enabled()
 
     def search(self, query: str, top_k: int) -> RetrievalChannelResult:
         invalid = _top_k_error("lexical", top_k)
@@ -73,24 +79,54 @@ class Bm25Retriever:
         if not fts_query:
             return RetrievalChannelResult("lexical", metadata={"query_empty": True})
         try:
-            uri = f"file:{self.db_path.resolve().as_posix()}?mode=ro&immutable=1"
-            with sqlite3.connect(uri, uri=True) as conn:
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute(
-                    """
-                    SELECT c.chunk_id, c.doc_id, c.title, c.source_type, c.chunk_type,
-                           c.source_ref, c.language, c.review_status, c.content_chars,
-                           c.content_preview, c.chunk_file, c.payload_json,
-                           bm25(chunk_fts) AS raw_score
-                    FROM chunk_fts
-                    JOIN chunks c ON c.chunk_id = chunk_fts.chunk_id
-                    WHERE chunk_fts MATCH ?
-                    ORDER BY raw_score ASC, c.chunk_id ASC
-                    LIMIT ?
-                    """,
-                    (fts_query, top_k),
-                ).fetchall()
-        except (sqlite3.Error, OSError) as exc:
+            with serving_bundle.connect_serving_database(
+                self.db_path,
+                allow_legacy=self.allow_legacy,
+            ) as conn:
+                has_retrieval_documents = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='retrieval_documents'"
+                ).fetchone()
+                if has_retrieval_documents:
+                    fts_manifest_row = conn.execute(
+                        "SELECT value FROM meta WHERE key='fts_input_manifest_hash'"
+                    ).fetchone()
+                    rows = conn.execute(
+                        """
+                        SELECT d.chunk_id, d.doc_id, d.title,
+                               d.document_profile AS source_type,
+                               d.semantic_unit AS chunk_type, d.source_ref,
+                               '' AS language, '' AS review_status,
+                               length(d.retrieval_text) AS content_chars,
+                               d.content_preview, '' AS chunk_file,
+                               d.payload_json, d.retrieval_text,
+                               d.retrieval_text_hash, d.retrieval_text_version,
+                               bm25(chunk_fts) AS raw_score
+                        FROM chunk_fts
+                        JOIN retrieval_documents d
+                          ON d.retrieval_doc_id = chunk_fts.retrieval_doc_id
+                        WHERE chunk_fts MATCH ?
+                        ORDER BY raw_score ASC, d.chunk_id ASC
+                        LIMIT ?
+                        """,
+                        (fts_query, top_k),
+                    ).fetchall()
+                else:
+                    fts_manifest_row = None
+                    rows = conn.execute(
+                        """
+                        SELECT c.chunk_id, c.doc_id, c.title, c.source_type, c.chunk_type,
+                               c.source_ref, c.language, c.review_status, c.content_chars,
+                               c.content_preview, c.chunk_file, c.payload_json,
+                               bm25(chunk_fts) AS raw_score
+                        FROM chunk_fts
+                        JOIN chunks c ON c.chunk_id = chunk_fts.chunk_id
+                        WHERE chunk_fts MATCH ?
+                        ORDER BY raw_score ASC, c.chunk_id ASC
+                        LIMIT ?
+                        """,
+                        (fts_query, top_k),
+                    ).fetchall()
+        except (sqlite3.Error, OSError, serving_bundle.ServingBundleError) as exc:
             return RetrievalChannelResult(
                 "lexical",
                 error={"code": "bm25_unavailable", "message": f"SQLite BM25 查询失败：{exc}"},
@@ -100,6 +136,15 @@ class Bm25Retriever:
         items = []
         for rank, row in enumerate(rows, start=1):
             item = dict(row)
+            if has_retrieval_documents:
+                try:
+                    payload = json.loads(item.get("payload_json") or "{}")
+                except json.JSONDecodeError:
+                    payload = {}
+                if isinstance(payload.get("governance"), dict):
+                    item["governance"] = payload["governance"]
+                if isinstance(payload.get("eligibility"), dict):
+                    item["eligibility"] = payload["eligibility"]
             raw_score = float(item["raw_score"])
             item.update({
                 "raw_score": raw_score,
@@ -107,11 +152,14 @@ class Bm25Retriever:
                 "score": 1.0 / (1.0 + max(0.0, raw_score - best)),
                 "channel": "lexical",
             })
+            if fts_manifest_row:
+                item["retrieval_input_manifest_hash"] = fts_manifest_row[0]
             items.append(item)
-        return RetrievalChannelResult(
-            "lexical", items=items,
-            metadata={"engine": "sqlite_fts5", "score_direction": "raw_lower_is_better", "fts_query": fts_query},
-        )
+        metadata = {"engine": "sqlite_fts5", "score_direction": "raw_lower_is_better", "fts_query": fts_query}
+        if fts_manifest_row:
+            metadata["retrieval_input_manifest_hash"] = fts_manifest_row[0]
+            metadata["retrieval_text_version"] = "retrieval_text_v1"
+        return RetrievalChannelResult("lexical", items=items, metadata=metadata)
 
 
 def _cosine(left: list[float], right: list[float]) -> float:
@@ -178,6 +226,14 @@ class DenseRetriever:
             fast_index = load_cached_fast_vector_index(self.index_path)
             if fast_index is not None:
                 items = fast_index.search(query_vector, top_k=top_k, min_similarity=self.min_similarity)
+                input_hashes = {
+                    item.get("retrieval_input_manifest_hash")
+                    for item in fast_index.metadata
+                    if item.get("retrieval_input_manifest_hash")
+                }
+                if len(input_hashes) == 1:
+                    provider_metadata["retrieval_input_manifest_hash"] = input_hashes.pop()
+                    provider_metadata["retrieval_text_version"] = "retrieval_text_v1"
                 provider_metadata.update({
                     "index_path": str(self.index_path),
                     "index_mode": "fast_numpy",
@@ -196,6 +252,7 @@ class DenseRetriever:
         try:
             records = []
             scanned_count = 0
+            input_hashes = set()
             with self.index_path.open(encoding="utf-8") as handle:
                 for line_number, line in enumerate(handle, start=1):
                     if not line.strip():
@@ -214,6 +271,8 @@ class DenseRetriever:
                     if score < self.min_similarity:
                         continue
                     metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+                    if record.get("retrieval_input_manifest_hash"):
+                        input_hashes.add(record["retrieval_input_manifest_hash"])
                     chunk_id = metadata.get("chunk_id") or record.get("chunk_id")
                     if not chunk_id and str(record.get("doc_id", "")).startswith("chunk:"):
                         chunk_id = str(record["doc_id"]).split(":", 1)[1]
@@ -238,4 +297,7 @@ class DenseRetriever:
             "index_search_ms": round((time.perf_counter() - index_started) * 1000, 3),
             "latency_ms": round((time.perf_counter() - started) * 1000, 3),
         })
+        if len(input_hashes) == 1:
+            provider_metadata["retrieval_input_manifest_hash"] = input_hashes.pop()
+            provider_metadata["retrieval_text_version"] = "retrieval_text_v1"
         return RetrievalChannelResult("vector", items=items, metadata=provider_metadata)

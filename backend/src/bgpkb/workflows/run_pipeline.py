@@ -106,6 +106,7 @@ STEPS = [
     ("构建 LLM 候选增强框架", "build_llm_candidate_enrichment.py"),
     ("构建 RAG 检索索引框架", "build_rag_indexes.py"),
     ("构建 BGE-M3 远程向量索引", "build_bge_m3_index.py"),
+    ("构建并校验 NumPy mmap 快向量索引", "build_fast_vector_index.py"),
     ("构建 SQLite 知识库", "build_sqlite_knowledge_base.py"),
     ("构建查询样例报告", "build_query_examples.py"),
     ("校验发布完整性", "build_published_integrity_report.py"),

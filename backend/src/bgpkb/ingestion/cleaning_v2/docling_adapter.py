@@ -50,10 +50,33 @@ def _reading_items(payload, index):
             return expanded
         return [item]
 
-    items = []
+    mounted_items = []
     for child in payload.get("body", {}).get("children", []):
-        items.extend(expand(child.get("$ref", "")))
-    return items
+        mounted_items.extend(expand(child.get("$ref", "")))
+
+    items = [
+        item
+        for item in mounted_items
+        if item.get("content_layer") != "furniture"
+    ]
+    seen = {item.get("self_ref") for item in items if item.get("self_ref")}
+    recovered = []
+    for collection_name, collection in payload.items():
+        if collection_name == "groups" or not isinstance(collection, list):
+            continue
+        for item in collection:
+            if not isinstance(item, dict):
+                continue
+            source_anchor = item.get("self_ref")
+            if (
+                item.get("content_layer") == "body"
+                and source_anchor
+                and source_anchor not in seen
+            ):
+                items.append(item)
+                recovered.append(source_anchor)
+                seen.add(source_anchor)
+    return items, recovered
 
 
 def _page_and_bbox(item):
@@ -133,10 +156,18 @@ def adapt_docling_document(docling_payload, source_meta, runtime_meta, config):
     del config
     doc_id = source_meta["doc_id"]
     index = _index_payload(docling_payload)
-    items = _reading_items(docling_payload, index)
+    items, recovered_body_items = _reading_items(docling_payload, index)
     blocks = []
     assets = []
     diagnostics = []
+    if recovered_body_items:
+        diagnostics.append(
+            {
+                "code": "unmounted_body_items_recovered",
+                "count": len(recovered_body_items),
+                "source_anchors": recovered_body_items,
+            }
+        )
     heading_stack = []
 
     for reading_order, item in enumerate(items):
@@ -223,7 +254,10 @@ def adapt_docling_document(docling_payload, source_meta, runtime_meta, config):
         "runtime": dict(runtime_meta),
         "blocks": sort_blocks(blocks),
         "assets": sorted(assets, key=lambda asset: asset["asset_id"]),
-        "diagnostics": sorted(diagnostics, key=lambda row: (row["source_anchor"], row["code"])),
+        "diagnostics": sorted(
+            diagnostics,
+            key=lambda row: (row.get("source_anchor", ""), row["code"]),
+        ),
         "parser_mode": "docling",
         "fallback_reason": None,
         "fallback_review_status": "not_applicable",

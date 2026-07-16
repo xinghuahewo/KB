@@ -1,0 +1,56 @@
+schema_version: semantic_chunking_config_v1
+config_version: 2026-07-14-v1
+chunker_version: 3.0.0
+
+profiles:
+  rfc:
+    chunker_name: rfc_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  document:
+    chunker_name: rfc_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  plain_text:
+    chunker_name: rfc_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  html:
+    chunker_name: html_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  pdf:
+    chunker_name: pdf_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  paper:
+    chunker_name: pdf_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  pdf_table:
+    chunker_name: pdf_semantic
+    target_min_tokens: 180
+    target_max_tokens: 800
+  openapi:
+    chunker_name: openapi_semantic
+    target_min_tokens: 120
+    target_max_tokens: 800
+  yaml:
+    chunker_name: openapi_semantic
+    target_min_tokens: 120
+    target_max_tokens: 800
+  openapi_yaml:
+    chunker_name: openapi_semantic
+    target_min_tokens: 120
+    target_max_tokens: 800
+
+short_content:
+  minimum_chars: 20
+  allowlist: []
+
+deduplication:
+  exact_normalization_version: exact-normalization-v1
+  near_duplicate_mode: diagnostic_only
+
+quality_gates:
+  max_same_source_exact_duplicate_rate: 0.02

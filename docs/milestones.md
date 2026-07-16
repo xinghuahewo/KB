@@ -14,10 +14,11 @@
 
 ## 当前阶段
 
-`repository-architecture-consolidation` 已完成首个正式发布与远端部署。当前进入稳定观察期，只保留一个发布周期后的旧路径兼容清理和 OpenSpec 归档。
+`repository-architecture-consolidation` 已完成首个正式发布与远端部署。当前正在实施 `rag-evidence-pipeline-v2`：已完成本地候选隔离、publish-index 制品闭包和 verify-release 统一门禁；尚未执行生产候选全量重建、canary、成对切换或回滚演练。
 
 ## 后续
 
 - 在稳定发布周期后移除旧服务器路径兼容。
+- 从冻结 snapshots 执行五阶段生产候选全量重建，并完成真实检索/回答与目标服务器性能门禁。
 - 根据使用量再评估从 screen 迁移到 systemd/容器编排；当前不提前引入。
 - 继续提升检索评测集、人工复核闭环和增量发布能力。

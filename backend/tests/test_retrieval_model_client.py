@@ -148,6 +148,38 @@ def test_local_http_providers_call_service_without_required_auth(monkeypatch):
     assert all("Authorization" not in request.headers for request in requests)
 
 
+def test_local_reranker_pads_short_candidate_pool_for_service_contract(monkeypatch):
+    requests = []
+
+    def urlopen(request, timeout):
+        requests.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse({
+            "model": "BAAI/bge-reranker-v2-m3",
+            "revision": "rr",
+            "results": [
+                {"index": index, "relevance_score": 1.0 - index / 10}
+                for index in range(5)
+            ],
+        })
+
+    monkeypatch.setattr(
+        "bgpkb.infrastructure.retrieval_model_client.urllib.request.urlopen",
+        urlopen,
+    )
+    reranker = RerankerHttpProvider("http://10.99.8.28:8012/v1/rerank")
+
+    result = reranker.rerank("q", ["a", "b", "c"], 3)
+
+    assert requests == [{
+        "model": "BAAI/bge-reranker-v2-m3",
+        "query": "q",
+        "documents": ["a", "b", "c", "[BGPKB_RERANK_PADDING]", "[BGPKB_RERANK_PADDING]"],
+        "top_n": 5,
+    }]
+    assert result["ok"] is True
+    assert [item["index"] for item in result["results"]] == [0, 1, 2]
+
+
 def test_default_chains_from_env_use_local_then_external_api(monkeypatch):
     monkeypatch.delenv("LOCAL_RETRIEVAL_API_KEY", raising=False)
     monkeypatch.setenv("LOCAL_EMBEDDING_ENDPOINT", "http://10.99.8.28:8011/v1/embeddings")

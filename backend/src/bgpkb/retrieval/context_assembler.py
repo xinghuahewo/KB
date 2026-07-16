@@ -7,6 +7,7 @@ import hashlib
 import json
 from typing import Any
 
+from bgpkb.domain.grounded_answering import build_evidence
 from bgpkb.domain.token_budget import TokenCounter, parent_budget
 
 
@@ -42,6 +43,11 @@ class ContextAssembler:
         units.sort(key=lambda unit: (-float(unit["max_rerank_score"] or 0.0), unit["doc_id"], unit["parent_section_id"]))
 
         units = self._apply_budget(query, units, token_budget, trim_events)
+        evidence = []
+        context_groups = []
+        for unit in units:
+            evidence.extend(unit.pop("_evidence_objects"))
+            context_groups.append(unit.pop("_context_group"))
         return {
             "schema_version": "context_pack_v2",
             "query": query,
@@ -49,6 +55,8 @@ class ContextAssembler:
             "resolved_query_type": query_type,
             "token_budget": token_budget,
             "context_units": units,
+            "evidence": evidence,
+            "context_groups": context_groups,
             "trim_events": trim_events,
         }
 
@@ -143,6 +151,9 @@ class ContextAssembler:
         content = _content(chunks)
         count = self.token_counter.count(content)
         included_chunk_ids = [chunk["chunk_id"] for chunk in chunks]
+        context_id = _context_id(section["section_id"], included_chunk_ids)
+        context_group_id = _context_group_id(context_id, chunks)
+        evidence, members = _evidence_members(chunks, hits, context_group_id)
         citations = [
             {"chunk_id": chunk["chunk_id"], "source_ref": chunk.get("source_ref", "")}
             for chunk in chunks if chunk.get("source_ref")
@@ -155,7 +166,7 @@ class ContextAssembler:
         max_score = max((_score(hit) for hit in hits), default=None)
         return {
             "schema_version": "context_unit_v1",
-            "context_id": _context_id(section["section_id"], included_chunk_ids),
+            "context_id": context_id,
             "mode": mode,
             "doc_id": section.get("doc_id") or (chunks[0].get("doc_id") if chunks else ""),
             "section_path": section.get("section_path") or (chunks[0].get("section_path") if chunks else []),
@@ -169,6 +180,19 @@ class ContextAssembler:
             "max_rerank_score": max_score,
             "trim_events": [],
             "citations": citations,
+            "evidence_ids": [item["evidence_id"] for item in evidence],
+            "_evidence_objects": evidence,
+            "_context_group": {
+                "schema_version": "context_group_v1",
+                "context_group_id": context_group_id,
+                "context_id": context_id,
+                "mode": mode,
+                "doc_id": section.get("doc_id") or (chunks[0].get("doc_id") if chunks else ""),
+                "section_path": section.get("section_path") or (chunks[0].get("section_path") if chunks else []),
+                "content": _content(chunks),
+                "member_evidence_ids": [item["evidence_id"] for item in evidence],
+                "members": members,
+            },
         }
 
     def _summarize_unit(self, query: str, unit: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +227,73 @@ def _score(item: dict[str, Any]) -> float:
 
 
 def _content(chunks: list[dict[str, Any]]) -> str:
-    return "\n\n".join(str(chunk.get("content", chunk.get("content_preview", ""))) for chunk in chunks).strip()
+    return "\n\n".join(_chunk_content(chunk) for chunk in chunks).strip()
+
+
+def _chunk_content(chunk: dict[str, Any]) -> str:
+    return str(chunk.get("content", chunk.get("retrieval_text", chunk.get("content_preview", "")))).strip()
+
+
+def _governance_projection(chunk: dict[str, Any]) -> dict[str, str]:
+    governance = chunk.get("governance") if isinstance(chunk.get("governance"), dict) else {}
+    eligibility = governance.get("retrieval_eligibility")
+    if isinstance(eligibility, dict):
+        eligibility = eligibility.get("status")
+    if not eligibility:
+        eligibility = chunk.get("retrieval_eligibility") or chunk.get("eligibility")
+        if isinstance(eligibility, dict):
+            eligibility = eligibility.get("status")
+    content_quality = governance.get("content_quality_status") or chunk.get("content_quality_status")
+    if not content_quality and chunk.get("review_status") == "approved":
+        content_quality = "approved"
+    return {
+        "parse_status": governance.get("parse_status") or chunk.get("parse_status") or "unknown",
+        "content_quality_status": content_quality or "unknown",
+        "source_trust_status": governance.get("source_trust_status") or chunk.get("source_trust_status") or "unknown",
+        "semantic_review_status": governance.get("semantic_review_status") or chunk.get("semantic_review_status") or "unknown",
+        "retrieval_eligibility": eligibility or "unknown",
+    }
+
+
+def _evidence_members(chunks, hits, context_group_id):
+    hits_by_id = {item.get("chunk_id"): item for item in hits}
+    evidence = []
+    members = []
+    cursor = 0
+    for index, chunk in enumerate(chunks):
+        content = _chunk_content(chunk)
+        start_char = cursor
+        end_char = start_char + len(content)
+        hit = hits_by_id.get(chunk.get("chunk_id"), {})
+        item = build_evidence(
+            chunk_id=chunk["chunk_id"],
+            doc_id=chunk.get("doc_id", "unknown"),
+            source_ref=chunk.get("source_ref", ""),
+            title=chunk.get("title", ""),
+            section_path=chunk.get("section_path") or [],
+            content=content,
+            governance=_governance_projection(chunk),
+            retrieval_scores={
+                "score": hit.get("score", chunk.get("score")),
+                "fusion_score": hit.get("fusion_score", chunk.get("fusion_score")),
+                "rerank_score": hit.get("rerank_score", chunk.get("rerank_score")),
+            },
+            context_group_id=context_group_id,
+            member_index=index,
+            start_char=start_char,
+            end_char=end_char,
+        )
+        evidence.append(item)
+        members.append({
+            "evidence_id": item["evidence_id"],
+            "chunk_id": item["chunk_id"],
+            "source_ref": item["source_ref"],
+            "member_index": index,
+            "start_char": start_char,
+            "end_char": end_char,
+        })
+        cursor = end_char + 2
+    return evidence, members
 
 
 def _context_id(section_id: str, included_chunk_ids: list[str]) -> str:
@@ -214,3 +304,25 @@ def _context_id(section_id: str, included_chunk_ids: list[str]) -> str:
         separators=(",", ":"),
     )
     return f"context_unit_{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _context_group_id(context_id: str, chunks: list[dict[str, Any]]) -> str:
+    payload = json.dumps(
+        {
+            "context_id": context_id,
+            "members": [
+                {
+                    "chunk_id": chunk.get("chunk_id", ""),
+                    "source_ref": chunk.get("source_ref", ""),
+                    "content_hash": hashlib.sha256(
+                        _chunk_content(chunk).encode("utf-8")
+                    ).hexdigest(),
+                }
+                for chunk in chunks
+            ],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"context_group_v1_{hashlib.sha256(payload.encode('utf-8')).hexdigest()}"

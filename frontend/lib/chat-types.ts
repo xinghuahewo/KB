@@ -28,12 +28,37 @@ export type Citation = {
   [key: string]: unknown;
 };
 
+export type GroundedClaim = {
+  schema_version: "grounded_claim_v1" | string;
+  claim_type: "factual" | "qualification" | string;
+  text: string;
+  evidence_ids: string[];
+  confidence: number;
+};
+
+export type GroundedEvidence = {
+  schema_version?: "evidence_v1" | string;
+  evidence_id: string;
+  chunk_id: string;
+  source_ref: string;
+  content_hash?: string;
+  title?: string;
+  section_path?: string[];
+  content?: string;
+  governance?: Record<string, unknown>;
+  member_boundary?: Record<string, unknown>;
+  retrieval_scores?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 export type ContextPack = {
   query?: string;
   normalized_query?: string;
   results?: Array<Record<string, unknown>>;
   context_units?: Array<Record<string, unknown>>;
   contextUnits?: Array<Record<string, unknown>>;
+  evidence?: GroundedEvidence[];
+  context_groups?: Array<Record<string, unknown>>;
   citations?: unknown[];
   resolved_query_type?: string;
   token_budget?: number;
@@ -51,6 +76,9 @@ export type RagAnswerPayload = {
   model?: string;
   error_code?: string;
   error?: string;
+  claims?: GroundedClaim[];
+  evidence?: GroundedEvidence[];
+  grounding_status?: string;
   citations: Citation[];
   context_pack: ContextPack;
   guardrails?: Record<string, unknown>;
@@ -79,6 +107,9 @@ export type ChatApiResponse = {
   message: ChatMessage;
   answerStatus: AnswerStatus;
   citations: Citation[];
+  claims: GroundedClaim[];
+  evidence: GroundedEvidence[];
+  groundingStatus?: string;
   retrieval: RetrievalSummary;
   error?: string;
   raw?: RagAnswerPayload;

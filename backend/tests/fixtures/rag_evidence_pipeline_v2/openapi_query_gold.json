@@ -1,0 +1,10 @@
+{
+  "operation": "GET /net/{id}",
+  "queries": [
+    {"query": "如何按 PeeringDB id 查询一个网络？", "expected_partition": "overview"},
+    {"query": "network_retrieve 的 path 参数是什么？", "expected_partition": "parameters:path"},
+    {"query": "depth 查询参数允许哪些取值？", "expected_partition": "parameters:query"},
+    {"query": "查询不存在的网络返回什么状态？", "expected_partition": "responses:4xx"},
+    {"query": "成功响应里的 ASN 字段在哪里定义？", "expected_partition": "responses:2xx+schema"}
+  ]
+}

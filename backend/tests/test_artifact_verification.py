@@ -69,6 +69,51 @@ def test_verify_artifact_release_checks_hashes_sqlite_and_index_metadata(tmp_pat
     assert result["vector_index_mode"] == "fast_numpy"
 
 
+def test_verify_artifact_release_accepts_publish_index_serving_bundle(
+    tmp_path, monkeypatch
+):
+    data_dir = _write_release(tmp_path)
+    published = data_dir / "published"
+    legacy_database = published / "bgp_knowledge_base.sqlite"
+    serving_database = published / "serving.sqlite"
+    legacy_database.replace(serving_database)
+    with sqlite3.connect(published / "governance.sqlite") as connection:
+        connection.execute("CREATE TABLE audit (id TEXT PRIMARY KEY)")
+    (published / "publish_index_manifest_v1.json").write_text(
+        json.dumps({"schema_version": "publish_index_manifest_v1"}) + "\n",
+        encoding="utf-8",
+    )
+    _rewrite_checksums(data_dir)
+
+    closure = {
+        "status": "complete",
+        "release_id": data_dir.parent.name,
+        "artifact_count": 13,
+        "retrieval_document_count": 1,
+        "chunk_id_count": 1,
+        "fts_document_count": 1,
+        "vector_record_count": 1,
+        "fast_record_count": 1,
+    }
+    monkeypatch.setattr(
+        artifact_verification,
+        "verify_publish_index_manifest",
+        lambda candidate, manifest: closure,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        artifact_verification.serving_bundle,
+        "connect_serving_database",
+        lambda candidate: sqlite3.connect(candidate),
+    )
+
+    result = verify_artifact_release(data_dir)
+
+    assert result["publish_index_manifest"] == closure
+    assert result["serving_schema_version"] == "serving_sqlite_v1"
+    assert result["governance_attached_online"] is False
+
+
 def test_verify_artifact_release_requires_fast_vector_artifacts(tmp_path):
     data_dir = _write_release(tmp_path)
     artifacts = build_fast_vector_index(data_dir / "published" / "bge_m3_vector_index.jsonl")
@@ -86,7 +131,7 @@ def test_verify_artifact_release_rejects_stale_fast_vector_manifest(tmp_path):
     vector_path = data_dir / "published" / "bge_m3_vector_index.jsonl"
     artifacts = build_fast_vector_index(vector_path)
     manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
-    manifest["source_size_bytes"] += 1
+    manifest["source_index_sha256"] = "sha256:" + "0" * 64
     artifacts.manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
     _rewrite_checksums(data_dir)
 

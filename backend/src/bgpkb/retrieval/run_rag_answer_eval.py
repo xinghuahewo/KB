@@ -29,6 +29,10 @@ TERM_ALIASES = {
 
 class StructureOnlyClient:
     model = "structure-check"
+    model_revision = "structure-check-v1"
+    provider = "offline_structure_check"
+    evaluation_mode = "development_structure_only"
+    release_eligible = False
 
     def generate_answer(self, query, context_items):
         evidence_text = " ".join(
@@ -44,6 +48,50 @@ class StructureOnlyClient:
             "provider": "offline_structure_check",
             "model": self.model,
             "content": f"结构检查回答：{query}\n{evidence_text[:1000]}",
+            "raw_usage": {},
+        }
+
+    def generate_grounded_answer(self, query, evidence, context_groups, repair=None):
+        """仅验证结构的离线客户端；不得替代真实回答发布评测。"""
+        if not evidence:
+            grounded = {
+                "schema_version": "grounded_answer_v1",
+                "answer": "",
+                "claims": [],
+                "evidence_ids": [],
+                "confidence": 0.0,
+                "insufficient_evidence": True,
+            }
+        else:
+            evidence_ids = [item["evidence_id"] for item in evidence]
+            evidence_text = " ".join(
+                " ".join([
+                    item.get("title", ""),
+                    item.get("source_ref", ""),
+                    item.get("content", ""),
+                ])
+                for item in evidence
+            )
+            answer = f"结构检查回答：{query}\n{evidence_text[:1000]}"
+            grounded = {
+                "schema_version": "grounded_answer_v1",
+                "answer": answer,
+                "claims": [{
+                    "schema_version": "grounded_claim_v1",
+                    "claim_type": "factual",
+                    "text": answer,
+                    "evidence_ids": evidence_ids,
+                    "confidence": 1.0,
+                }],
+                "evidence_ids": evidence_ids,
+                "confidence": 1.0,
+                "insufficient_evidence": False,
+            }
+        return {
+            "ok": True,
+            "provider": "offline_structure_check",
+            "model": self.model,
+            "content": json.dumps(grounded, ensure_ascii=False, sort_keys=True),
             "raw_usage": {},
         }
 
@@ -140,17 +188,45 @@ def score_payload(question, payload):
     }
 
 
-def run_evaluation(questions=None, client=None, limit=5):
+def _validate_release_client(client, *, required_model, required_model_revision):
+    if getattr(client, "release_eligible", True) is not True:
+        raise ValueError("结构检查客户端不能替代真实 reranker/DeepSeek 发布评测")
+    if getattr(client, "provider", None) != "deepseek":
+        raise ValueError("发布回答评测必须使用 DeepSeek provider")
+    if not required_model or getattr(client, "model", None) != required_model:
+        raise ValueError("发布回答评测的 DeepSeek model 与固定基线不一致")
+    actual_revision = getattr(client, "model_revision", None)
+    if not required_model_revision or actual_revision != required_model_revision:
+        raise ValueError("发布回答评测缺少或不匹配精确 model revision")
+
+
+def run_evaluation(
+    questions=None,
+    client=None,
+    limit=5,
+    *,
+    release_mode=False,
+    required_model=None,
+    required_model_revision=None,
+):
     selected = questions if questions is not None else load_questions()
     active_client = client or (
         llm_client.DeepSeekClient.from_env()
         if os.environ.get("DEEPSEEK_API_KEY")
         else StructureOnlyClient()
     )
+    if release_mode:
+        _validate_release_client(
+            active_client,
+            required_model=required_model,
+            required_model_revision=required_model_revision,
+        )
     results = []
     for question in selected:
         payload = rag_answer.answer_question(question["query"], limit=limit, client=active_client)
-        results.append(score_payload(question, payload))
+        scored = score_payload(question, payload)
+        scored["model_revision"] = getattr(active_client, "model_revision", "")
+        results.append(scored)
     return results
 
 
@@ -171,8 +247,11 @@ def summarize(results):
     }
 
 
-def render_report(results, api_key_configured):
+def render_report(results, api_key_configured, evaluation_mode=None):
     summary = summarize(results)
+    selected_mode = evaluation_mode or (
+        "real_deepseek" if api_key_configured else "development_structure_only"
+    )
     lines = [
         "# 阶段 4.3 RAG 答案评测报告",
         "",
@@ -180,6 +259,7 @@ def render_report(results, api_key_configured):
         "",
         f"- 生成时间：{datetime.now().replace(microsecond=0).isoformat()}",
         f"- DeepSeek API key 配置：{'是' if api_key_configured else '否'}",
+        f"- 评测模式：`{selected_mode}`",
         "- 密钥记录：未写入报告、数据集或仓库。",
         f"- 问题数：{summary['total']}",
         f"- 通过数：{summary['passed']}",
@@ -200,6 +280,11 @@ def render_report(results, api_key_configured):
         "| ID | 查询 | 预期 | 实际 | 结论 | 引用数 | 失败检查 |",
         "| --- | --- | --- | --- | --- | ---: | --- |",
     ]
+    if selected_mode == "development_structure_only":
+        lines[12:12] = [
+            "- 发布资格：否；本报告仅用于开发结构检查。",
+            "- 结构检查不能替代真实 reranker/DeepSeek 发布评测。",
+        ]
     for item in results:
         failed = ", ".join(item["failed_checks"]) if item["failed_checks"] else ""
         lines.append(
@@ -233,9 +318,10 @@ def main():
     write_jsonl(RESULTS_PATH, results)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(render_report(results, api_key_configured), encoding="utf-8")
-    print(f"Wrote {RESULTS_PATH.relative_to(ROOT)}")
-    print(f"Wrote {REPORT_PATH.relative_to(ROOT)}")
+    print(f"Wrote {paths.rel(RESULTS_PATH)}")
+    print(f"Wrote {paths.rel(REPORT_PATH)}")
+    return 1 if summarize(results)["failed"] else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

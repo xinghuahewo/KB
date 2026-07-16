@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Placeholder entity extractor.
+"""兼容入口：转发到显式启用的证据绑定知识候选抽取器。"""
 
-The first version uses manual JSONL seeds in data/knowledge/entities/. Automated extraction
-should preserve source_refs and set review_status=pending.
-"""
+from bgpkb.workflows.extract_knowledge_candidates import main
 
-print("Entity extractor scaffold ready. Manual seed entities are already present.")
 
+if __name__ == "__main__":
+    raise SystemExit(main())

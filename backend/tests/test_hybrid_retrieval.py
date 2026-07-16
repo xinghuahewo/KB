@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import runpy
@@ -57,6 +58,58 @@ def test_rrf_fuses_lexical_and_vector_results_and_deduplicates_chunks():
     assert fused[0]["retrieval_method"] == "hybrid_rrf"
     assert {"lexical", "vector"} <= set(fused[0]["match_reasons"])
     assert fused[0]["fusion_score"] > 0
+
+
+def test_reranker_uses_current_retrieval_text_and_blocks_component_manifest_drift():
+    manifest_hash = "sha256:" + "a" * 64
+    candidate = result("rfc7908", "chunk-current", "standard", 1.0)
+    retrieval_text = "title: Route Leak\ncontent: complete body tail-marker"
+    candidate.update({
+        "retrieval_text": retrieval_text,
+        "retrieval_text_hash": "sha256:" + hashlib.sha256(retrieval_text.encode()).hexdigest(),
+        "retrieval_text_version": "retrieval_text_v1",
+        "retrieval_input_manifest_hash": manifest_hash,
+    })
+
+    class CapturingReranker:
+        def __init__(self):
+            self.documents = None
+
+        def rerank(self, query, documents, top_n, require_model=False):
+            self.documents = documents
+            return {
+                "ok": True,
+                "provider": "fake",
+                "model": "BAAI/bge-reranker-v2-m3",
+                "revision": "rev-test",
+                "results": [{"index": 0, "relevance_score": 0.9}],
+            }
+
+    reranker = CapturingReranker()
+    payload = hybrid_retrieval.rerank_candidates(
+        "route leak",
+        [candidate],
+        reranker=reranker,
+        component_manifest_hashes={
+            "fts": manifest_hash,
+            "embedding": manifest_hash,
+            "reranker": manifest_hash,
+        },
+    )
+    assert reranker.documents == [candidate["retrieval_text"]]
+    assert payload["reranker_input_manifest_hash"] == manifest_hash
+
+    with __import__("pytest").raises(ValueError, match="embedding"):
+        hybrid_retrieval.rerank_candidates(
+            "route leak",
+            [candidate],
+            reranker=reranker,
+            component_manifest_hashes={
+                "fts": manifest_hash,
+                "embedding": "sha256:" + "c" * 64,
+                "reranker": manifest_hash,
+            },
+        )
 
 
 def test_vector_search_filters_results_below_similarity_threshold():
@@ -248,6 +301,39 @@ def test_search_reports_jsonl_vector_fallback_as_degraded():
     assert payload["degraded"] is True
 
 
+def test_context_pack_accepts_empty_candidates_with_matching_channel_manifests(monkeypatch):
+    manifest_hash = "sha256:" + "a" * 64
+
+    class EmptyRetrievalData:
+        @staticmethod
+        def excluded_by_policy():
+            return []
+
+    monkeypatch.setattr(hybrid_retrieval, "search", lambda *args, **kwargs: {
+        "results": [],
+        "channel_metadata": {
+            "lexical": {"retrieval_input_manifest_hash": manifest_hash},
+            "vector": {"retrieval_input_manifest_hash": manifest_hash},
+        },
+        "degraded": False,
+        "lexical_count": 0,
+        "vector_count": 0,
+        "vector_status": "empty",
+    })
+
+    payload = hybrid_retrieval.context_pack(
+        "明天北京逐小时天气",
+        top_n=5,
+        query_type="fact",
+        require_model=True,
+        retrieval_data=EmptyRetrievalData(),
+    )
+
+    assert payload["results"] == []
+    assert payload["rerank_status"] == "empty"
+    assert payload["degraded"] is False
+
+
 def test_rrf_is_capped_at_twenty_and_ties_are_stable():
     lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[
         _channel_item(f"chunk-{index:02}", 1, 1.0) for index in range(25, -1, -1)
@@ -265,6 +351,141 @@ def test_rrf_is_capped_at_twenty_and_ties_are_stable():
     assert len(payload["results"]) == 20
     assert [item["chunk_id"] for item in payload["results"]] == [f"chunk-{index:02}" for index in range(20)]
     assert payload["channel_status"]["vector"] == "empty"
+
+
+def test_rrf_candidate_pool_caps_each_logical_source_before_global_limit():
+    lexical_items = []
+    for index in range(25):
+        item = _channel_item(f"dominant-{index:02}", index + 1, 1.0)
+        item.update({
+            "doc_id": "dominant-source",
+            "source_ref": "https://example.test/dominant-source#part",
+        })
+        if index < 3:
+            item["source_id"] = "dominant-source"
+        lexical_items.append(item)
+    tail = _channel_item("independent", 26, 0.1)
+    tail.update({"doc_id": "independent-source", "source_ref": "independent-source#part"})
+    lexical_items.append(tail)
+
+    fused = hybrid_retrieval._rrf_channel_results(
+        RetrievalChannelResult("lexical", items=lexical_items),
+        RetrievalChannelResult("vector", items=[]),
+        limit=20,
+    )
+
+    assert [item["doc_id"] for item in fused].count("dominant-source") == 2
+    assert fused[1]["doc_id"] == "independent-source"
+
+
+def test_rrf_preserves_named_source_anchor_before_the_global_candidate_limit():
+    lexical_items = []
+    for index in range(25):
+        item = _channel_item(f"generic-{index:02}", index + 1, 1.0)
+        item.update({
+            "doc_id": f"generic-source-{index:02}",
+            "source_ref": f"generic-source-{index:02}#part",
+        })
+        lexical_items.append(item)
+    anchor = _channel_item("rfc7908-definition", 26, 0.1)
+    anchor.update({"doc_id": "rfc7908", "source_ref": "rfc7908#definition"})
+    lexical_items.append(anchor)
+
+    fused = hybrid_retrieval._rrf_channel_results(
+        RetrievalChannelResult("lexical", items=lexical_items),
+        RetrievalChannelResult("vector", items=[]),
+        query="What is a BGP route leak? RFC7908",
+        limit=20,
+    )
+
+    anchored = next(item for item in fused if item["doc_id"] == "rfc7908")
+    assert anchored["source_anchor"] == {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": ["rfc7908"],
+    }
+
+
+def test_source_anchor_recognizes_the_ris_domain_acronym():
+    assert hybrid_retrieval._source_anchor(
+        "How can RouteViews and RIS be cross-checked?",
+        {"doc_id": "ripe_ris_docs"},
+    ) == {
+        "rule_id": "exact_named_source_preservation_v1",
+        "matched_terms": ["ris"],
+    }
+
+
+def test_search_only_anchors_sources_explicitly_named_in_original_query(monkeypatch):
+    lexical_item = _channel_item("rfc7908", 1, 1.0)
+    lexical_item["doc_id"] = "rfc7908"
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[lexical_item]))
+    vector = FakeRetriever(RetrievalChannelResult("vector", items=[]))
+    monkeypatch.setattr(
+        hybrid_retrieval.retrieval_framework,
+        "normalize_query",
+        lambda query: f"{query} RFC7908",
+    )
+
+    payload = hybrid_retrieval.search(
+        "What is a route leak?",
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
+    )
+
+    assert "source_anchor" not in payload["results"][0]
+
+
+def test_context_pack_uses_the_same_normalized_query_for_recall_and_rerank(monkeypatch):
+    candidate = _channel_item("rfc6811-state", 1, 1.0)
+    candidate.update({"doc_id": "rfc6811", "source_ref": "rfc6811#state"})
+    monkeypatch.setattr(hybrid_retrieval, "search", lambda *args, **kwargs: {
+        "query": "ROV 会把路由起源有效性分成哪些状态？",
+        "normalized_query": "ROV 会把路由起源有效性分成哪些状态？ route origin validation RFC6811",
+        "results": [candidate],
+        "channel_metadata": {},
+        "lexical_count": 1,
+        "vector_count": 1,
+        "vector_status": "complete",
+        "degraded": False,
+    })
+    monkeypatch.setattr(hybrid_retrieval, "_build_structured_context", lambda *args, **kwargs: {
+        "context_units": [],
+        "evidence": [],
+        "context_groups": [],
+        "trim_events": [],
+    })
+
+    class RetrievalData:
+        @staticmethod
+        def excluded_by_policy():
+            return []
+
+    class CapturingReranker:
+        query = None
+
+        def rerank(self, query, documents, top_n, require_model=False):
+            self.query = query
+            return {
+                "ok": True,
+                "provider": "fake",
+                "model": "BAAI/bge-reranker-v2-m3",
+                "revision": "rev",
+                "results": [{"index": 0, "relevance_score": 0.9}],
+            }
+
+    reranker = CapturingReranker()
+    hybrid_retrieval.context_pack(
+        "ROV 会把路由起源有效性分成哪些状态？",
+        top_n=8,
+        query_type="fact",
+        require_model=True,
+        reranker=reranker,
+        retrieval_data=RetrievalData(),
+    )
+
+    assert reranker.query.endswith("route origin validation RFC6811")
 
 
 def test_single_failure_degrades_and_double_failure_raises():

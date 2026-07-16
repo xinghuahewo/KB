@@ -1,0 +1,21 @@
+schema_version: retrieval_text_config_v1
+config_version: retrieval_text_v1.0.0
+retrieval_text_version: retrieval_text_v1
+template:
+  fields:
+    - title
+    - section_path
+    - document_profile
+    - semantic_unit
+    - content
+  labels:
+    title: title
+    section_path: section
+    document_profile: document_profile
+    semantic_unit: semantic_unit
+    content: content
+preview:
+  max_characters: 240
+normalization:
+  whitespace: collapse_outside_content
+  unicode: NFC

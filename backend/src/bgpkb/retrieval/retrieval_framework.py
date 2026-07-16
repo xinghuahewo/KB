@@ -1,6 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 
 from bgpkb import paths
 
@@ -65,7 +66,16 @@ def normalize_query(query):
     cfg = config()
     terms = [query]
     for source, expansions in cfg.get("query_expansions", {}).items():
-        if source.lower() in query.lower():
+        source_text = str(source)
+        if re.fullmatch(r"[A-Za-z0-9_.+-]+", source_text):
+            matched = re.search(
+                rf"(?<![A-Za-z0-9_]){re.escape(source_text)}(?![A-Za-z0-9_])",
+                query,
+                flags=re.IGNORECASE,
+            ) is not None
+        else:
+            matched = source_text.casefold() in str(query).casefold()
+        if matched:
             terms.extend(expansions)
     return " ".join(dict.fromkeys(term for term in terms if term)).strip()
 

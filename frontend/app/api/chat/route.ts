@@ -60,6 +60,9 @@ function toChatResponse(payload: RagAnswerPayload): ChatApiResponse {
     },
     answerStatus,
     citations: payload.citations || [],
+    claims: payload.claims || [],
+    evidence: payload.evidence || [],
+    groundingStatus: payload.grounding_status,
     retrieval: summarizeRetrieval(payload),
     error: payload.error,
     raw: payload,
@@ -170,6 +173,8 @@ function errorResponse(content: string, error?: string): ChatApiResponse {
     },
     answerStatus: "error",
     citations: [] as Citation[],
+    claims: [],
+    evidence: [],
     retrieval: {
       vectorStatus: "unavailable",
       resultCount: 0,

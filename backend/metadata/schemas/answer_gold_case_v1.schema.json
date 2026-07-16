@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/answer-gold-case-v1.json",
+  "title": "AnswerGoldCaseV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "dataset_version",
+    "case_id",
+    "retrieval_question_id",
+    "language",
+    "query",
+    "scenario_tags",
+    "expected_status",
+    "required_behavior",
+    "reference_answer",
+    "expected_claims",
+    "prohibited_claims",
+    "citation_policy",
+    "attack_payload",
+    "owner_ref",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {"const": "answer_gold_case_v1"},
+    "dataset_version": {"const": "answer_gold_v1.0.0"},
+    "case_id": {"type": "string", "pattern": "^ag-(zh|en)-[0-9]{3}$"},
+    "retrieval_question_id": {"type": "string", "pattern": "^rg-(zh|en)-(fact|process|policy|global)-[0-9]{3}$"},
+    "language": {"enum": ["zh", "en"]},
+    "query": {"type": "string", "minLength": 8},
+    "scenario_tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["claim_correctness", "citation_precision", "citation_recall", "refusal", "prompt_injection", "source_conflict"]}
+    },
+    "expected_status": {"enum": ["answered", "no_evidence"]},
+    "required_behavior": {"enum": ["answer_from_evidence", "compare_sources", "refuse_without_evidence"]},
+    "reference_answer": {"type": ["string", "null"], "minLength": 1},
+    "expected_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id", "statement", "acceptable_evidence_refs", "correctness_criteria", "required"],
+        "properties": {
+          "claim_id": {"type": "string", "minLength": 1},
+          "statement": {"type": "string", "minLength": 3},
+          "acceptable_evidence_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "correctness_criteria": {"type": "string", "minLength": 3},
+          "required": {"const": true}
+        }
+      }
+    },
+    "prohibited_claims": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "citation_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["must_cite_every_factual_claim", "allow_context_only_citations", "additional_citations"],
+      "properties": {
+        "must_cite_every_factual_claim": {"const": true},
+        "allow_context_only_citations": {"const": false},
+        "additional_citations": {"const": "supporting_only"}
+      }
+    },
+    "attack_payload": {"type": ["string", "null"], "minLength": 1},
+    "owner_ref": {"const": "metadata/config/rag_eval_ownership.yaml#answer_gold"},
+    "notes": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"expected_status": {"const": "answered"}}},
+      "then": {
+        "properties": {
+          "expected_claims": {"minItems": 1},
+          "reference_answer": {"type": "string"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"expected_status": {"const": "no_evidence"}}},
+      "then": {
+        "properties": {
+          "expected_claims": {"maxItems": 0},
+          "reference_answer": {"type": "null"},
+          "required_behavior": {"const": "refuse_without_evidence"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"scenario_tags": {"contains": {"const": "prompt_injection"}}}},
+      "then": {"properties": {"attack_payload": {"type": "string"}}}
+    }
+  ]
+}

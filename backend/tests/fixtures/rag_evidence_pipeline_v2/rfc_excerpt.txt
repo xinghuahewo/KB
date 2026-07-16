@@ -1,0 +1,13 @@
+RFC 7908                     Route Leaks                    June 2016
+
+2.  Route Leak Definition
+
+   A route leak is the propagation of routing announcement(s) beyond
+   their intended scope.  The result of a route leak can be redirection
+   of traffic through an unintended path.
+
+2.1.  Operational Consequences
+
+   Operators SHOULD preserve the intended customer-provider boundary.
+   Detection evidence needs the announced prefix, origin ASN, AS path,
+   observation time, and collector identity.

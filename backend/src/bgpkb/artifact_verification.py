@@ -12,10 +12,16 @@ import sys
 
 from bgpkb import paths
 from bgpkb.artifact_registry import ArtifactRegistryError, load_release_registry
+from bgpkb.infrastructure import serving_bundle
 from bgpkb.infrastructure.fast_vector_index import (
     FastVectorIndex,
     FastVectorIndexArtifacts,
     FastVectorIndexError,
+    verify_fast_vector_artifacts,
+)
+from bgpkb.publishing.publish_index_closure import (
+    PublishIndexClosureError,
+    verify_publish_index_manifest,
 )
 
 
@@ -36,8 +42,42 @@ REQUIRED_FILES = (
     "derived/datasets/entity_source_evidence.jsonl",
     "derived/datasets/section_catalog.jsonl",
 )
+PUBLISH_INDEX_REQUIRED_FILES = (
+    "published/serving.sqlite",
+    "published/governance.sqlite",
+    "published/publish_index_manifest_v1.json",
+    "published/bge_m3_vector_index.jsonl",
+    "published/bge_m3_vector_matrix.npy",
+    "published/bge_m3_vector_metadata.jsonl",
+    "published/bge_m3_vector_fast_manifest.json",
+    "published/bge_m3_embedding_manifest.json",
+)
 
 DEFAULT_REGISTRY_PATH = paths.PROJECT_ROOT.parent / "artifacts" / "releases.yaml"
+
+
+def verify_release_manifest_closure(
+    data_dir: Path,
+    manifest_path: Path | None = None,
+) -> dict:
+    """验证 v2 release manifest 的 hash、release identity 与跨制品 ID 闭包。"""
+
+    try:
+        return serving_bundle.verify_release_manifest(data_dir, manifest_path)
+    except serving_bundle.ReleaseManifestError as exc:
+        raise ArtifactVerificationError(f"release manifest 校验失败：{exc}") from exc
+
+
+def verify_publish_index_manifest_closure(
+    data_dir: Path,
+    manifest_path: Path,
+) -> dict:
+    """验证五阶段 publish-index 闭包，并统一转换为制品校验错误。"""
+
+    try:
+        return verify_publish_index_manifest(data_dir, manifest_path)
+    except PublishIndexClosureError as exc:
+        raise ArtifactVerificationError(f"publish-index manifest 校验失败：{exc}") from exc
 
 
 def _sha256(path: Path) -> str:
@@ -83,7 +123,38 @@ def verify_artifact_release(data_dir: Path) -> dict:
         raise ArtifactVerificationError(f"数据根目录必须是存在的 release/data：{data_dir}")
     release_root = data_dir.parent
 
-    for relative_path in REQUIRED_FILES:
+    release_manifest_path = data_dir / "published" / "release_manifest_v2.json"
+    publish_index_manifest_path = (
+        data_dir / "published" / "publish_index_manifest_v1.json"
+    )
+    release_manifest_closure = None
+    publish_index_manifest_closure = None
+    required_files = REQUIRED_FILES
+    if release_manifest_path.is_file():
+        release_manifest_closure = verify_release_manifest_closure(
+            data_dir, release_manifest_path
+        )
+        required_files = tuple(
+            path
+            for path in REQUIRED_FILES
+            if path
+            not in {
+                "published/bgp_knowledge_base.sqlite",
+                "derived/datasets/entity_source_evidence.jsonl",
+            }
+        ) + (
+            "published/serving.sqlite",
+            "published/governance.sqlite",
+            "published/release_manifest_v2.json",
+        )
+    elif publish_index_manifest_path.is_file():
+        publish_index_manifest_closure = verify_publish_index_manifest_closure(
+            data_dir,
+            publish_index_manifest_path,
+        )
+        required_files = PUBLISH_INDEX_REQUIRED_FILES
+
+    for relative_path in required_files:
         path = data_dir / relative_path
         if not path.is_file():
             raise ArtifactVerificationError(f"缺少必需运行制品：{relative_path}")
@@ -107,10 +178,19 @@ def verify_artifact_release(data_dir: Path) -> dict:
         if not path.is_file() or _sha256(path) != expected:
             raise ArtifactVerificationError(f"SHA-256 校验失败：{path.relative_to(release_root)}")
 
-    database_path = data_dir / "published" / "bgp_knowledge_base.sqlite"
+    uses_serving_bundle = bool(
+        release_manifest_closure or publish_index_manifest_closure
+    )
+    database_path = data_dir / "published" / (
+        "serving.sqlite" if uses_serving_bundle else "bgp_knowledge_base.sqlite"
+    )
     try:
-        uri = f"file:{database_path.as_posix()}?mode=ro&immutable=1"
-        with sqlite3.connect(uri, uri=True) as conn:
+        if uses_serving_bundle:
+            connection = serving_bundle.connect_serving_database(database_path)
+        else:
+            uri = f"file:{database_path.as_posix()}?mode=ro&immutable=1"
+            connection = sqlite3.connect(uri, uri=True)
+        with connection as conn:
             sqlite_integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
     except sqlite3.Error as exc:
         raise ArtifactVerificationError(f"SQLite 完整性检查失败：{exc}") from exc
@@ -128,6 +208,7 @@ def verify_artifact_release(data_dir: Path) -> dict:
 
     vector_count = 0
     fast_vector_count = 0
+    fast_vector_chunk_ids = set()
     vector_index_path = data_dir / "published" / "bge_m3_vector_index.jsonl"
     try:
         with vector_index_path.open(encoding="utf-8") as handle:
@@ -150,6 +231,13 @@ def verify_artifact_release(data_dir: Path) -> dict:
                 vector_count += 1
                 if record.get("kind", "chunk") == "chunk":
                     fast_vector_count += 1
+                    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+                    chunk_id = metadata.get("chunk_id") or record.get("chunk_id")
+                    if not chunk_id and str(record.get("doc_id", "")).startswith("chunk:"):
+                        chunk_id = str(record["doc_id"]).split(":", 1)[1]
+                    if not chunk_id:
+                        raise ArtifactVerificationError(f"向量索引第 {line_number} 行缺少 chunk_id")
+                    fast_vector_chunk_ids.add(str(chunk_id))
     except (OSError, json.JSONDecodeError) as exc:
         raise ArtifactVerificationError(f"向量索引不可读：{exc}") from exc
     expected_vector_count = vector_manifest.get("record_count", vector_manifest.get("input_count"))
@@ -160,7 +248,11 @@ def verify_artifact_release(data_dir: Path) -> dict:
 
     fast_artifacts = FastVectorIndexArtifacts.from_index_path(vector_index_path)
     try:
-        fast_index = FastVectorIndex.load(vector_index_path)
+        verify_fast_vector_artifacts(
+            vector_index_path,
+            eligible_chunk_ids=fast_vector_chunk_ids,
+        )
+        fast_index = FastVectorIndex.load(vector_index_path, validate_source_hash=False)
     except (FastVectorIndexError, OSError, ValueError, json.JSONDecodeError) as exc:
         raise ArtifactVerificationError(f"快向量索引不可读：{exc}") from exc
     if fast_index is None:
@@ -176,7 +268,7 @@ def verify_artifact_release(data_dir: Path) -> dict:
             f"快向量索引维度不一致：{fast_index.dimension} != {dimension}"
         )
 
-    return {
+    result = {
         "release_id": release_root.name,
         "data_dir": str(data_dir),
         "file_count": len(entries),
@@ -188,6 +280,17 @@ def verify_artifact_release(data_dir: Path) -> dict:
         "vector_index_mode": "fast_numpy",
         "fast_vector_record_count": fast_index.record_count,
     }
+    if release_manifest_closure:
+        result["release_manifest"] = release_manifest_closure
+        result["serving_schema_version"] = release_manifest_closure[
+            "serving_schema_version"
+        ]
+        result["governance_attached_online"] = False
+    elif publish_index_manifest_closure:
+        result["publish_index_manifest"] = publish_index_manifest_closure
+        result["serving_schema_version"] = "serving_sqlite_v1"
+        result["governance_attached_online"] = False
+    return result
 
 
 def verify_artifact_workspace(source_data_dir: Path, workspace_data_dir: Path) -> None:

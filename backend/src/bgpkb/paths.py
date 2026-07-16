@@ -39,6 +39,7 @@ GENERATED_REPORTS_DIR = GENERATED_DIR / "reports"
 METADATA_DIR = PROJECT_ROOT / "metadata"
 CONFIG_DIR = METADATA_DIR / "config"
 SCHEMAS_DIR = METADATA_DIR / "schemas"
+SOURCE_REGISTRY_PATH = METADATA_DIR / "sources" / "source_registry.yaml"
 REPORT_POLICY_PATH = CONFIG_DIR / "report_policy.yaml"
 
 DOCS_DIR = REPOSITORY_ROOT / "docs"

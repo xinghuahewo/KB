@@ -53,4 +53,4 @@ FastAPI 契约在本次整理中保持不变。运行时必须通过 `BGPKB_DATA
 
 ## 离线边界
 
-Docling、清洗、索引与报告生成可写入构建工作区，但不得直接写当前线上 release。发布流程先生成候选目录、完成校验，再原子切换制品指针。
+离线产品流程固定为 source-ingest、canonicalize、semantic-build、publish-index、verify-release 五阶段。所有写入先进入隔离候选目录，任何阶段失败不得修改当前线上 release。候选目录、checkpoint、制品闭包和验证/回滚契约统一维护在 [RAG 五阶段流水线](pipeline.md)，本架构文档不再复制操作步骤。

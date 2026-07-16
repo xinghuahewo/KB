@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/evidence-v1.json",
+  "title": "EvidenceV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_id",
+    "chunk_id",
+    "doc_id",
+    "source_ref",
+    "title",
+    "section_path",
+    "content",
+    "content_hash",
+    "member_boundary",
+    "governance",
+    "retrieval_scores"
+  ],
+  "properties": {
+    "schema_version": {"const": "evidence_v1"},
+    "evidence_id": {"type": "string", "pattern": "^evidence_v1_[0-9a-f]{64}$"},
+    "chunk_id": {"type": "string", "minLength": 1},
+    "doc_id": {"type": "string", "minLength": 1},
+    "source_ref": {"type": "string", "minLength": 1},
+    "title": {"type": "string"},
+    "section_path": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "content": {"type": "string", "minLength": 1},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "member_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_group_id", "member_index", "start_char", "end_char"],
+      "properties": {
+        "context_group_id": {"type": "string", "pattern": "^context_group_v1_[0-9a-f]{64}$"},
+        "member_index": {"type": "integer", "minimum": 0},
+        "start_char": {"type": "integer", "minimum": 0},
+        "end_char": {"type": "integer", "minimum": 1}
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parse_status",
+        "content_quality_status",
+        "source_trust_status",
+        "semantic_review_status",
+        "retrieval_eligibility"
+      ],
+      "properties": {
+        "parse_status": {"enum": ["parsed", "failed", "quarantined", "unknown"]},
+        "content_quality_status": {"enum": ["approved", "pending_review", "rejected", "quarantined", "unknown"]},
+        "source_trust_status": {"enum": ["trusted", "trusted_with_caution", "untrusted", "pending", "unknown"]},
+        "semantic_review_status": {"enum": ["approved", "pending", "rejected", "unknown"]},
+        "retrieval_eligibility": {"enum": ["eligible", "eligible_with_caution", "ineligible", "unknown"]}
+      }
+    },
+    "retrieval_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "fusion_score", "rerank_score"],
+      "properties": {
+        "score": {"type": ["number", "null"]},
+        "fusion_score": {"type": ["number", "null"]},
+        "rerank_score": {"type": ["number", "null"]}
+      }
+    }
+  }
+}

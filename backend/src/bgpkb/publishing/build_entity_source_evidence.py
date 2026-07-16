@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from bgpkb import paths
+from bgpkb.ingestion.legacy_canonical_adapter import read_legacy_read_only
 
 
 ROOT = paths.PROJECT_ROOT
@@ -61,11 +62,16 @@ def load_source_statuses():
 def load_chunks_by_doc():
     chunks_by_doc = defaultdict(list)
     for path in sorted((paths.CHUNKS_DIR).glob("*.jsonl")):
-        for record in load_jsonl(path):
+        legacy = read_legacy_read_only(path, allow_legacy=True)
+        for record in legacy["content"]:
             doc_id = record.get("doc_id")
             chunk_id = record.get("chunk_id")
             if doc_id and chunk_id:
-                chunks_by_doc[doc_id].append(record)
+                chunks_by_doc[doc_id].append({
+                    **record,
+                    "input_mode": legacy["mode"],
+                    "legacy_diagnostic_code": legacy["diagnostic"]["code"],
+                })
     return {
         doc_id: sorted(records, key=lambda item: item.get("chunk_id", ""))
         for doc_id, records in chunks_by_doc.items()
@@ -191,6 +197,7 @@ def sample_chunk_ids(entity, chunk_records):
 def build_record(entity, source_id, source_statuses, chunks_by_doc, observation_counts):
     status = source_statuses.get(source_id, {})
     chunk_records = chunks_by_doc.get(source_id, [])
+    legacy_modes = {row.get("input_mode") for row in chunk_records if row.get("input_mode")}
     return {
         "evidence_id": f"{entity['id']}__{source_id}",
         "entity_id": entity["id"],
@@ -205,6 +212,10 @@ def build_record(entity, source_id, source_statuses, chunks_by_doc, observation_
         "chunk_count": len(chunk_records),
         "chunk_sample_ids": sample_chunk_ids(entity, chunk_records),
         "case_observation_count": observation_counts.get(source_id, 0),
+        "input_mode": "legacy_read_only" if "legacy_read_only" in legacy_modes else "missing",
+        "legacy_diagnostic_code": (
+            "deprecated_legacy_canonical_input" if "legacy_read_only" in legacy_modes else ""
+        ),
         "generated_by": "src/bgpkb/pipeline/build_entity_source_evidence.py",
     }
 
@@ -231,6 +242,8 @@ def write_csv(records):
         "chunk_count",
         "chunk_sample_ids",
         "case_observation_count",
+        "input_mode",
+        "legacy_diagnostic_code",
         "generated_by",
     ]
     with CSV_OUTPUT.open("w", newline="", encoding="utf-8") as handle:
@@ -260,6 +273,7 @@ def write_report(records):
         "## 范围",
         "",
         "本报告从 `data/knowledge/entities/*.jsonl`、来源处理状态、chunks 和案例观察值机械生成实体到来源的证据索引。该步骤不判断来源是否真正支持实体定义，也不改变审核状态，只列出人工复核可打开的证据位置。",
+        "现有 chunks 通过显式 legacy 只读适配器读取，仅供历史审计，不得进入新 release 或形成新的批准状态。",
         "",
         "## 摘要",
         "",

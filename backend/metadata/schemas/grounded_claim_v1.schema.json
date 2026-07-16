@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://w3id.org/bgpkb/schema/grounded-claim-v1.json",
+  "title": "GroundedClaimV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "claim_type", "text", "evidence_ids", "confidence"],
+  "properties": {
+    "schema_version": {"const": "grounded_claim_v1"},
+    "claim_type": {"enum": ["factual", "qualification"]},
+    "text": {"type": "string", "minLength": 1},
+    "evidence_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^evidence_v1_[0-9a-f]{64}$"}
+    },
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"claim_type": {"const": "factual"}}},
+      "then": {"properties": {"evidence_ids": {"minItems": 1}}}
+    }
+  ]
+}
