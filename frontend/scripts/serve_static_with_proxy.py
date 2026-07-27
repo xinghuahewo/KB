@@ -13,6 +13,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
 import urllib.error
+import urllib.parse
 import urllib.request
 
 
@@ -26,7 +27,33 @@ class StaticProxyHandler(SimpleHTTPRequestHandler):
         if self._should_proxy():
             self._proxy()
             return
-        super().do_GET()
+        request_path = urllib.parse.urlsplit(self.path).path
+        self._static_cache_kind = self._static_cache_policy(request_path)
+        if self._static_cache_kind == "html":
+            for header in ("If-Modified-Since", "If-None-Match"):
+                if header in self.headers:
+                    del self.headers[header]
+        try:
+            super().do_GET()
+        finally:
+            self._static_cache_kind = None
+
+    def send_response(self, code, message=None):
+        self._response_status = code
+        super().send_response(code, message)
+
+    def end_headers(self):
+        cache_kind = getattr(self, "_static_cache_kind", None)
+        response_status = getattr(self, "_response_status", None)
+        if cache_kind == "html":
+            self.send_header("Cache-Control", "no-store, max-age=0, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        elif cache_kind == "immutable" and response_status == 200:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        elif cache_kind:
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
     def do_POST(self):  # noqa: N802
         if self._should_proxy():
@@ -49,6 +76,14 @@ class StaticProxyHandler(SimpleHTTPRequestHandler):
 
     def _should_proxy(self) -> bool:
         return any(self.path == prefix or self.path.startswith(prefix) for prefix in PROXY_PREFIXES)
+
+    @staticmethod
+    def _static_cache_policy(request_path: str) -> str:
+        if request_path == "/" or request_path.endswith(("/", ".html")):
+            return "html"
+        if request_path.startswith("/_next/static/"):
+            return "immutable"
+        return "revalidate"
 
     def _proxy(self) -> None:
         length = int(self.headers.get("content-length", "0") or "0")
