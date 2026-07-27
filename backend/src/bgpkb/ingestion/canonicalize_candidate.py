@@ -23,6 +23,14 @@ from bgpkb.ingestion.cleaning_v2.contracts import atomic_write_json
 
 
 DEFAULT_REPROCESS_POLICY = paths.CONFIG_DIR / "canonical_reprocess_policy_v1.yaml"
+LOCKED_DOCLING_ROUTE = {
+    "ssh_target": "root@10.99.8.28",
+    "gpu_index": 1,
+    "device": "nvidia.com/gpu=1",
+    "network": "none",
+    "image": "bgpkb-docling-v2:2.107.0-cu128",
+    "image_digest": "sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2",
+}
 
 
 class CanonicalizeCandidateError(ValueError):
@@ -101,6 +109,15 @@ def load_reprocess_policy(path: Path = DEFAULT_REPROCESS_POLICY) -> dict:
     for field in ("ssh_target", "image", "image_digest"):
         if not isinstance(docling.get(field), str) or not docling[field]:
             raise CanonicalizeCandidateError(f"Docling 路由缺少 {field}")
+    mismatches = [
+        field
+        for field, expected in LOCKED_DOCLING_ROUTE.items()
+        if docling.get(field) != expected
+    ]
+    if mismatches:
+        raise CanonicalizeCandidateError(
+            "Docling 路由与生产锁定值不一致：" + ", ".join(mismatches)
+        )
     pipeline_revision = docling.get("pipeline_revision", "docling-html-reprocess-v1")
     if not isinstance(pipeline_revision, str) or not pipeline_revision:
         raise CanonicalizeCandidateError("Docling 路由缺少 pipeline_revision")
@@ -167,8 +184,9 @@ def _load_reprocess_manifest(
             str(row.get("canonical_path") or ""),
             field="reprocess canonical_path",
         )
-        canonical_path = (path.parent / relative).resolve()
-        if canonical_path.parent != frozen_canonical_root:
+        reprocess_canonical_root = path.parent
+        canonical_path = (reprocess_canonical_root / relative).resolve()
+        if canonical_path.parent != reprocess_canonical_root:
             raise CanonicalizeCandidateError(
                 f"Docling reprocess canonical path 越界：{source_id}"
             )

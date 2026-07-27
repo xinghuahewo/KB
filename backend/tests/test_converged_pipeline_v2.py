@@ -257,7 +257,10 @@ def test_failure_preserves_release_pointers_and_marks_partial_candidate_unreadab
         partial = context.data_dir / "published" / serving_bundle.SERVING_DB_FILENAME
         partial.parent.mkdir(parents=True, exist_ok=True)
         partial.write_bytes(b"partial database")
-        if context.stage.name == "canonicalize":
+        if context.stage.name == "canonicalize" and context.subtask.subtask_id in {
+            "plan-docling-reprocess",
+            "build-canonical-documents",
+        }:
             return {"returncode": 31, "stderr": "candidate build failed"}
         return {"returncode": 0, "stdout": "ok", "stderr": ""}
 
@@ -338,6 +341,30 @@ def test_stable_cli_make_entries_and_stage_manifests_are_public(tmp_path):
     assert manifest["pipeline_version"] == definition.pipeline_version
     assert manifest["stage"] == "source-ingest"
     assert manifest["status"] == "complete"
+
+
+def test_plan_only_reports_remote_mode_without_executing_pipeline(tmp_path, monkeypatch, capsys):
+    pipeline = _pipeline()
+
+    def unexpected_execution(**_kwargs):
+        raise AssertionError("plan-only 不得执行任何阶段或远端 Docling")
+
+    monkeypatch.setattr(pipeline, "run_pipeline", unexpected_execution)
+    exit_code = pipeline.main(
+        [
+            "canonicalize",
+            "--candidate-dir",
+            str(tmp_path / "candidate"),
+            "--docling-execution-mode",
+            "remote",
+            "--plan-only",
+        ]
+    )
+
+    result = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert result["mode"] == "plan_only"
+    assert result["docling_execution_mode"] == "remote"
 
 
 def test_source_ingest_cli_uses_frozen_input_and_binds_it_to_checkpoint_fingerprint(tmp_path):
@@ -430,7 +457,10 @@ def test_canonicalize_cli_binds_frozen_canonical_inputs_to_checkpoint(tmp_path):
     def inspect_canonical_input(context):
         observed.append(context)
         _write_required_outputs(context)
-        if context.stage.name == "canonicalize":
+        if context.stage.name == "canonicalize" and context.subtask.subtask_id in {
+            "plan-docling-reprocess",
+            "build-canonical-documents",
+        }:
             assert "--frozen-canonical-root" in context.command
             assert str(frozen_canonical.resolve()) in context.command
             assert "--frozen-assets-root" in context.command
@@ -467,6 +497,52 @@ def test_canonicalize_cli_binds_frozen_canonical_inputs_to_checkpoint(tmp_path):
     ])
     assert parsed.frozen_canonical_root == frozen_canonical
     assert parsed.frozen_assets_root == frozen_assets
+    assert parsed.docling_execution_mode == "disabled"
+
+
+def test_docling_execution_mode_is_explicit_and_invalidates_from_canonicalize(tmp_path):
+    pipeline = _pipeline()
+    candidate_dir = tmp_path / "candidate"
+    initial_calls: list[tuple[str, str]] = []
+    first = pipeline.run_pipeline(
+        candidate_dir=candidate_dir,
+        target_stage="canonicalize",
+        task_executor=_successful_executor(initial_calls),
+        code_fingerprint="sha256:code-v1",
+        protected_paths=(),
+        docling_execution_mode="disabled",
+    )
+    assert first["status"] == "complete"
+
+    rerun_calls: list[tuple[str, str]] = []
+    second = pipeline.run_pipeline(
+        candidate_dir=candidate_dir,
+        target_stage="canonicalize",
+        task_executor=_successful_executor(rerun_calls),
+        code_fingerprint="sha256:code-v1",
+        protected_paths=(),
+        docling_execution_mode="remote",
+    )
+
+    assert second["reused_stages"] == ["source-ingest"]
+    assert second["executed_stages"] == ["canonicalize"]
+    assert {subtask for stage, subtask in rerun_calls if stage == "canonicalize"} == {
+        "plan-docling-reprocess",
+        "materialize-docling-reprocess",
+        "build-canonical-documents",
+    }
+    manifest = json.loads(
+        pipeline.stage_manifest_path(candidate_dir, "canonicalize").read_text(
+            encoding="utf-8"
+        )
+    )
+    materialize = next(
+        row
+        for row in manifest["subtasks"]
+        if row["subtask_id"] == "materialize-docling-reprocess"
+    )
+    mode_index = materialize["command"].index("--execution-mode")
+    assert materialize["command"][mode_index + 1] == "remote"
 
 
 def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importable(tmp_path):
@@ -502,6 +578,18 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
     )
     assert "--reuse-existing-report" in performance_subtask.args
 
+    canonicalize_subtasks = {
+        subtask.subtask_id: subtask
+        for subtask in definition.stages["canonicalize"].subtasks
+    }
+    assert set(canonicalize_subtasks) == {
+        "plan-docling-reprocess",
+        "materialize-docling-reprocess",
+        "build-canonical-documents",
+    }
+    assert canonicalize_subtasks["materialize-docling-reprocess"].module == (
+        "bgpkb.ingestion.candidate_docling_reprocess"
+    )
     canonicalize_subtask = next(
         subtask
         for subtask in definition.stages["canonicalize"].subtasks
@@ -509,7 +597,7 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
     )
     reprocess_index = canonicalize_subtask.args.index("--reprocess-manifest")
     assert canonicalize_subtask.args[reprocess_index + 1] == (
-        "{frozen_canonical_root}/docling_reprocess_manifest_v1.json"
+        "{candidate_dir}/data/corpus/docling_reprocessed/docling_reprocess_manifest_v1.json"
     )
 
     candidate_dir = tmp_path / "candidate"

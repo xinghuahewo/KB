@@ -40,6 +40,76 @@ stages:
     success_criteria:
       - Canonical Document v2 Schema 与来源闭包通过
     subtasks:
+      - id: plan-docling-reprocess
+        module: bgpkb.ingestion.docling_reprocess_plan
+        code_dependencies:
+          - bgpkb.ingestion.canonicalize_candidate
+          - bgpkb.ingestion.canonical_migration
+        fingerprint_files:
+          - metadata/config/canonical_reprocess_policy_v1.yaml
+          - metadata/schemas/canonical_document_v2.schema.json
+        write_paths:
+          - "{candidate_dir}/data"
+          - "{candidate_dir}/.pipeline/tmp/canonical-plan"
+        args:
+          - --source-manifest
+          - "{candidate_dir}/data/manifests/source_ingest.json"
+          - --source-store
+          - "{source_store_dir}"
+          - --frozen-canonical-root
+          - "{frozen_canonical_root}"
+          - --frozen-assets-root
+          - "{frozen_assets_root}"
+          - --probe-output-root
+          - "{candidate_dir}/.pipeline/tmp/canonical-plan/canonical"
+          - --probe-assets-root
+          - "{candidate_dir}/.pipeline/tmp/canonical-plan/assets"
+          - --probe-manifest
+          - "{candidate_dir}/.pipeline/tmp/canonical-plan/canonical_documents_v2.json"
+          - --plan
+          - "{candidate_dir}/data/manifests/docling_reprocess_plan_v1.json"
+          - --reprocess-policy
+          - "{backend_root}/metadata/config/canonical_reprocess_policy_v1.yaml"
+          - --release-id
+          - "{release_id}"
+      - id: materialize-docling-reprocess
+        module: bgpkb.ingestion.candidate_docling_reprocess
+        code_dependencies:
+          - bgpkb.ingestion.docling_payload_worker
+          - bgpkb.ingestion.docling_reprocess_materializer
+          - bgpkb.ingestion.cleaning_v2.docling_adapter
+          - bgpkb.ingestion.cleaning_v2.runtime_pipeline
+        fingerprint_files:
+          - deploy/docling/model_manifest.json
+          - deploy/docling/verify_offline_runtime.py
+          - metadata/config/canonical_reprocess_policy_v1.yaml
+        write_paths:
+          - "{candidate_dir}/data"
+          - "{candidate_dir}/.pipeline/tmp/docling"
+          - "{candidate_dir}/.pipeline/cache/docling"
+        args:
+          - --candidate-dir
+          - "{candidate_dir}"
+          - --plan
+          - "{candidate_dir}/data/manifests/docling_reprocess_plan_v1.json"
+          - --source-manifest
+          - "{candidate_dir}/data/manifests/source_ingest.json"
+          - --source-store
+          - "{source_store_dir}"
+          - --payload-root
+          - "{candidate_dir}/data/derived/docling_payloads"
+          - --output-root
+          - "{candidate_dir}/data/corpus/docling_reprocessed"
+          - --manifest
+          - "{candidate_dir}/data/corpus/docling_reprocessed/docling_reprocess_manifest_v1.json"
+          - --policy
+          - "{backend_root}/metadata/config/canonical_reprocess_policy_v1.yaml"
+          - --release-id
+          - "{release_id}"
+          - --execution-mode
+          - "{docling_execution_mode}"
+          - --code-root
+          - "{repository_root}"
       - id: build-canonical-documents
         module: bgpkb.ingestion.canonicalize_candidate
         write_paths:
@@ -62,7 +132,7 @@ stages:
           - --reprocess-policy
           - "{backend_root}/metadata/config/canonical_reprocess_policy_v1.yaml"
           - --reprocess-manifest
-          - "{frozen_canonical_root}/docling_reprocess_manifest_v1.json"
+          - "{candidate_dir}/data/corpus/docling_reprocessed/docling_reprocess_manifest_v1.json"
           - --release-id
           - "{release_id}"
 

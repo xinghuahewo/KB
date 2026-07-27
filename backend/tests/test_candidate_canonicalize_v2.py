@@ -292,6 +292,38 @@ def test_docling_reprocess_policy_fails_closed_for_any_route_other_than_gpu_1(tm
         load_reprocess_policy(policy)
 
 
+@pytest.mark.parametrize(
+    ("field", "old", "new"),
+    [
+        ("ssh_target", "root@10.99.8.28", "root@example.test"),
+        (
+            "image",
+            "bgpkb-docling-v2:2.107.0-cu128",
+            "bgpkb-docling-v2:latest",
+        ),
+        (
+            "image_digest",
+            "sha256:273131691988d0b069c158fea9d5ea9aa597d5cc095288c3ee0baed315fc24f2",
+            "sha256:" + "0" * 64,
+        ),
+    ],
+)
+def test_docling_reprocess_policy_rejects_unlocked_remote_identity(
+    tmp_path, field, old, new
+):
+    inputs = _write_inputs(tmp_path)
+    policy = inputs["policy"]
+    policy.write_text(
+        policy.read_text(encoding="utf-8").replace(
+            f"  {field}: {old}", f"  {field}: {new}"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CanonicalizeCandidateError, match="生产锁定值"):
+        load_reprocess_policy(policy)
+
+
 def test_policy_affected_source_requires_locked_reprocess_manifest(tmp_path):
     inputs = _write_inputs(tmp_path)
     inputs["policy"].write_text(
@@ -319,6 +351,50 @@ def test_policy_affected_source_requires_locked_reprocess_manifest(tmp_path):
 
     assert result["status"] == "blocked_reprocess_required"
     assert result["docling_reprocess_queue"][0]["reason"] == "policy_affected"
+
+
+def test_docling_reprocess_plan_reuses_canonical_decision_and_binds_snapshot(tmp_path):
+    from bgpkb.ingestion.docling_reprocess_plan import (
+        build_docling_reprocess_plan,
+    )
+
+    inputs = _write_inputs(tmp_path)
+    inputs["policy"].write_text(
+        inputs["policy"].read_text(encoding="utf-8").replace(
+            "affected_source_ids: []", "affected_source_ids: [paper]"
+        )
+        + "  pipeline_revision: docling-html-reprocess-v1\n",
+        encoding="utf-8",
+    )
+    candidate = tmp_path / "candidate"
+    plan_path = candidate / "data" / "manifests" / "docling_reprocess_plan_v1.json"
+
+    result = build_docling_reprocess_plan(
+        source_manifest_path=inputs["source_manifest"],
+        source_store_root=inputs["source_store"],
+        frozen_canonical_root=inputs["frozen_canonical"],
+        frozen_assets_root=inputs["frozen_assets"],
+        probe_output_root=candidate / ".pipeline" / "tmp" / "probe" / "canonical",
+        probe_assets_root=candidate / ".pipeline" / "tmp" / "probe" / "assets",
+        probe_manifest_path=candidate / ".pipeline" / "tmp" / "probe" / "manifest.json",
+        plan_path=plan_path,
+        reprocess_policy_path=inputs["policy"],
+        release_id="candidate-11-2",
+    )
+
+    assert result["status"] == "ready"
+    assert result["summary"] == {"requested": 1}
+    assert result["sources"][0] == {
+        "source_id": "paper",
+        "snapshot_id": inputs["snapshot"]["snapshot_id"],
+        "object_digest": inputs["snapshot"]["object_digest"],
+        "object_path": inputs["snapshot"]["object_path"],
+        "byte_size": inputs["snapshot"]["byte_size"],
+        "mime_type": inputs["snapshot"]["mime_type"],
+        "reason": "policy_affected",
+        "diagnostics": result["sources"][0]["diagnostics"],
+    }
+    assert json.loads(plan_path.read_text(encoding="utf-8")) == result
 
 
 def test_policy_affected_source_accepts_only_manifest_bound_docling_result(tmp_path):

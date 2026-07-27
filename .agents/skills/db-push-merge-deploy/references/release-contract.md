@@ -62,6 +62,13 @@ git merge --ff-only origin/main
 
 - 通用代码部署沿用当前 `current-artifact`，不重建、不修改、不重新登记 artifact。
 - 新 artifact 必须来自独立候选目录，完成 `verify-release`，且所有真实门禁均为 pass；`skipped_blocking` 仍是失败。
+- `canonicalize` 需要 Docling 重处理时，必须通过稳定入口显式设置
+  `--docling-execution-mode remote`。计划、payload、运行时证据、严格 Canonical、manifest、
+  日志、临时目录和缓存均只能写候选；旧 release、`current`、`previous` 与冻结 snapshot
+  保持只读。默认模式和 `--plan-only` 不得启动 SSH、Docker 或 GPU 作业。
+- 远端 Docling 必须使用固定无代理 SSH、锁定镜像 digest、GPU 1 和 `--network none`，
+  并在执行前通过 GPU 空闲、CUDA、离线环境与 5 模型 hash 预检。任一文档失败、source/output
+  hash 不符、路径越界或 manifest 集合不闭合都必须停止发布。
 - 代码 release 与 artifact 必须成对记录，但不得交叉拼接未经验证的新旧版本。
 - release 目录不可变；修复必须产生新提交和新 release id。
 
