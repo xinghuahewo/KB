@@ -723,6 +723,57 @@ def test_atomic_payload_publish_cleans_failure_and_success_staging(tmp_path):
     assert not list(formal.parent.glob(".incoming-docling-payloads-*"))
 
 
+def test_atomic_payload_publish_reuses_only_exact_existing_closure(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        _publish_payloads_atomically,
+    )
+
+    candidate = tmp_path / "candidate"
+    staged = candidate / ".pipeline" / "tmp" / "run" / "output"
+    staged.mkdir(parents=True)
+    payload = staged / "source.json"
+    payload.write_text('{"ok": true}\n', encoding="utf-8")
+    receipt = {
+        "documents": [
+            {
+                "source_id": "source",
+                "payload_path": "source.json",
+                "payload_sha256": _sha256(payload.read_bytes()),
+            }
+        ]
+    }
+    formal = candidate / "data" / "derived" / "docling_payloads"
+
+    _publish_payloads_atomically(
+        candidate_dir=candidate,
+        receipt=receipt,
+        staged_payload_root=staged,
+        payload_root=formal,
+    )
+    original_payload = (formal / "source.json").read_bytes()
+
+    _publish_payloads_atomically(
+        candidate_dir=candidate,
+        receipt=receipt,
+        staged_payload_root=staged,
+        payload_root=formal,
+    )
+    assert (formal / "source.json").read_bytes() == original_payload
+    assert not list(formal.parent.glob(".incoming-docling-payloads-*"))
+
+    (formal / "unexpected.json").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(CandidateDoclingReprocessError, match="不一致"):
+        _publish_payloads_atomically(
+            candidate_dir=candidate,
+            receipt=receipt,
+            staged_payload_root=staged,
+            payload_root=formal,
+        )
+    assert (formal / "unexpected.json").is_file()
+    assert not list(formal.parent.glob(".incoming-docling-payloads-*"))
+
+
 def _locked_runtime_identity():
     return {
         "pipeline_revision": "docling-html-reprocess-v1",

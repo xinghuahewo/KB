@@ -476,9 +476,64 @@ def _publish_payloads_atomically(
             directory.chmod(0o750)
         incoming.chmod(0o750)
         if payload_root.exists():
-            if not payload_root.is_dir() or any(payload_root.iterdir()):
+            if not payload_root.is_dir():
                 raise CandidateDoclingReprocessError(
-                    "正式 Docling payload 目录已存在且非空，拒绝覆盖"
+                    "正式 Docling payload 路径已存在且不是目录，拒绝覆盖"
+                )
+            expected_files = {
+                _safe_relative(str(row["payload_path"]), field="Docling payload")
+                for row in receipt["documents"]
+            }
+            expected_files.add(Path("docling_payload_manifest_v1.json"))
+            expected_directories = {
+                parent
+                for relative in expected_files
+                for parent in relative.parents
+                if parent != Path(".")
+            }
+            actual_files = set()
+            actual_directories = set()
+            for path in payload_root.rglob("*"):
+                relative = path.relative_to(payload_root)
+                metadata = path.lstat()
+                if stat.S_ISDIR(metadata.st_mode):
+                    actual_directories.add(relative)
+                    continue
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    raise CandidateDoclingReprocessError(
+                        f"已有正式 Docling payload 不是独立普通文件：{relative}"
+                    )
+                actual_files.add(relative)
+            if actual_files:
+                try:
+                    existing_receipt = json.loads(
+                        (
+                            payload_root / "docling_payload_manifest_v1.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    raise CandidateDoclingReprocessError(
+                        f"已有正式 Docling payload manifest 不可读：{exc}"
+                    ) from exc
+                hashes_match = all(
+                    _sha256(
+                        payload_root
+                        / _safe_relative(
+                            str(row["payload_path"]), field="Docling payload"
+                        )
+                    )
+                    == row["payload_sha256"]
+                    for row in receipt["documents"]
+                )
+                if (
+                    actual_files == expected_files
+                    and actual_directories == expected_directories
+                    and existing_receipt == receipt
+                    and hashes_match
+                ):
+                    return
+                raise CandidateDoclingReprocessError(
+                    "已有正式 Docling payload 与本次验证结果不一致，拒绝覆盖"
                 )
             payload_root.rmdir()
         os.replace(incoming, payload_root)
