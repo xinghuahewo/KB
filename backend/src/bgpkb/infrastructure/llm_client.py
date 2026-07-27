@@ -1,12 +1,19 @@
 import codecs
 import json
 import os
+import time
 import urllib.error
 import urllib.request
+
+import httpx
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/chat/completions"
 DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 10
+DEFAULT_READ_TIMEOUT_SECONDS = 45
+DEFAULT_TOTAL_TIMEOUT_SECONDS = 55
+DEFAULT_MAX_ATTEMPTS = 2
 
 
 class DeepSeekClient:
@@ -18,14 +25,24 @@ class DeepSeekClient:
         api_key="",
         base_url=DEFAULT_BASE_URL,
         model=DEFAULT_MODEL,
-        timeout=30,
+        timeout=DEFAULT_READ_TIMEOUT_SECONDS,
         model_revision="",
+        connect_timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS,
+        total_timeout=DEFAULT_TOTAL_TIMEOUT_SECONDS,
+        max_attempts=DEFAULT_MAX_ATTEMPTS,
     ):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
-        self.timeout = timeout
+        self.timeout = float(timeout)
         self.model_revision = model_revision
+        self.connect_timeout = float(connect_timeout)
+        self.total_timeout = float(total_timeout)
+        self.max_attempts = int(max_attempts)
+        if min(self.timeout, self.connect_timeout, self.total_timeout) <= 0:
+            raise ValueError("DeepSeek timeout 必须为正数")
+        if not 1 <= self.max_attempts <= 3:
+            raise ValueError("DeepSeek max_attempts 必须位于 1..3")
 
     @classmethod
     def from_env(cls):
@@ -33,8 +50,23 @@ class DeepSeekClient:
             api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
             base_url=os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL),
             model=os.environ.get("DEEPSEEK_MODEL", DEFAULT_MODEL),
-            timeout=int(os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+            timeout=float(os.environ.get(
+                "DEEPSEEK_READ_TIMEOUT_SECONDS",
+                os.environ.get("DEEPSEEK_TIMEOUT_SECONDS", str(DEFAULT_READ_TIMEOUT_SECONDS)),
+            )),
             model_revision=os.environ.get("DEEPSEEK_MODEL_REVISION", ""),
+            connect_timeout=float(os.environ.get(
+                "DEEPSEEK_CONNECT_TIMEOUT_SECONDS",
+                str(DEFAULT_CONNECT_TIMEOUT_SECONDS),
+            )),
+            total_timeout=float(os.environ.get(
+                "DEEPSEEK_TOTAL_TIMEOUT_SECONDS",
+                str(DEFAULT_TOTAL_TIMEOUT_SECONDS),
+            )),
+            max_attempts=int(os.environ.get(
+                "DEEPSEEK_MAX_ATTEMPTS",
+                str(DEFAULT_MAX_ATTEMPTS),
+            )),
         )
 
     def build_payload(self, query, context_items):
@@ -258,35 +290,74 @@ class DeepSeekClient:
         }
 
     def _post_payload(self, payload):
-        request = urllib.request.Request(
-            self.base_url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
+        started = time.monotonic()
+        deadline = started + self.total_timeout
+        attempts = 0
+        last_failure = None
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        while attempts < self.max_attempts:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                last_failure = ("total_timeout", "模型请求超过总超时预算。", True)
+                break
+            attempts += 1
+            timeout = httpx.Timeout(
+                connect=min(self.connect_timeout, remaining),
+                read=min(self.timeout, remaining),
+                write=min(self.connect_timeout, remaining),
+                pool=min(self.connect_timeout, remaining),
+            )
+            try:
+                with httpx.Client(timeout=timeout) as client:
+                    response = client.post(self.base_url, json=payload, headers=headers)
+                if response.status_code == 429:
+                    last_failure = ("rate_limited", "模型服务暂时限流。", True)
+                elif 500 <= response.status_code <= 599:
+                    last_failure = ("upstream_unavailable", "模型服务暂时不可用。", True)
+                elif response.status_code >= 400:
+                    last_failure = ("http_error", f"模型服务返回 HTTP {response.status_code}。", False)
+                else:
+                    try:
+                        response_payload = response.json()
+                    except (TypeError, ValueError):
+                        last_failure = ("invalid_response", "模型服务返回了无效 JSON。", False)
+                    else:
+                        if not isinstance(response_payload, dict):
+                            last_failure = ("invalid_response", "模型服务返回格式无效。", False)
+                        else:
+                            return response_payload, None
+            except httpx.TimeoutException:
+                last_failure = ("request_timeout", "模型请求超时。", True)
+            except httpx.NetworkError:
+                last_failure = ("network_unavailable", "模型网络暂时不可用。", True)
+            except Exception:
+                last_failure = ("request_failed", "模型请求失败。", False)
+
+            if not last_failure[2] or attempts >= self.max_attempts:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                last_failure = ("total_timeout", "模型请求超过总超时预算。", True)
+                break
+
+        error_code, message, retryable = last_failure or (
+            "request_failed",
+            "模型请求失败。",
+            False,
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                response_payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            return None, {
-                "ok": False,
-                "provider": "deepseek",
-                "model": self.model,
-                "error_code": "http_error",
-                "error": f"DeepSeek API returned HTTP {exc.code}.",
-            }
-        except Exception as exc:
-            return None, {
-                "ok": False,
-                "provider": "deepseek",
-                "model": self.model,
-                "error_code": "request_failed",
-                "error": str(exc),
-            }
-        return response_payload, None
+        return None, {
+            "ok": False,
+            "provider": "deepseek",
+            "model": self.model,
+            "error_code": error_code,
+            "error": message,
+            "retryable": retryable,
+            "attempts": attempts,
+            "elapsed_ms": round((time.monotonic() - started) * 1000, 3),
+        }
 
     def generate_standard_mapping_candidates(self, items, prompt_version):
         """请求结构化待审核映射候选。"""

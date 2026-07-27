@@ -5,6 +5,8 @@ from pathlib import Path
 import runpy
 import sys
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -264,8 +266,8 @@ def test_v2_search_uses_fixed_channel_limits_and_rrf_contract():
         eligible_doc_ids=set(),
     )
 
-    assert lexical.calls == [(payload["normalized_query"], 50)]
-    assert vector.calls == [(payload["normalized_query"], 50)]
+    assert lexical.calls == [(payload["normalized_query"], 64)]
+    assert vector.calls == [(payload["normalized_query"], 64)]
     assert len(payload["results"]) == 3
     shared = payload["results"][0]
     assert shared["chunk_id"] == "shared"
@@ -276,6 +278,52 @@ def test_v2_search_uses_fixed_channel_limits_and_rrf_contract():
     assert shared["vector_raw_score"] == 0.9
     assert shared["match_channels"] == ["lexical", "vector"]
     assert payload["degraded"] is False
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "缺少精确关键词的中文跨语言问题",
+        "English question without the source identifier",
+    ],
+)
+def test_v2_search_keeps_relevant_tail_source_inside_bounded_fusion_pool(query):
+    lexical = FakeRetriever(RetrievalChannelResult("lexical", items=[]))
+    vector_items = [
+        {
+            **_channel_item(f"generic-{rank:02}", rank, 1.0 - rank / 1000),
+            "doc_id": f"generic-source-{(rank - 1) % 16:02}",
+        }
+        for rank in range(1, 56)
+    ]
+    vector_items.append({
+        **_channel_item("relevant-tail", 56, 0.7),
+        "doc_id": "relevant-source",
+    })
+    vector = FakeRetriever(RetrievalChannelResult(
+        "vector",
+        items=vector_items,
+        metadata={"provider": "local_http"},
+    ))
+
+    payload = hybrid_retrieval.search(
+        query,
+        lexical_retriever=lexical,
+        dense_retriever=vector,
+        trusted_chunk_ids=set(),
+        eligible_doc_ids=set(),
+    )
+
+    assert lexical.calls == [(payload["normalized_query"], 64)]
+    assert vector.calls == [(payload["normalized_query"], 64)]
+    assert len(payload["results"]) <= 20
+    assert any(item["chunk_id"] == "relevant-tail" for item in payload["results"])
+    assert payload["retrieval_contract"] == {
+        "lexical_top_k": 64,
+        "vector_top_k": 64,
+        "rrf_k": 60,
+        "fused_top_k": 20,
+    }
 
 
 def test_search_reports_jsonl_vector_fallback_as_degraded():

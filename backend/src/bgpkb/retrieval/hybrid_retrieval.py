@@ -16,7 +16,12 @@ from .query_type_resolver import resolve_query_type
 from .retrieval_data import PublishedArtifactRetrievalData, RetrievalData
 from bgpkb.infrastructure.retrieval_model_client import RerankerProviderChain
 from bgpkb.indexing.retrieval_documents import verify_component_input_manifests
-from .retrievers import Bm25Retriever, DenseRetriever, RetrievalChannelResult
+from .retrievers import (
+    MAX_CHANNEL_TOP_K,
+    Bm25Retriever,
+    DenseRetriever,
+    RetrievalChannelResult,
+)
 
 
 def _published_path(filename: str) -> Path:
@@ -519,7 +524,7 @@ def rerank_candidates(
 
 def _best_channel_items(result):
     best = {}
-    for position, item in enumerate(result.items[:50], start=1):
+    for position, item in enumerate(result.items[:MAX_CHANNEL_TOP_K], start=1):
         chunk_id = item.get("chunk_id")
         if not chunk_id:
             continue
@@ -623,8 +628,8 @@ def _governance_diagnostics(results):
 def search(
     query,
     limit=20,
-    lexical_top_k=50,
-    vector_top_k=50,
+    lexical_top_k=64,
+    vector_top_k=64,
     rrf_k=60,
     vector_enabled=True,
     client=None,
@@ -637,8 +642,8 @@ def search(
     started = time.perf_counter()
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
         raise ValueError("limit 必须是 1 到 20 的整数")
-    if (lexical_top_k, vector_top_k, rrf_k) != (50, 50, 60):
-        raise ValueError("v2 召回契约固定为 lexical=50、vector=50、rrf_k=60")
+    if (lexical_top_k, vector_top_k, rrf_k) != (64, 64, 60):
+        raise ValueError("v2 召回契约固定为 lexical=64、vector=64、rrf_k=60")
     normalized = retrieval_framework.normalize_query(query)
     active_data = retrieval_data
     if (
@@ -655,7 +660,9 @@ def search(
         active_data.eligible_doc_ids() if eligible_doc_ids is None else set(eligible_doc_ids)
     )
     lexical_started = time.perf_counter()
-    lexical = (lexical_retriever or Bm25Retriever(retrieval_data=active_data)).search(normalized, 50)
+    lexical = (lexical_retriever or Bm25Retriever(retrieval_data=active_data)).search(
+        normalized, lexical_top_k
+    )
     lexical.metadata.setdefault("latency_ms", round((time.perf_counter() - lexical_started) * 1000, 3))
     for item in lexical.items:
         item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
@@ -665,7 +672,7 @@ def search(
         vector_started = time.perf_counter()
         vector = (
             dense_retriever or DenseRetriever(retrieval_data=active_data, provider=client)
-        ).search(normalized, 50)
+        ).search(normalized, vector_top_k)
         vector.metadata.setdefault("latency_ms", round((time.perf_counter() - vector_started) * 1000, 3))
         for item in vector.items:
             item["trust_basis"] = item.get("trust_basis") or _trust_basis(item, trusted_chunk_ids, eligible_doc_ids)
@@ -713,7 +720,12 @@ def search(
         "channel_status": channel_status,
         "channel_metadata": {channel: result.metadata for channel, result in channel_results.items()},
         "retrieval_latency_ms": round((time.perf_counter() - started) * 1000, 3),
-        "retrieval_contract": {"lexical_top_k": 50, "vector_top_k": 50, "rrf_k": 60, "fused_top_k": 20},
+        "retrieval_contract": {
+            "lexical_top_k": lexical_top_k,
+            "vector_top_k": vector_top_k,
+            "rrf_k": rrf_k,
+            "fused_top_k": 20,
+        },
         "governance_diagnostics": _governance_diagnostics(results),
         "trusted_chunk_policy": "approved_entity_evidence_or_processed_source_with_traceability",
         "generated_by": "src/bgpkb/service/hybrid_retrieval.py",

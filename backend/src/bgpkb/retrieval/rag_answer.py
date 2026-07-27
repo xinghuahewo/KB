@@ -24,6 +24,16 @@ def _guardrails(blocked_reason=""):
     return payload
 
 
+def _llm_failure_diagnostics(result):
+    """只保留可公开的失败分类与重试统计，不透传 endpoint 或原始异常。"""
+
+    return {
+        key: result.get(key)
+        for key in ("error_code", "retryable", "attempts", "elapsed_ms")
+        if result.get(key) is not None
+    }
+
+
 def _emit(progress, stage, status, message, **metadata):
     if progress is None:
         return
@@ -120,6 +130,7 @@ def _answer_question_buffered(query, limit=8, client=None, progress=None):
             "model_revision": getattr(active_client, "model_revision", ""),
             "error_code": result.get("error_code", "llm_error"),
             "error": result.get("error", ""),
+            "llm_diagnostics": _llm_failure_diagnostics(result),
             "claims": [],
             "evidence": [],
             "citations": [],
@@ -162,6 +173,7 @@ def _answer_question_buffered(query, limit=8, client=None, progress=None):
                 "model_revision": getattr(active_client, "model_revision", ""),
                 "error_code": result.get("error_code", "llm_error"),
                 "error": result.get("error", ""),
+                "llm_diagnostics": _llm_failure_diagnostics(result),
                 "claims": [],
                 "evidence": [],
                 "citations": [],

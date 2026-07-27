@@ -105,8 +105,8 @@ vector_store:
       uri: http://localhost:19530
       collection: bgp_chunks
 hybrid_retrieval:
-  lexical_top_k: 50
-  vector_top_k: 50
+  lexical_top_k: 64
+  vector_top_k: 64
   rrf_k: 60
   fused_top_k: 20
   context_top_k: 8
