@@ -10,16 +10,28 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 def test_repository_registry_records_current_external_release():
     registry = load_release_registry(REPOSITORY_ROOT / "artifacts" / "releases.yaml")
+    releases = {
+        release["release_id"]: release
+        for release in registry["releases"]
+    }
 
     assert registry["schema_version"] == 1
     assert registry["current_release_id"] == "rag-evidence-pipeline-v2-11.1-20260715T073006Z"
-    assert registry["releases"][-1] == {
+    assert releases[registry["current_release_id"]] == {
         "release_id": "rag-evidence-pipeline-v2-11.1-20260715T073006Z",
         "source_commit": "2f1957839673f7ef65e1f6dfec332abfcef69972",
         "file_count": 209,
         "sha256sums_sha256": "f78d26fd9347617783cebefeec9e17b89e7196b42aadc0d990654dbf581cbfb7",
         "data_path": "/srv/bgpkb/artifacts/releases/rag-evidence-pipeline-v2-11.1-20260715T073006Z/data",
         "status": "current",
+    }
+    assert releases["rag-evidence-pipeline-v2-11.2-20260727T035429Z"] == {
+        "release_id": "rag-evidence-pipeline-v2-11.2-20260727T035429Z",
+        "source_commit": "7adc62a3d81407bf3c7ffcdc55b93892e2e99628",
+        "file_count": 267,
+        "sha256sums_sha256": "b78aaad1c276a8bad49f116fd911950b8527485e583c0dae6b5ce5527cbd312a",
+        "data_path": "/srv/bgpkb/artifacts/releases/rag-evidence-pipeline-v2-11.2-20260727T035429Z/data",
+        "status": "available",
     }
 
 
