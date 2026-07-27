@@ -1,6 +1,8 @@
 from pathlib import Path
 import json
 
+import httpx
+
 from bgpkb import paths
 import sys
 
@@ -22,6 +24,20 @@ def test_deepseek_client_binds_explicit_release_model_revision(monkeypatch):
     assert client.provider == "deepseek"
     assert client.release_eligible is True
     assert client.model_revision == "deepseek-chat@release-rev-a"
+
+
+def test_deepseek_client_binds_bounded_retry_timeouts_from_env(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_CONNECT_TIMEOUT_SECONDS", "7")
+    monkeypatch.setenv("DEEPSEEK_READ_TIMEOUT_SECONDS", "41")
+    monkeypatch.setenv("DEEPSEEK_TOTAL_TIMEOUT_SECONDS", "52")
+    monkeypatch.setenv("DEEPSEEK_MAX_ATTEMPTS", "2")
+
+    client = llm_client.DeepSeekClient.from_env()
+
+    assert client.connect_timeout == 7
+    assert client.timeout == 41
+    assert client.total_timeout == 52
+    assert client.max_attempts == 2
 
 
 def test_deepseek_client_reports_unavailable_without_api_key(monkeypatch):
@@ -155,3 +171,81 @@ def test_stream_answer_marks_upstream_errors_without_raising(monkeypatch):
 
     assert frames[-1]["type"] == "error"
     assert frames[-1]["error_code"] == "request_failed"
+
+
+def test_buffered_request_retries_timeout_once_and_uses_explicit_timeout_budget(monkeypatch):
+    calls = []
+    observed_timeouts = []
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"choices": [{"message": {"content": "{}"}}]}
+
+    class Client:
+        def __init__(self, timeout):
+            observed_timeouts.append(timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            if len(calls) == 1:
+                raise httpx.ReadTimeout("sensitive upstream detail")
+            return Response()
+
+    monkeypatch.setattr(llm_client.httpx, "Client", Client)
+    client = llm_client.DeepSeekClient(
+        api_key="test-key",
+        connect_timeout=3,
+        timeout=20,
+        total_timeout=30,
+        max_attempts=2,
+    )
+
+    payload, error = client._post_payload({"model": "deepseek-chat"})
+
+    assert error is None
+    assert payload["choices"]
+    assert len(calls) == 2
+    assert all(timeout.connect <= 3 for timeout in observed_timeouts)
+    assert all(timeout.read <= 20 for timeout in observed_timeouts)
+
+
+def test_buffered_request_does_not_retry_non_retryable_http_error_or_leak_raw_body(monkeypatch):
+    calls = []
+
+    class Response:
+        status_code = 400
+
+    class Client:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def post(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return Response()
+
+    monkeypatch.setattr(llm_client.httpx, "Client", Client)
+    client = llm_client.DeepSeekClient(api_key="test-key", max_attempts=2)
+
+    payload, error = client._post_payload({"private": "must-not-appear"})
+
+    assert payload is None
+    assert len(calls) == 1
+    assert error["error_code"] == "http_error"
+    assert error["retryable"] is False
+    assert error["attempts"] == 1
+    assert "must-not-appear" not in json.dumps(error)

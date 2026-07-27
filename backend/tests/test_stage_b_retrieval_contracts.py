@@ -25,8 +25,8 @@ def test_stage_b_config_pins_retrieval_model_and_budget_contracts():
         key: cfg["hybrid_retrieval"][key]
         for key in ("lexical_top_k", "vector_top_k", "rrf_k", "fused_top_k")
     } == {
-        "lexical_top_k": 50,
-        "vector_top_k": 50,
+        "lexical_top_k": 64,
+        "vector_top_k": 64,
         "rrf_k": 60,
         "fused_top_k": 20,
     }

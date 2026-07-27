@@ -252,6 +252,48 @@ def test_answer_gold_scores_grounding_citations_refusal_and_injection():
     ] == [["evidence-rfc7908"]]
 
 
+def test_answer_gold_records_only_non_sensitive_llm_failure_diagnostics():
+    from bgpkb.workflows.release_gate_evidence import evaluate_answer_gold
+
+    evaluation, _, _ = evaluate_answer_gold(
+        [{
+            "case_id": "ag-zh-timeout",
+            "query": "什么是 BGP 路由泄露？",
+            "scenario_tags": [],
+            "expected_status": "answered",
+            "expected_claims": [],
+            "attack_payload": None,
+        }],
+        request_fn=lambda *args, **kwargs: {
+            "answer": "",
+            "answer_status": "llm_unavailable",
+            "generated": False,
+            "claims": [],
+            "citations": [],
+            "context_pack": {"evidence": []},
+            "grounding_status": "llm_unavailable",
+            "model": MODELS["llm"]["model"],
+            "model_revision": MODELS["llm"]["revision"],
+            "llm_diagnostics": {
+                "error_code": "request_timeout",
+                "retryable": True,
+                "attempts": 2,
+                "elapsed_ms": 55000.0,
+                "error": "must-not-be-recorded",
+            },
+        },
+        expected_llm=MODELS["llm"],
+    )
+
+    assert evaluation["samples"][0]["llm_diagnostics"] == {
+        "error_code": "request_timeout",
+        "retryable": True,
+        "attempts": 2,
+        "elapsed_ms": 55000.0,
+    }
+    assert "error" not in evaluation["samples"][0]["llm_diagnostics"]
+
+
 def test_answer_gold_matches_expected_logical_source_id_through_evidence_doc_id():
     from bgpkb.workflows.release_gate_evidence import evaluate_answer_gold
 

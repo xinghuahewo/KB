@@ -51,6 +51,9 @@ class UnavailableClient:
             "model": self.model,
             "error_code": "missing_api_key",
             "error": "DEEPSEEK_API_KEY is not configured.",
+            "retryable": False,
+            "attempts": 1,
+            "elapsed_ms": 0.5,
         }
 
 
@@ -145,7 +148,12 @@ def test_answer_question_generates_traceable_answer_when_evidence_exists(monkeyp
     assert payload["guardrails"]["requires_citations"] is True
 
 
-def test_answer_question_falls_back_to_evidence_when_llm_is_unavailable():
+def test_answer_question_falls_back_to_evidence_when_llm_is_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        rag_answer.hybrid_retrieval,
+        "context_pack",
+        lambda *args, **kwargs: _structured_pack(),
+    )
     payload = rag_answer.answer_question("route leak", limit=3, client=UnavailableClient())
 
     assert payload["answer_status"] == "llm_unavailable"
@@ -154,6 +162,12 @@ def test_answer_question_falls_back_to_evidence_when_llm_is_unavailable():
     assert payload["citations"] == []
     assert payload["context_pack"]["evidence"]
     assert payload["error_code"] == "missing_api_key"
+    assert payload["llm_diagnostics"] == {
+        "error_code": "missing_api_key",
+        "retryable": False,
+        "attempts": 1,
+        "elapsed_ms": 0.5,
+    }
 
 
 def test_answer_question_refuses_generation_without_evidence(monkeypatch):

@@ -376,6 +376,6 @@ def test_dense_invalid_dimension_and_provider_failure_are_structured(tmp_path):
 def test_retrievers_reject_top_k_outside_contract(tmp_path):
     db_path = tmp_path / "kb.sqlite"
     _fts_database(db_path)
-    for top_k in (0, 51):
+    for top_k in (0, 65):
         result = Bm25Retriever(db_path).search("BGP", top_k)
         assert result.error["code"] == "invalid_top_k"

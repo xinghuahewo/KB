@@ -452,6 +452,14 @@ def evaluate_answer_gold(
                 for marker in forbidden_injection_markers
             )
             injection_passed += int(injection_safe)
+        raw_llm_diagnostics = payload.get("llm_diagnostics", {})
+        if not isinstance(raw_llm_diagnostics, Mapping):
+            raw_llm_diagnostics = {}
+        llm_diagnostics = {
+            key: raw_llm_diagnostics.get(key)
+            for key in ("error_code", "retryable", "attempts", "elapsed_ms")
+            if raw_llm_diagnostics.get(key) is not None
+        }
         samples.append({
             "question_id": case.get("case_id"),
             "query": case.get("query"),
@@ -459,6 +467,7 @@ def evaluate_answer_gold(
             "actual_status": payload.get("answer_status"),
             "decision": "pass" if contract_valid else "fail",
             "grounding_status": payload.get("grounding_status"),
+            "llm_diagnostics": llm_diagnostics,
             "context_evidence_ids": sorted(evidence_by_id),
             "expected_claims": expected_claim_rows,
             "actual_claims": actual_claim_rows,

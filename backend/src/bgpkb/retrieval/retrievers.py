@@ -18,7 +18,7 @@ from bgpkb.retrieval.retrieval_data import PublishedArtifactRetrievalData, Retri
 from bgpkb.infrastructure.retrieval_model_client import EmbeddingProviderChain
 
 
-MAX_CHANNEL_TOP_K = 50
+MAX_CHANNEL_TOP_K = 64
 
 
 @dataclass
