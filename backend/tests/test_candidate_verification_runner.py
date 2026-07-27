@@ -98,3 +98,66 @@ def test_runner_rejects_canary_health_binding_mismatch(tmp_path):
 
     with pytest.raises(CandidateVerificationRunnerError, match="binding"):
         validate_canary_health(health, binding)
+
+
+def test_runner_rejects_canary_health_missing_llm_model(tmp_path):
+    from bgpkb.workflows.candidate_verification_runner import (
+        CandidateVerificationRunnerError,
+        validate_canary_health,
+    )
+
+    binding = _binding(tmp_path)
+    health = {
+        "release_id": binding["release_id"],
+        "degraded": False,
+        "retrieval_runtime": {
+            "ready": True,
+            "status": "ready",
+            "index_mode": "fast_numpy",
+        },
+        "verification_binding": json.loads(json.dumps(binding)),
+    }
+    health["verification_binding"].pop("llm_model")
+
+    with pytest.raises(CandidateVerificationRunnerError, match="binding"):
+        validate_canary_health(health, binding)
+
+
+def test_health_binding_exposes_exact_allowlist_and_never_sensitive_fields(
+    tmp_path,
+):
+    from bgpkb.api.app import safe_verification_binding_for_health
+
+    binding = {
+        **_binding(tmp_path),
+        "model_revisions": {
+            **MODEL_REVISIONS,
+            "api_key": "nested-secret",
+        },
+        "endpoint": "https://private.invalid/v1",
+        "api_key": "secret",
+        "token": "secret",
+        "runtime_env": {"SECRET": "secret"},
+    }
+
+    exposed = safe_verification_binding_for_health(json.dumps(binding))
+
+    assert exposed == {
+        **{
+            key: binding[key]
+            for key in (
+                "candidate_root",
+                "release_id",
+                "publish_manifest_hash",
+                "publish_checkpoint_hash",
+                "pipeline_run_id",
+                "code_commit",
+                "prompt_version",
+                "llm_model",
+                "chat_db_path",
+            )
+        },
+        "model_revisions": MODEL_REVISIONS,
+    }
+    assert not {"endpoint", "api_key", "token", "runtime_env"} & set(exposed)
+    assert "api_key" not in exposed["model_revisions"]

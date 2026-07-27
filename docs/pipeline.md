@@ -103,7 +103,7 @@ revision、锁定镜像 digest、状态和诊断；来源集合、任一 hash、
 4. 运行 `semantic-build`，复核语义切块、治理状态、隔离清单和 chunk ID 迁移。
 5. 运行 `publish-index`，按 Retrieval Document → serving/governance DB/FTS → embedding JSONL → fast index → manifest 的顺序形成闭包。
 6. 在目标服务器通过代码 release 自带的 `scripts/verify-candidate-release` 启动只绑定回环地址的隔离评测服务，并运行同一轮 `verify-release`；该入口只接受已完整通过 `publish-index`、且失败阶段不早于 `verify-release` 的同一候选，并为 canary 与门禁进程同时强制 `BGP_RAG_REQUIRE_RERANKER=1`，禁止离线 RRF 降级被误当成真实 reranker 评测。
-7. 稳定入口从代码 release manifest、候选 publish manifest 和显式参数形成代码提交、LLM model、三类模型 revision、prompt version、checkpoint hash 与 pipeline run ID 的唯一绑定，并同时设置证据门禁读取的 `BGP_*` 变量和真实 DeepSeek 客户端读取的 `DEEPSEEK_MODEL`、`DEEPSEEK_MODEL_REVISION`。canary health 的绑定、真实 reranker 要求或 readiness 任一不一致时，在昂贵评测前停止；性能与黄金集报告必须由本次候选真实生成，失败只修复候选并从首个失效阶段恢复。
+7. 稳定入口从代码 release manifest、候选 publish manifest 和显式参数形成代码提交、LLM model、三类模型 revision、prompt version、checkpoint hash 与 pipeline run ID 的唯一绑定，并同时设置证据门禁读取的 `BGP_*` 变量和真实 DeepSeek 客户端读取的 `DEEPSEEK_MODEL`、`DEEPSEEK_MODEL_REVISION`。canary health 只回传精确比对所需的非敏感绑定白名单，不回传 endpoint、key、token 或完整环境；绑定、真实 reranker 要求或 readiness 任一不一致时，在昂贵评测前停止。性能与黄金集报告必须由本次候选真实生成，失败只修复候选并从首个失效阶段恢复。
 8. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
 
 需要重处理时，第 3 步的生产命令必须显式包含
