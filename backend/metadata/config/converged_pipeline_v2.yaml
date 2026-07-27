@@ -241,7 +241,6 @@ stages:
         args:
           - --data-dir
           - "{data_dir}"
-          - --reuse-existing-report
           - --registry
           - "{backend_root}/metadata/sources/source_registry.yaml"
           - --release-id
