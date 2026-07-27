@@ -112,6 +112,13 @@ make canonicalize CANDIDATE_DIR=<候选目录> \
 4. CUDA 实际可用，离线环境有效，5 个锁定模型的实际 SHA-256 全部匹配。
 5. source snapshot 在转换前后 hash 不变，所有 payload 和 Canonical 输出均位于候选目录。
 
+宿主只把计划声明且 hash 匹配的普通文件复制到候选
+`.pipeline/tmp/docling/run-*/input`：拒绝 symlink、hardlink、重复目标和路径越界，目录为
+`0555`、文件为 `0444`，原始 `0600` 输入保持不变。容器只读挂载该 input，并分别挂载
+最小 writable output/work/cache；不得读写挂载整个候选。宿主在容器结束后复核 source
+binding、文件类型、payload hash 和路径，再原子物化正式 payload 目录及回执。成功、失败
+或受控中断均清理 `run-*`，失败不得留下正式 payload manifest。
+
 执行记录位于候选 `.pipeline/logs/canonicalize/`，运行时和 5 模型证据位于
 `data/manifests/docling_runtime_evidence_v1.json`。任一文档失败、回执缺失、hash 不符或
 路径越界时，不得继续 `semantic-build`。长任务应查看容器进程、GPU 1、日志和已完成文档计数；
