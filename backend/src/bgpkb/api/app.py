@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 import json
 import os
 import queue
@@ -7,6 +8,7 @@ from typing import Annotated, Any, Literal, Optional
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse
+from fastapi.responses import JSONResponse
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,6 +18,13 @@ from bgpkb import paths
 
 from bgpkb.infrastructure import database
 from bgpkb.infrastructure.chat_store import ChatRepository, hash_client_id
+from bgpkb.infrastructure.retrieval_runtime import (
+    preload_retrieval_runtime,
+    retrieval_runtime_status,
+)
+from bgpkb.infrastructure.serving_bundle import (
+    VERIFICATION_CANDIDATE_BINDING_ENV,
+)
 from bgpkb.retrieval import repository
 from bgpkb.retrieval.evidence_detail import evidence_detail
 
@@ -53,10 +62,18 @@ _ACTIVE_TURNS: dict[tuple[str, str], threading.Event] = {}
 _ACTIVE_TURNS_LOCK = threading.Lock()
 _SSE_HEARTBEAT_SECONDS = float(os.environ.get("BGP_SSE_HEARTBEAT_SECONDS", "15"))
 
+
+@asynccontextmanager
+async def lifespan(_app):
+    preload_retrieval_runtime()
+    yield
+
+
 app = FastAPI(
     title="BGP 知识库服务",
     description="面向已发布 SQLite 知识库的只读查询服务。",
     version=database.SERVICE_VERSION,
+    lifespan=lifespan,
 )
 
 BASE_DIR = paths.API_DIR
@@ -89,10 +106,41 @@ def _chat_repository_or_503() -> ChatRepository:
 @app.get("/health")
 def health():
     payload = database.health_status()
+    readiness = retrieval_runtime_status()
+    if readiness.get("status") == "uninitialized":
+        try:
+            preload_retrieval_runtime()
+        except Exception:
+            pass
+        readiness = retrieval_runtime_status()
+    payload["retrieval_runtime"] = readiness
+    raw_binding = os.environ.get(VERIFICATION_CANDIDATE_BINDING_ENV, "").strip()
+    if raw_binding:
+        try:
+            binding = json.loads(raw_binding)
+        except json.JSONDecodeError:
+            binding = {}
+        if isinstance(binding, dict):
+            payload["verification_binding"] = {
+                key: binding.get(key)
+                for key in (
+                    "candidate_root",
+                    "release_id",
+                    "publish_manifest_hash",
+                    "publish_checkpoint_hash",
+                    "pipeline_run_id",
+                    "code_commit",
+                    "prompt_version",
+                    "model_revisions",
+                    "chat_db_path",
+                )
+            }
     try:
         payload["chat_history"] = ChatRepository().health()
     except Exception as exc:  # 会话库故障不得覆盖发布知识库健康状态
         payload["chat_history"] = {"writable": False, "error": str(exc)}
+    if readiness.get("ready") is not True:
+        return JSONResponse(status_code=503, content=payload)
     return payload
 
 

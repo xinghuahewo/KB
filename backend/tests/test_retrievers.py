@@ -2,14 +2,20 @@ import json
 import os
 import math
 import sqlite3
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pytest
 
+from bgpkb.infrastructure import fast_vector_index
 from bgpkb.infrastructure.fast_vector_index import (
     FastVectorIndex,
     build_fast_vector_index,
+    clear_fast_vector_index_cache,
     load_cached_fast_vector_index,
+    preload_fast_vector_index,
     verify_fast_vector_artifacts,
 )
 from bgpkb.retrieval.retrievers import (
@@ -215,6 +221,96 @@ def test_fast_vector_gate_rejects_eligibility_set_mismatch(tmp_path):
 
     with pytest.raises(RuntimeError, match="eligibility"):
         verify_fast_vector_artifacts(index, eligible_chunk_ids={"a", "missing"})
+
+
+def test_concurrent_cold_fast_index_load_is_single_flight(tmp_path, monkeypatch):
+    index = tmp_path / "bge_m3_vector_index.jsonl"
+    index.write_text(
+        json.dumps({
+            "kind": "chunk",
+            "metadata": {"chunk_id": "a", "eligibility": {"status": "eligible"}},
+            "vector": [1.0, 0.0],
+        }) + "\n",
+        encoding="utf-8",
+    )
+    build_fast_vector_index(index)
+    clear_fast_vector_index_cache()
+    original_load = FastVectorIndex.load.__func__
+    entered = threading.Event()
+    release = threading.Event()
+    call_count = 0
+    count_lock = threading.Lock()
+
+    def delayed_load(cls, *args, **kwargs):
+        nonlocal call_count
+        with count_lock:
+            call_count += 1
+        entered.set()
+        assert release.wait(timeout=2)
+        return original_load(cls, *args, **kwargs)
+
+    monkeypatch.setattr(FastVectorIndex, "load", classmethod(delayed_load))
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [
+            executor.submit(load_cached_fast_vector_index, index)
+            for _index in range(4)
+        ]
+        assert entered.wait(timeout=2)
+        time.sleep(0.05)
+        release.set()
+        loaded = [future.result(timeout=2) for future in futures]
+
+    assert call_count == 1
+    assert len({id(value) for value in loaded}) == 1
+
+
+def test_preloaded_fast_index_keeps_first_concurrent_batch_outside_cold_path(
+    tmp_path, monkeypatch
+):
+    index = tmp_path / "bge_m3_vector_index.jsonl"
+    index.write_text(
+        "".join(
+            json.dumps({
+                "kind": "chunk",
+                "metadata": {"chunk_id": f"chunk-{value}"},
+                "vector": [float(value == 0), float(value == 1)],
+            }) + "\n"
+            for value in range(2)
+        ),
+        encoding="utf-8",
+    )
+    build_fast_vector_index(index)
+    clear_fast_vector_index_cache()
+    original_load = FastVectorIndex.load.__func__
+    call_count = 0
+
+    def slow_load(cls, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        time.sleep(0.2)
+        return original_load(cls, *args, **kwargs)
+
+    monkeypatch.setattr(FastVectorIndex, "load", classmethod(slow_load))
+    readiness = preload_fast_vector_index(index)
+    assert readiness["index_mode"] == "fast_numpy"
+    assert call_count == 1
+
+    barrier = threading.Barrier(4)
+
+    def first_batch(_index):
+        barrier.wait()
+        started = time.perf_counter()
+        loaded = load_cached_fast_vector_index(index)
+        loaded.search([1.0, 0.0], top_k=1, min_similarity=0.0)
+        return (time.perf_counter() - started) * 1000
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        latencies = list(executor.map(first_batch, range(4)))
+
+    ordered = sorted(latencies)
+    p95 = ordered[-1]
+    assert call_count == 1
+    assert p95 < 100
 
 
 def test_dense_retriever_prefers_fast_vector_index_without_reading_jsonl(tmp_path):

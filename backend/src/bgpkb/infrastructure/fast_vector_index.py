@@ -8,6 +8,7 @@ import json
 import math
 import os
 from pathlib import Path
+import threading
 from typing import Any
 
 import numpy as np
@@ -125,28 +126,60 @@ class FastVectorIndex:
 
 
 _FAST_INDEX_CACHE: dict[str, tuple[tuple[tuple[str, int, int], ...], FastVectorIndex]] = {}
+_FAST_INDEX_CACHE_LOCK = threading.RLock()
 
 
 def clear_fast_vector_index_cache() -> None:
-    _FAST_INDEX_CACHE.clear()
+    with _FAST_INDEX_CACHE_LOCK:
+        _FAST_INDEX_CACHE.clear()
 
 
 def load_cached_fast_vector_index(index_path: Path | str) -> FastVectorIndex | None:
     artifacts = FastVectorIndexArtifacts.from_index_path(index_path)
-    signature = artifacts.cache_signature()
-    if signature is None:
-        return None
-    key = str(artifacts.source_path.resolve())
-    cached = _FAST_INDEX_CACHE.get(key)
-    if cached and cached[0] == signature:
-        return cached[1]
-    # 线上 release 在激活前已执行源 hash 门禁，运行期只加载不可变 mmap，
-    # 避免冷启动重新顺序读取大型 JSONL。直接 load/发布验证仍默认校验源 hash。
-    loaded = FastVectorIndex.load(artifacts.source_path, validate_source_hash=False)
+    with _FAST_INDEX_CACHE_LOCK:
+        signature = artifacts.cache_signature()
+        if signature is None:
+            return None
+        key = str(artifacts.source_path.resolve())
+        cached = _FAST_INDEX_CACHE.get(key)
+        if cached and cached[0] == signature:
+            return cached[1]
+        # 线上 release 在激活前已执行源 hash 门禁，运行期只加载不可变 mmap，
+        # 避免冷启动重新顺序读取大型 JSONL。锁内完成 single-flight，防止首批
+        # 并发请求重复解析 metadata 并互相阻塞。
+        loaded = FastVectorIndex.load(
+            artifacts.source_path,
+            validate_source_hash=False,
+        )
+        if loaded is None:
+            return None
+        _FAST_INDEX_CACHE[key] = (signature, loaded)
+        return loaded
+
+
+def preload_fast_vector_index(index_path: Path | str) -> dict[str, Any]:
+    """在服务 ready 前加载 metadata、mmap，并触碰矩阵查询路径。"""
+
+    loaded = load_cached_fast_vector_index(index_path)
     if loaded is None:
-        return None
-    _FAST_INDEX_CACHE[key] = (signature, loaded)
-    return loaded
+        raise FastVectorIndexError("快向量索引预载失败")
+    if loaded.record_count < 1 or loaded.dimension < 1:
+        raise FastVectorIndexError("快向量索引预载得到空矩阵")
+    probe = np.asarray(loaded.matrix[0], dtype=np.float32)
+    results = loaded.search(
+        probe.tolist(),
+        top_k=1,
+        min_similarity=-1.0,
+    )
+    if not results:
+        raise FastVectorIndexError("快向量索引预载查询没有结果")
+    return {
+        "ready": True,
+        "status": "ready",
+        "index_mode": "fast_numpy",
+        "record_count": loaded.record_count,
+        "dimension": loaded.dimension,
+    }
 
 
 def build_fast_vector_index(index_path: Path | str) -> FastVectorIndexArtifacts:

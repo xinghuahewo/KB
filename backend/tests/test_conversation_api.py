@@ -104,6 +104,14 @@ def test_chat_database_failure_does_not_mask_published_database_health(tmp_path,
         "bgpkb.api.app.database.health_status",
         lambda: {"service": "bgp-knowledge-base-service", "integrity_check": "ok"},
     )
+    monkeypatch.setattr(
+        "bgpkb.api.app.retrieval_runtime_status",
+        lambda: {
+            "ready": True,
+            "status": "ready",
+            "index_mode": "fast_numpy",
+        },
+    )
 
     response = TestClient(app).get("/health")
 
