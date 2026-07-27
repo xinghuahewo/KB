@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
-from typing import Any
+from typing import Any, Callable
 
 
 DEFAULT_SERVER = "root@10.99.8.28"
@@ -23,11 +24,17 @@ SSH_OPTIONS = (
 )
 
 
-def run(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str],
+    *,
+    cwd: Path | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=cwd,
         text=True,
+        input=input_text,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
@@ -124,6 +131,98 @@ printf 'disk_artifact\t%s\n' "$disk_artifact"
 """
 
 
+def _chat_database_tool() -> Path:
+    return Path(__file__).resolve().parents[4] / "scripts" / "chat-database-maintenance"
+
+
+def inspect_remote_chat_database(server: str, database_path: str) -> dict[str, Any]:
+    tool = _chat_database_tool()
+    if not tool.is_file():
+        return {"ok": False, "error": "local_chat_database_tool_missing"}
+    remote_command = (
+        "python3 - inspect --database " + shlex.quote(database_path)
+    )
+    completed = run(
+        ["ssh", *SSH_OPTIONS, server, remote_command],
+        input_text=tool.read_text(encoding="utf-8"),
+    )
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "remote_chat_database_inspection_invalid_json"}
+    if not isinstance(result, dict):
+        return {"ok": False, "error": "remote_chat_database_inspection_invalid_payload"}
+    if completed.returncode != 0:
+        result["ok"] = False
+    return result
+
+
+def _chat_summary(chat: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "database_path": chat.get("database_path"),
+        "database_exists": chat.get("database_exists"),
+        "writable": chat.get("writable"),
+        "integrity_check": chat.get("integrity_check"),
+        "schema_version": chat.get("schema_version"),
+        "schema_compatible": chat.get("schema_compatible"),
+        "required_tables_present": chat.get("required_tables_present"),
+    }
+
+
+def _chat_is_healthy(chat: dict[str, Any]) -> bool:
+    schema_version = chat.get("schema_version")
+    schema_compatible = chat.get("schema_compatible", schema_version == 1)
+    required_tables_present = chat.get("required_tables_present", True)
+    return bool(
+        chat.get("writable") is True
+        and chat.get("integrity_check") == "ok"
+        and schema_version == 1
+        and schema_compatible is True
+        and required_tables_present is True
+    )
+
+
+def validate_remote_health(
+    remote: dict[str, Any],
+    database_inspector: Callable[[str], dict[str, Any]],
+) -> list[str]:
+    errors: list[str] = []
+    health_payloads: dict[str, dict[str, Any]] = {}
+
+    for key in ("fastapi_health", "frontend_health"):
+        raw_health = remote.get(key, "")
+        try:
+            health = json.loads(raw_health)
+        except (TypeError, json.JSONDecodeError):
+            errors.append(f"{key} 未返回有效 JSON。")
+            continue
+        if not isinstance(health, dict):
+            errors.append(f"{key} 未返回 JSON 对象。")
+            continue
+        health_payloads[key] = health
+        if health.get("degraded") is not False or health.get("integrity_check") != "ok":
+            errors.append(f"{key} 显示知识库降级或完整性异常。")
+
+    if remote.get("chat_db"):
+        remote["chat_history_source"] = "direct_sqlite_inspect"
+        chat = database_inspector(str(remote["chat_db"]))
+        remote["chat_history_summary"] = _chat_summary(chat)
+        if chat.get("ok") is not True or not _chat_is_healthy(chat):
+            errors.append("会话库直接 SQLite 检查失败。")
+    else:
+        errors.append("未找到会话数据库路径，不能执行直接 SQLite 检查。")
+
+    for key, health in health_payloads.items():
+        remote[f"{key}_summary"] = {
+            "release_id": health.get("release_id"),
+            "degraded": health.get("degraded"),
+            "integrity_check": health.get("integrity_check"),
+        }
+        remote.pop(key, None)
+
+    return errors
+
+
 def inspect_remote(server: str) -> tuple[dict[str, Any], list[str]]:
     completed = run(["ssh", *SSH_OPTIONS, server, REMOTE_INSPECTION])
     if completed.returncode != 0:
@@ -152,29 +251,12 @@ def inspect_remote(server: str) -> tuple[dict[str, Any], list[str]]:
     if remote.get("rollback") != "ok":
         errors.append("previous 代码/制品回滚点无效。")
 
-    for key in ("fastapi_health", "frontend_health"):
-        raw_health = remote.get(key, "")
-        try:
-            health = json.loads(raw_health)
-        except (TypeError, json.JSONDecodeError):
-            errors.append(f"{key} 未返回有效 JSON。")
-            continue
-        if health.get("degraded") is not False or health.get("integrity_check") != "ok":
-            errors.append(f"{key} 显示知识库降级或完整性异常。")
-        chat = health.get("chat_history") or {}
-        if chat.get("writable") is not True or chat.get("integrity_check") != "ok":
-            errors.append(f"{key} 显示会话库不可写或完整性异常。")
-        remote[f"{key}_summary"] = {
-            "release_id": health.get("release_id"),
-            "degraded": health.get("degraded"),
-            "integrity_check": health.get("integrity_check"),
-            "chat_history": {
-                "writable": chat.get("writable"),
-                "integrity_check": chat.get("integrity_check"),
-                "schema_version": chat.get("schema_version"),
-            },
-        }
-        del remote[key]
+    errors.extend(
+        validate_remote_health(
+            remote,
+            lambda database_path: inspect_remote_chat_database(server, database_path),
+        )
+    )
 
     return remote, errors
 

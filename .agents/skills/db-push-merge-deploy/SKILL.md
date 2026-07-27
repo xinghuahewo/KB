@@ -86,12 +86,14 @@ python3 .agents/skills/db-push-merge-deploy/scripts/preflight.py --phase deploy
 
 - 记录当前代码、当前 artifact、previous 代码/制品、screen、端口和健康状态。
 - 从 `/etc/bgpkb/runtime.env` 只读取所需路径，不输出文件内容或任何密钥。
-- 按 `docs/operations.md` 使用 SQLite `.backup` 为独立会话库创建一致性备份，并验证 `integrity_check=ok`。
+- `preflight.py` 必须使用仓库稳定的 `scripts/chat-database-maintenance inspect` 直接检查独立会话库；不得依赖当前服务版本是否暴露 `health.chat_history`，也不得在直接检查失败时降级放行。
+- 按 `docs/operations.md` 调用新代码 release 内的 `scripts/chat-database-maintenance backup` 创建一致性备份。必须验证 JSON 回执中的 `integrity_check=ok`、`schema_version=1`、必要表、权限、大小和 SHA-256；不得依赖服务器 `sqlite3` CLI。
 - 使用新代码 release 的迁移入口对同一会话库执行幂等迁移；不得把会话库复制进代码或 artifact release。
 - 代码部署默认解析并沿用当前 artifact。若用户指定新 artifact，必须先通过注册表、`SHA256SUMS`、SQLite、向量/fast index、真实 artifact test 和回滚对检查。
 
 ### 6. 部署与验收
 
+- 条件允许时，在不修改 `/etc/bgpkb/runtime.env`、nginx、正式 screen 或模型服务的前提下，以临时端口和隔离会话库运行新 release canary；完成 health、会话、真实 RAG、SSE、静态缓存和浏览器验收后清理临时进程。若稳定脚本不支持安全 canary，不得用临时 SSH 命令重写部署状态机。
 - 只调用新代码 release 自带的稳定入口：
 
 ```bash
@@ -100,7 +102,7 @@ bash <remote-code-release>/scripts/deploy \
 ```
 
 - 该入口负责检查回滚点、同步锁定依赖、验证 artifact、原子切换 generation、重启 screen、健康检查和失败自动回滚。
-- 部署后至少核对：`current`/`current-artifact`、两个 screen、39280/39281/8011/8012、前后端 health、`degraded=false`、知识库 `integrity_check=ok`、会话库 `writable=true`。
+- 部署后至少核对：`current`/`current-artifact`、两个 screen、39280/39281/8011/8012、前后端 health、`degraded=false`、知识库 `integrity_check=ok`，以及 `health.chat_history` 完整且 `writable=true`、`integrity_check=ok`、`schema_version=1`。
 - 执行一次真实 RAG；涉及流式或前端时，进一步验证 SSE headers、至少两个 `answer_delta` 先于 `done`、阶段耗时、历史恢复、复制和证据定位。
 - 健康或验收失败时先确认自动回滚结果。旧版本仍不健康则立即停止并报告，不在生产目录临时修补代码。
 
@@ -118,4 +120,4 @@ bash <remote-code-release>/scripts/deploy \
 
 ## 失败关闭条件
 
-遇到以下任一情况不得继续：工作树含无关修改；本地 `main` 无法快进；CI 未完成或失败；PR 不可合并或仍有未解决对话；release 不是最终合并 SHA；目标 release 已存在；任一 manifest/hash 不匹配；artifact 未登记或门禁失败；previous 代码/制品不存在；会话备份失败；运行环境缺失；自动回滚后服务仍不健康。
+遇到以下任一情况不得继续：工作树含无关修改；本地 `main` 无法快进；CI 未完成或失败；PR 不可合并或仍有未解决对话；release 不是最终合并 SHA；目标 release 已存在；任一 manifest/hash 不匹配；artifact 未登记或门禁失败；previous 代码/制品不存在；会话数据库直接检查或备份失败；运行环境缺失；新版本 `health.chat_history` 不完整；自动回滚后服务仍不健康。

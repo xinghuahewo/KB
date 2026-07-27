@@ -52,16 +52,22 @@ uv run python -m bgpkb.workflows.migrate_chat_database \
   --database /srv/bgpkb/runtime/chat/chat_history.sqlite3
 ```
 
-在线备份使用 SQLite 的一致性备份命令，不直接复制单个主文件，以免遗漏 WAL 中尚未 checkpoint 的事务：
+在线备份必须调用待发布代码 release 内的稳定入口。该入口使用 Python 标准库
+`sqlite3.Connection.backup()` 捕获 WAL 中已提交但尚未 checkpoint 的事务，先写同目录临时文件，
+通过完整性、schema 和必要表检查后再以不覆盖方式原子落盘；目录权限固定为 `0700`，备份文件为
+`0600`。不得直接复制在线主文件，也不依赖服务器安装 `sqlite3` CLI：
 
 ```bash
 CHAT_DB=/srv/bgpkb/runtime/chat/chat_history.sqlite3
-BACKUP_DIR=/srv/bgpkb/backups/chat
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-install -d -m 700 "$BACKUP_DIR"
-sqlite3 "$CHAT_DB" ".backup '$BACKUP_DIR/chat_history-$STAMP.sqlite3'"
-sqlite3 "$BACKUP_DIR/chat_history-$STAMP.sqlite3" 'PRAGMA integrity_check; PRAGMA user_version;'
+python3 /home/wbt/DB-code-releases/<新代码 release>/scripts/chat-database-maintenance \
+  inspect --database "$CHAT_DB"
+python3 /home/wbt/DB-code-releases/<新代码 release>/scripts/chat-database-maintenance \
+  backup --database "$CHAT_DB" --backup-dir /srv/bgpkb/backups/chat
 ```
+
+两个命令均输出不含密钥的 JSON 回执。`inspect` 或 `backup` 任一非零、`integrity_check` 非 `ok`、
+`schema_version` 非 `1`、必要表缺失、目标已存在或权限设置失败，都必须停止部署。备份回执必须记录
+路径、字节数和 SHA-256，供发布记录和人工回滚决策使用。
 
 恢复前停止 FastAPI，保留故障库及其 `-wal`、`-shm` 文件，再把已校验备份复制到一个新路径。先用迁移命令验证新路径，随后只修改 `/etc/bgpkb/runtime.env` 中的 `BGP_CHAT_DB_PATH` 并重启。不要用回滚代码的方式覆盖会话库。
 
