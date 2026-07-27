@@ -61,6 +61,18 @@ class RagAnswerResponse(BaseModel):
 _ACTIVE_TURNS: dict[tuple[str, str], threading.Event] = {}
 _ACTIVE_TURNS_LOCK = threading.Lock()
 _SSE_HEARTBEAT_SECONDS = float(os.environ.get("BGP_SSE_HEARTBEAT_SECONDS", "15"))
+_VERIFICATION_HEALTH_BINDING_FIELDS = (
+    "candidate_root",
+    "release_id",
+    "publish_manifest_hash",
+    "publish_checkpoint_hash",
+    "pipeline_run_id",
+    "code_commit",
+    "prompt_version",
+    "llm_model",
+    "model_revisions",
+    "chat_db_path",
+)
 
 
 @asynccontextmanager
@@ -103,6 +115,34 @@ def _chat_repository_or_503() -> ChatRepository:
         raise HTTPException(status_code=503, detail=f"chat history unavailable: {exc}") from exc
 
 
+def safe_verification_binding_for_health(raw_binding: str) -> dict | None:
+    """只返回候选精确比对所需的非敏感运行绑定。"""
+
+    if not raw_binding.strip():
+        return None
+    try:
+        binding = json.loads(raw_binding)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(binding, dict):
+        return None
+    safe_binding = {
+        key: binding.get(key)
+        for key in _VERIFICATION_HEALTH_BINDING_FIELDS
+        if key != "model_revisions"
+    }
+    revisions = binding.get("model_revisions")
+    safe_binding["model_revisions"] = (
+        {
+            role: revisions.get(role)
+            for role in ("embedding", "reranker", "llm")
+        }
+        if isinstance(revisions, dict)
+        else None
+    )
+    return safe_binding
+
+
 @app.get("/health")
 def health():
     payload = database.health_status()
@@ -115,26 +155,9 @@ def health():
         readiness = retrieval_runtime_status()
     payload["retrieval_runtime"] = readiness
     raw_binding = os.environ.get(VERIFICATION_CANDIDATE_BINDING_ENV, "").strip()
-    if raw_binding:
-        try:
-            binding = json.loads(raw_binding)
-        except json.JSONDecodeError:
-            binding = {}
-        if isinstance(binding, dict):
-            payload["verification_binding"] = {
-                key: binding.get(key)
-                for key in (
-                    "candidate_root",
-                    "release_id",
-                    "publish_manifest_hash",
-                    "publish_checkpoint_hash",
-                    "pipeline_run_id",
-                    "code_commit",
-                    "prompt_version",
-                    "model_revisions",
-                    "chat_db_path",
-                )
-            }
+    safe_binding = safe_verification_binding_for_health(raw_binding)
+    if safe_binding is not None:
+        payload["verification_binding"] = safe_binding
     try:
         payload["chat_history"] = ChatRepository().health()
     except Exception as exc:  # 会话库故障不得覆盖发布知识库健康状态
