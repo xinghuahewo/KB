@@ -1,0 +1,4 @@
+interface:
+  display_name: "DB 推送合并部署"
+  short_description: "安全编排 DB 仓库的推送、CI 合并、不可变发布与远端部署"
+  default_prompt: "使用 $db-push-merge-deploy 完成当前变更的推送、合并和生产部署。"
