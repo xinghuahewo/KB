@@ -34,6 +34,13 @@ def _sha256(path: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+def _sha256_json(value: object) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
 def _validate_runtime(runtime: dict) -> dict:
     required = {
         "pipeline_revision",
@@ -69,10 +76,24 @@ def materialize_docling_reprocess(
     source_ids: list[str],
     release_id: str,
     runtime_identity: dict,
+    model_evidence: list[dict] | None = None,
 ) -> dict:
     """把容器导出的 Docling payload 与当前 snapshot 严格绑定。"""
 
     runtime = _validate_runtime(dict(runtime_identity))
+    models = list(model_evidence or [])
+    if models and (
+        len(models) != 5
+        or any(
+            not isinstance(row, dict)
+            or not row.get("name")
+            or not row.get("actual_sha256")
+            or row.get("actual_sha256") != row.get("expected_sha256")
+            for row in models
+        )
+    ):
+        raise DoclingReprocessError("Docling 5 模型 revision 证据非法")
+    model_revision_sha256 = _sha256_json(models)
     if not source_ids or len(set(source_ids)) != len(source_ids):
         raise DoclingReprocessError("source_ids 必须是非空且不重复的列表")
     source_manifest_path = Path(source_manifest_path).resolve()
@@ -116,6 +137,7 @@ def materialize_docling_reprocess(
                 "pipeline_revision": runtime["pipeline_revision"],
                 "image": runtime["image"],
                 "image_digest": runtime["image_digest"],
+                "model_revision_sha256": model_revision_sha256,
                 "gpu_index": runtime["gpu_index"],
                 "device": runtime["device"],
                 "network": runtime["network"],
@@ -137,10 +159,17 @@ def materialize_docling_reprocess(
                 "source_id": source_id,
                 "snapshot_id": snapshot["snapshot_id"],
                 "object_digest": snapshot["object_digest"],
+                "source_sha256": snapshot["object_digest"],
                 "payload_path": payload_path.relative_to(payload_root).as_posix(),
                 "payload_sha256": _sha256(payload_path),
                 "canonical_path": output_path.relative_to(manifest_path.parent).as_posix(),
                 "canonical_sha256": _sha256(output_path),
+                "parser_version": runtime["parser_version"],
+                "pipeline_revision": runtime["pipeline_revision"],
+                "image_digest": runtime["image_digest"],
+                "model_revision_sha256": model_revision_sha256,
+                "status": "complete",
+                "diagnostics": [],
                 "block_count": len(strict["blocks"]),
                 "text_char_count": sum(
                     len(str(block.get("cleaned_text") or ""))
@@ -156,6 +185,7 @@ def materialize_docling_reprocess(
         "generated_at": _utc_now(),
         "source_ingest_manifest_sha256": _sha256(source_manifest_path),
         "runtime": runtime,
+        "model_evidence": models,
         "summary": {
             "requested": len(source_ids),
             "materialized": len(documents),

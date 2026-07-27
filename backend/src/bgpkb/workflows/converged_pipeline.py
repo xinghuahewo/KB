@@ -269,6 +269,7 @@ def _render_subtask_command(
     frozen_legacy_chunks_root: Path,
     frozen_source_catalog_path: Path,
     frozen_entity_evidence_path: Path,
+    docling_execution_mode: str,
 ) -> tuple[str, ...]:
     substitutions = _candidate_substitutions(
         candidate_dir,
@@ -278,6 +279,7 @@ def _render_subtask_command(
         frozen_legacy_chunks_root=frozen_legacy_chunks_root,
         frozen_source_catalog_path=frozen_source_catalog_path,
         frozen_entity_evidence_path=frozen_entity_evidence_path,
+        docling_execution_mode=docling_execution_mode,
     )
     return (
         sys.executable,
@@ -296,6 +298,7 @@ def _candidate_substitutions(
     frozen_legacy_chunks_root: Path | None = None,
     frozen_source_catalog_path: Path | None = None,
     frozen_entity_evidence_path: Path | None = None,
+    docling_execution_mode: str = "disabled",
 ) -> dict[str, str]:
     selected_frozen_root = Path(frozen_source_root or paths.RAW_DIR).expanduser().resolve()
     selected_canonical_root = Path(
@@ -327,6 +330,7 @@ def _candidate_substitutions(
         "release_id": candidate_dir.name,
         "backend_root": str(paths.PROJECT_ROOT),
         "repository_root": str(paths.REPOSITORY_ROOT),
+        "docling_execution_mode": docling_execution_mode,
     }
 
 
@@ -732,6 +736,7 @@ def run_pipeline(
     frozen_legacy_chunks_root: Path | None = None,
     frozen_source_catalog_path: Path | None = None,
     frozen_entity_evidence_path: Path | None = None,
+    docling_execution_mode: str = "disabled",
 ) -> dict:
     definition = definition or load_pipeline_definition()
     if not code_fingerprint:
@@ -753,6 +758,10 @@ def run_pipeline(
         frozen_entity_evidence_path
         or paths.DATASETS_DIR / "entity_source_evidence.jsonl"
     ).expanduser().resolve()
+    if docling_execution_mode not in {"disabled", "remote"}:
+        raise PipelineDefinitionError(
+            "docling_execution_mode 必须是 disabled 或 remote"
+        )
     protected = _default_protected_paths() if protected_paths is None else tuple(protected_paths)
     resolved_protected = tuple(Path(path).expanduser().resolve() for path in protected)
     for frozen_input in (
@@ -822,6 +831,10 @@ def run_pipeline(
         "frozen_assets_root",
         _fingerprint_tree(frozen_assets_root),
     )
+    external_input_fingerprints.setdefault("canonicalize", {}).setdefault(
+        "docling_execution_mode",
+        docling_execution_mode,
+    )
     external_input_fingerprints.setdefault("semantic-build", {}).setdefault(
         "frozen_legacy_chunks_root",
         _fingerprint_tree(frozen_legacy_chunks_root),
@@ -883,6 +896,7 @@ def run_pipeline(
                 frozen_legacy_chunks_root=frozen_legacy_chunks_root,
                 frozen_source_catalog_path=frozen_source_catalog_path,
                 frozen_entity_evidence_path=frozen_entity_evidence_path,
+                docling_execution_mode=docling_execution_mode,
             )
             write_paths = _render_subtask_write_paths(subtask, candidate_dir=candidate)
             context = SubtaskContext(
@@ -1061,6 +1075,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=paths.DATASETS_DIR / "entity_source_evidence.jsonl",
     )
+    parser.add_argument(
+        "--docling-execution-mode",
+        choices=("disabled", "remote"),
+        default="disabled",
+        help="只有 remote 会显式执行锁定的远端 Docling；默认禁用",
+    )
     parser.add_argument("--plan-only", action="store_true")
     return parser
 
@@ -1078,6 +1098,7 @@ def main(argv: list[str] | None = None) -> int:
             "frozen_legacy_chunks_root": str(args.frozen_legacy_chunks_root.expanduser().resolve()),
             "frozen_source_catalog_path": str(args.frozen_source_catalog_path.expanduser().resolve()),
             "frozen_entity_evidence_path": str(args.frozen_entity_evidence_path.expanduser().resolve()),
+            "docling_execution_mode": args.docling_execution_mode,
             "target_stage": args.stage,
             "stages": list(_stage_names_through(args.stage)),
             "mode": "plan_only",
@@ -1095,6 +1116,7 @@ def main(argv: list[str] | None = None) -> int:
             frozen_legacy_chunks_root=args.frozen_legacy_chunks_root,
             frozen_source_catalog_path=args.frozen_source_catalog_path,
             frozen_entity_evidence_path=args.frozen_entity_evidence_path,
+            docling_execution_mode=args.docling_execution_mode,
         )
     except (CandidateIsolationError, PipelineDefinitionError) as exc:
         print(str(exc), file=sys.stderr)

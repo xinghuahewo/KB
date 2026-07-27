@@ -20,6 +20,12 @@ source-ingest → canonicalize → semantic-build → publish-index → verify-r
 
 执行某一阶段时，编排器会检查并复用它之前的有效 checkpoint；不得跳过依赖或直接把细粒度脚本的零散输出拼成 release。查看计划可追加 `PIPELINE_ARGS=--plan-only`。本流程不自动提交、部署或切换线上制品。
 
+`canonicalize` 默认禁止远端 Docling。只有发布执行者明确追加
+`PIPELINE_ARGS="... --docling-execution-mode remote"` 时，阶段才会按
+`plan-docling-reprocess → materialize-docling-reprocess → build-canonical-documents`
+三个正式子任务执行重处理。`--plan-only` 只展示执行模式和阶段，不运行 SSH、Docker 或 GPU
+作业；没有显式启用而计划中存在重处理来源时，阶段必须失败关闭。
+
 ## 候选目录边界
 
 候选目录必须与 `current`、`previous` 及其 release 目录完全分离，不能是指向它们的符号链接，也不能包含或被受保护路径包含。候选目录 basename 同时作为五阶段统一的 `BGPKB_RELEASE_ID`，应使用稳定且唯一的候选 ID。推荐布局：
@@ -37,13 +43,24 @@ source-ingest → canonicalize → semantic-build → publish-index → verify-r
   source-store/
   data/
     manifests/
+      docling_reprocess_plan_v1.json
+      docling_runtime_evidence_v1.json
     corpus/
+      docling_reprocessed/
     derived/datasets/
     generated/reports/
     published/
 ```
 
 所有子任务必须声明候选内写根。`BGPKB_DATA_DIR`、`BGPKB_SOURCE_STORE_DIR`、临时目录和缓存目录都由编排器重定向到候选目录；阶段不得写 current release。候选构建期间 `candidate.json` 的 `reader_selectable=false`，失败后状态为 `failed`，在线 reader 会失败关闭，避免把临时文件或半成品误当成完整制品。只有整个 `verify-release` 成功后，候选才标记为 `verified`，用于后续显式 canary；仍不得自动切换 `current` 或 `previous`。
+
+Docling 重处理计划只接受当前 `source-ingest` manifest 中已验证 hash 的 snapshot，并受
+`canonical_reprocess_policy_v1.yaml` 的来源名单约束。payload、运行时证据、严格 Canonical
+和 `docling_reprocess_manifest_v1.json` 全部写入候选；容器输入副本、缓存和临时文件只写
+`.pipeline/tmp`、`.pipeline/cache`。旧 artifact、`current`、`previous` 和冻结输入目录始终只读。
+正式 manifest 逐文档绑定 source hash、payload hash、Canonical hash、parser/pipeline
+revision、锁定镜像 digest、状态和诊断；来源集合、任一 hash、路径边界或部分结果不一致都不得
+形成 `closure=true`。
 
 ## Checkpoint 与恢复
 
@@ -88,6 +105,11 @@ source-ingest → canonicalize → semantic-build → publish-index → verify-r
 6. 运行 `verify-release`；失败只修复候选并从首个失效阶段恢复。
 7. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
 
+需要重处理时，第 3 步的生产命令必须显式包含
+`--docling-execution-mode remote`。编排器先写候选内计划，再通过固定无代理 SSH 调度锁定
+Docling 容器，最后复用 `docling_reprocess_materializer` 生成严格 Canonical；不得把容器
+payload、手工生成的成功报告或旧 checkpoint 直接拼入 release。
+
 v1 parsed/chunks 和 legacy reader 只保留为受控只读迁移入口，不得进入新 serving、embedding、真实评测或治理决定；正式退役必须等待一个稳定发布周期和零生产引用证明。
 
 ## verify-release 统一门禁
@@ -124,5 +146,13 @@ canary 通过后，运维流程才可用 `make deploy ARGS="<code-release-dir> <
 5. `publish-index` 失败时运行候选内的闭包校验，重点检查 release ID、artifact manifest、model revision、retrieval input hash 和 ID 集。
 6. `verify-release` 失败时读取统一门禁矩阵；`skipped_blocking` 是发布失败，不是可忽略跳过。
 7. 任何失败都先保留候选证据并修复，再按 checkpoint 恢复；不得修改 current/previous、手工补写成功 manifest 或让 reader 指向失败候选。
+
+`canonicalize` 的重处理故障还应依次检查
+`data/manifests/docling_reprocess_plan_v1.json`、
+`data/manifests/docling_runtime_evidence_v1.json`、
+`data/derived/docling_payloads/docling_payload_manifest_v1.json` 和
+`data/corpus/docling_reprocessed/docling_reprocess_manifest_v1.json`。从 `disabled` 改为
+`remote`、策略或相关代码变化时，checkpoint 指纹必须使 `canonicalize` 及其下游失效；
+只能重新执行稳定入口，不得手改 checkpoint。
 
 现有细粒度脚本和 legacy reader 仍可用于只读诊断与兼容迁移。它们的存在不改变五阶段是唯一产品入口这一约束。

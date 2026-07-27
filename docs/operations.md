@@ -92,6 +92,29 @@ BGP_CHAT_DB_PATH=/srv/bgpkb/runtime/chat/chat_history-restored.sqlite3 \
 - GPU 0 未经检查不得使用；GPU 2/3 使用前重新执行 `nvidia-smi`。
 - 构建文件：`/srv/bgpkb/docling-build`；模型：`/srv/bgpkb/docling-models`。
 
+五阶段候选的 Docling 重处理默认关闭。确认候选计划确有待处理来源后，使用：
+
+```bash
+make canonicalize CANDIDATE_DIR=<候选目录> \
+  PIPELINE_ARGS="<冻结输入参数> --docling-execution-mode remote"
+```
+
+该参数是远端作业的显式授权开关；`--plan-only` 和默认 `disabled` 均不得启动远端作业。
+生产 runner 固定使用
+`ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28`，
+并在转换前完成以下失败关闭检查：
+
+1. GPU 1 存在且没有计算进程；不得仅凭显存数字推断空闲。
+2. 本地镜像 ID 与策略中的不可变 digest 完全一致。
+3. 临时容器使用 `--device nvidia.com/gpu=1 --network none`。
+4. CUDA 实际可用，离线环境有效，5 个锁定模型的实际 SHA-256 全部匹配。
+5. source snapshot 在转换前后 hash 不变，所有 payload 和 Canonical 输出均位于候选目录。
+
+执行记录位于候选 `.pipeline/logs/canonicalize/`，运行时和 5 模型证据位于
+`data/manifests/docling_runtime_evidence_v1.json`。任一文档失败、回执缺失、hash 不符或
+路径越界时，不得继续 `semantic-build`。长任务应查看容器进程、GPU 1、日志和已完成文档计数；
+耗时本身不是失败依据。
+
 模型必须先离线预取并通过 `verify_offline_runtime.py` 校验，再作为独立构建上下文注入镜像；生产阶段不得下载模型：
 
 ```bash
