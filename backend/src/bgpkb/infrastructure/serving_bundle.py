@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sqlite3
 from typing import Iterable, Mapping, Sequence
 from urllib.parse import quote
@@ -19,6 +20,8 @@ GOVERNANCE_SCHEMA_VERSION = "governance_sqlite_v1"
 MINIMUM_READER_VERSION = "1.0.0"
 CURRENT_READER_VERSION = "1.0.0"
 LEGACY_SCHEMA_VERSION = "legacy_v0"
+VERIFICATION_CANDIDATE_BINDING_ENV = "BGPKB_VERIFICATION_CANDIDATE_BINDING"
+CODE_RELEASE_MANIFEST_PATH = Path(__file__).resolve().parents[4] / "release-manifest.json"
 
 GOVERNANCE_ONLY_TABLES = {
     "entity_evidence",
@@ -755,6 +758,89 @@ def legacy_reader_enabled() -> bool:
     }
 
 
+def verification_candidate_reader_enabled(
+    data_dir: Path,
+    candidate_state: Mapping[str, object],
+) -> bool:
+    """只允许显式绑定、已完成 publish-index 的本机验证进程读取候选。"""
+
+    raw_binding = os.environ.get(VERIFICATION_CANDIDATE_BINDING_ENV, "").strip()
+    if not raw_binding:
+        return False
+    try:
+        binding = json.loads(raw_binding)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(binding, dict):
+        return False
+    candidate_root = Path(data_dir).resolve().parent
+    if Path(str(binding.get("candidate_root", ""))).expanduser().resolve() != candidate_root:
+        return False
+    if candidate_state.get("reader_selectable") is True:
+        return False
+    if candidate_state.get("status") not in {"candidate", "failed"}:
+        return False
+    if candidate_state.get("failed_stage") not in {None, "verify-release"}:
+        return False
+    try:
+        code_release_manifest = json.loads(
+            CODE_RELEASE_MANIFEST_PATH.read_text(encoding="utf-8")
+        )
+        stage_manifest = json.loads(
+            (candidate_root / ".pipeline" / "manifests" / "publish-index.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        publish_manifest = json.loads(
+            (candidate_root / "data" / "published" / "publish_index_manifest_v1.json").read_text(
+                encoding="utf-8"
+            )
+        )
+    except (OSError, json.JSONDecodeError):
+        return False
+    publish_manifest_hash = "sha256:" + hashlib.sha256(
+        (candidate_root / "data" / "published" / "publish_index_manifest_v1.json").read_bytes()
+    ).hexdigest()
+    code_commit = str(binding.get("code_commit", ""))
+    prompt_version = str(binding.get("prompt_version", ""))
+    model_revisions = binding.get("model_revisions")
+    if not isinstance(model_revisions, dict):
+        return False
+    published_model_revisions = publish_manifest.get("model_revisions")
+    if not isinstance(published_model_revisions, dict):
+        return False
+    if not re.fullmatch(r"[0-9a-f]{40}", code_commit):
+        return False
+    if not prompt_version or any(
+        not str(model_revisions.get(role, "")).strip()
+        for role in ("embedding", "reranker", "llm")
+    ):
+        return False
+    isolated_chat_db = Path(str(binding.get("chat_db_path", ""))).expanduser().resolve()
+    isolated_chat_root = (candidate_root / ".pipeline" / "tmp" / "canary-chat").resolve()
+    if (
+        isolated_chat_db.parent != isolated_chat_root
+        or Path(os.environ.get("BGP_CHAT_DB_PATH", "")).expanduser().resolve()
+        != isolated_chat_db
+    ):
+        return False
+    return (
+        stage_manifest.get("stage") == "publish-index"
+        and stage_manifest.get("status") == "complete"
+        and publish_manifest.get("status") == "complete"
+        and publish_manifest.get("release_id") == candidate_root.name
+        and binding.get("release_id") == candidate_root.name
+        and binding.get("publish_manifest_hash") == publish_manifest_hash
+        and code_release_manifest.get("git_commit") == code_commit
+        and published_model_revisions.get("embedding") == model_revisions["embedding"]
+        and os.environ.get("BGPKB_CODE_COMMIT") == code_commit
+        and os.environ.get("BGP_GROUNDED_PROMPT_VERSION") == prompt_version
+        and os.environ.get("BGP_EMBEDDING_MODEL_REVISION") == model_revisions["embedding"]
+        and os.environ.get("BGP_RERANKER_MODEL_REVISION") == model_revisions["reranker"]
+        and os.environ.get("BGP_LLM_MODEL_REVISION") == model_revisions["llm"]
+    )
+
+
 def resolve_serving_database_path(
     data_dir: Path,
     *,
@@ -769,7 +855,10 @@ def resolve_serving_database_path(
             candidate_state = json.loads(candidate_state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise ServingBundleCompatibilityError(f"候选状态不可读：{exc}") from exc
-        if candidate_state.get("reader_selectable") is not True:
+        if (
+            candidate_state.get("reader_selectable") is not True
+            and not verification_candidate_reader_enabled(data_dir, candidate_state)
+        ):
             raise ServingBundleCompatibilityError(
                 f"候选 release 尚不可读取：status={candidate_state.get('status', 'unknown')}"
             )

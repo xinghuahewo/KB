@@ -102,8 +102,9 @@ revision、锁定镜像 digest、状态和诊断；来源集合、任一 hash、
 3. 运行 `canonicalize`；只有 Schema/闭包失败或受新策略影响的文档才重新走 Docling。
 4. 运行 `semantic-build`，复核语义切块、治理状态、隔离清单和 chunk ID 迁移。
 5. 运行 `publish-index`，按 Retrieval Document → serving/governance DB/FTS → embedding JSONL → fast index → manifest 的顺序形成闭包。
-6. 运行 `verify-release`；失败只修复候选并从首个失效阶段恢复。
-7. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
+6. 在目标服务器通过 `bgpkb.workflows.candidate_verification_canary` 启动只绑定回环地址的隔离评测服务；该入口只接受已完整通过 `publish-index`、且失败阶段不早于 `verify-release` 的同一候选。
+7. 显式绑定评测 URL、代码提交、三类模型 revision 和 prompt version 后运行 `verify-release`；性能与黄金集报告必须由本次候选真实生成，失败只修复候选并从首个失效阶段恢复。
+8. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
 
 需要重处理时，第 3 步的生产命令必须显式包含
 `--docling-execution-mode remote`。编排器先写候选内计划，再验证目标主机：已在
@@ -135,6 +136,16 @@ v1 parsed/chunks 和 legacy reader 只保留为受控只读迁移入口，不得
 | 版本化阈值 | 任一硬指标低于 `rag_quality_gates_v1.yaml` |
 
 阶段内部报告任务即使返回非零，也会先保留各自报告并继续到最终统一门禁；编排器记录所有非零，最终报告生成成功不得掩盖失败。任一 `fail` 或 `skipped_blocking` 都使 `verify-release` 返回非零。结构 mock、旧报告和当前线上旧 release 的结果不能替代本次候选真实评测。
+
+隔离评测服务只能绑定 `127.0.0.1` 或 `::1`，并必须设置最长运行时间；
+不会修改候选 `reader_selectable`。服务进程同时精确绑定候选根、release ID、
+publish manifest hash、当前不可变代码 release 的完整 commit、prompt version 和三类模型
+revision。reader 逐项复核这些绑定、`publish-index` 阶段 manifest 与候选发布 manifest；
+目录、hash、commit、revision 不一致，阶段不完整或更早阶段失败时仍然拒绝读取。会话库只能
+位于候选 `.pipeline/tmp/canary-chat/`，显式拒绝生产会话库，并在进程退出时清理；进程级能力
+绑定也随退出消失。运维方在 `verify-release` 返回后必须立即终止隔离服务，最长运行时间仅作
+遗留进程的最终保险。`verify-release` 配置不使用 `--reuse-existing-report`，避免新候选误用
+不存在、其他候选或线上旧 release 的报告。
 
 ## 成对发布与回滚
 
