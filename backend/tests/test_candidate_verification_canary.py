@@ -16,6 +16,7 @@ def _write_json(path: Path, payload: dict) -> None:
 
 CODE_COMMIT = "a" * 40
 PROMPT_VERSION = "grounded_answer_prompt_v1"
+LLM_MODEL = "deepseek-v4-pro"
 MODEL_REVISIONS = {
     "embedding": "embedding-revision",
     "reranker": "reranker-revision",
@@ -69,6 +70,7 @@ def _binding(candidate: Path) -> dict:
         "pipeline_run_id": PIPELINE_RUN_ID,
         "code_commit": CODE_COMMIT,
         "prompt_version": PROMPT_VERSION,
+        "llm_model": LLM_MODEL,
         "model_revisions": MODEL_REVISIONS,
         "chat_db_path": str(
             candidate
@@ -91,10 +93,14 @@ def _configure_reader(monkeypatch, candidate: Path, code_manifest: Path) -> dict
     )
     monkeypatch.setenv("BGP_CHAT_DB_PATH", binding["chat_db_path"])
     monkeypatch.setenv("BGPKB_CODE_COMMIT", CODE_COMMIT)
+    monkeypatch.setenv("BGP_RAG_REQUIRE_RERANKER", "1")
     monkeypatch.setenv("BGP_GROUNDED_PROMPT_VERSION", PROMPT_VERSION)
+    monkeypatch.setenv("BGP_LLM_MODEL", LLM_MODEL)
     monkeypatch.setenv("BGP_EMBEDDING_MODEL_REVISION", MODEL_REVISIONS["embedding"])
     monkeypatch.setenv("BGP_RERANKER_MODEL_REVISION", MODEL_REVISIONS["reranker"])
     monkeypatch.setenv("BGP_LLM_MODEL_REVISION", MODEL_REVISIONS["llm"])
+    monkeypatch.setenv("DEEPSEEK_MODEL", LLM_MODEL)
+    monkeypatch.setenv("DEEPSEEK_MODEL_REVISION", MODEL_REVISIONS["llm"])
     return binding
 
 
@@ -228,6 +234,26 @@ def test_candidate_reader_rejects_model_revision_mismatch(
         serving_bundle.resolve_serving_database_path(candidate / "data")
 
 
+@pytest.mark.parametrize(
+    ("name", "wrong_value"),
+    [
+        ("BGP_RAG_REQUIRE_RERANKER", "0"),
+        ("BGP_LLM_MODEL", "wrong-model"),
+        ("DEEPSEEK_MODEL", "wrong-model"),
+        ("DEEPSEEK_MODEL_REVISION", "wrong-revision"),
+    ],
+)
+def test_candidate_reader_rejects_runtime_model_binding_mismatch(
+    monkeypatch, tmp_path, code_manifest, name, wrong_value
+):
+    candidate = _candidate(tmp_path)
+    _configure_reader(monkeypatch, candidate, code_manifest)
+    monkeypatch.setenv(name, wrong_value)
+
+    with pytest.raises(serving_bundle.ServingBundleCompatibilityError, match="候选"):
+        serving_bundle.resolve_serving_database_path(candidate / "data")
+
+
 def test_candidate_canary_rejects_production_chat_database(monkeypatch, tmp_path):
     candidate = _candidate(tmp_path)
     production_chat_db = tmp_path / "production.sqlite3"
@@ -260,6 +286,10 @@ def test_verification_environment_is_process_scoped_and_cleans_chat_files(
         chat_db.write_bytes(b"chat")
         Path(str(chat_db) + "-wal").write_bytes(b"wal")
         assert os.environ["BGPKB_DATA_DIR"] == str(candidate / "data")
+        assert os.environ["BGP_RAG_REQUIRE_RERANKER"] == "1"
+        assert os.environ["BGP_LLM_MODEL"] == LLM_MODEL
+        assert os.environ["DEEPSEEK_MODEL"] == LLM_MODEL
+        assert os.environ["DEEPSEEK_MODEL_REVISION"] == MODEL_REVISIONS["llm"]
         assert serving_bundle.VERIFICATION_CANDIDATE_BINDING_ENV in os.environ
 
     assert os.environ["BGPKB_DATA_DIR"] == "/production/data"

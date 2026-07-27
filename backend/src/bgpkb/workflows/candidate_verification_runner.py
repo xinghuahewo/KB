@@ -39,6 +39,7 @@ def validate_runner_binding(binding: Mapping[str, object]) -> dict:
     if (
         not re.fullmatch(r"[0-9a-f]{40}", str(normalized.get("code_commit", "")))
         or not str(normalized.get("prompt_version", "")).strip()
+        or not str(normalized.get("llm_model", "")).strip()
         or not isinstance(revisions, Mapping)
         or any(
             not str(revisions.get(role, "")).strip()
@@ -71,10 +72,14 @@ def build_verification_environment(binding: Mapping[str, object]) -> dict[str, s
     return {
         "BGPKB_CODE_COMMIT": str(validated["code_commit"]),
         "BGPKB_PIPELINE_RUN_ID": str(validated["pipeline_run_id"]),
+        "BGP_RAG_REQUIRE_RERANKER": "1",
         "BGP_GROUNDED_PROMPT_VERSION": str(validated["prompt_version"]),
+        "BGP_LLM_MODEL": str(validated["llm_model"]),
         "BGP_EMBEDDING_MODEL_REVISION": str(revisions["embedding"]),
         "BGP_RERANKER_MODEL_REVISION": str(revisions["reranker"]),
         "BGP_LLM_MODEL_REVISION": str(revisions["llm"]),
+        "DEEPSEEK_MODEL": str(validated["llm_model"]),
+        "DEEPSEEK_MODEL_REVISION": str(revisions["llm"]),
     }
 
 
@@ -178,6 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--embedding-revision", required=True)
     parser.add_argument("--reranker-revision", required=True)
+    parser.add_argument("--llm-model", default="deepseek-v4-pro")
     parser.add_argument("--llm-revision", required=True)
     parser.add_argument("--pipeline-run-id")
     parser.add_argument("--host", default="127.0.0.1")
@@ -215,6 +221,7 @@ def _build_binding(args: argparse.Namespace) -> dict:
         "pipeline_run_id": run_id,
         "code_commit": str(code_manifest.get("git_commit", "")),
         "prompt_version": args.prompt_version,
+        "llm_model": args.llm_model,
         "model_revisions": {
             "embedding": args.embedding_revision,
             "reranker": args.reranker_revision,
@@ -266,6 +273,8 @@ def run(args: argparse.Namespace) -> int:
         str(revisions["embedding"]),
         "--reranker-revision",
         str(revisions["reranker"]),
+        "--llm-model",
+        str(binding["llm_model"]),
         "--llm-revision",
         str(revisions["llm"]),
         "--chat-db-path",
@@ -277,7 +286,12 @@ def run(args: argparse.Namespace) -> int:
         "--max-runtime-seconds",
         str(args.max_runtime_seconds),
     ]
-    canary = subprocess.Popen(canary_command)
+    environment = {
+        **os.environ,
+        **build_verification_environment(binding),
+        "BGPKB_VERIFY_TARGET_URL": target_url,
+    }
+    canary = subprocess.Popen(canary_command, env=environment)
     pipeline_result: subprocess.CompletedProcess | None = None
     cleanup_error: Exception | None = None
     try:
@@ -287,11 +301,6 @@ def run(args: argparse.Namespace) -> int:
             process=canary,
             timeout_seconds=args.readiness_timeout_seconds,
         )
-        environment = {
-            **os.environ,
-            **build_verification_environment(binding),
-            "BGPKB_VERIFY_TARGET_URL": target_url,
-        }
         frozen = args.frozen_release_root.expanduser().resolve() / "data"
         pipeline_command = [
             sys.executable,

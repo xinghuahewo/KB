@@ -20,6 +20,7 @@ def _binding(tmp_path: Path) -> dict:
         "pipeline_run_id": "run-" + "1" * 32,
         "code_commit": "c" * 40,
         "prompt_version": "grounded_answer_prompt_v1",
+        "llm_model": "deepseek-v4-pro",
         "model_revisions": MODEL_REVISIONS,
         "chat_db_path": str(
             tmp_path / "candidate" / ".pipeline/tmp/canary-chat"
@@ -35,7 +36,11 @@ def test_stable_runner_builds_actual_bgp_revision_environment(tmp_path):
 
     environment = build_verification_environment(_binding(tmp_path))
 
+    assert environment["BGP_RAG_REQUIRE_RERANKER"] == "1"
     assert environment["BGP_GROUNDED_PROMPT_VERSION"] == "grounded_answer_prompt_v1"
+    assert environment["BGP_LLM_MODEL"] == "deepseek-v4-pro"
+    assert environment["DEEPSEEK_MODEL"] == "deepseek-v4-pro"
+    assert environment["DEEPSEEK_MODEL_REVISION"] == "llm-revision"
     assert environment["BGP_EMBEDDING_MODEL_REVISION"] == "embedding-revision"
     assert environment["BGP_RERANKER_MODEL_REVISION"] == "reranker-revision"
     assert environment["BGP_LLM_MODEL_REVISION"] == "llm-revision"
@@ -48,6 +53,7 @@ def test_stable_runner_builds_actual_bgp_revision_environment(tmp_path):
     [
         (("code_commit",), ""),
         (("prompt_version",), ""),
+        (("llm_model",), ""),
         (("model_revisions", "embedding"), ""),
         (("model_revisions", "reranker"), ""),
         (("model_revisions", "llm"), ""),
@@ -92,4 +98,3 @@ def test_runner_rejects_canary_health_binding_mismatch(tmp_path):
 
     with pytest.raises(CandidateVerificationRunnerError, match="binding"):
         validate_canary_health(health, binding)
-
