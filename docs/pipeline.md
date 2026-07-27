@@ -102,8 +102,8 @@ revision、锁定镜像 digest、状态和诊断；来源集合、任一 hash、
 3. 运行 `canonicalize`；只有 Schema/闭包失败或受新策略影响的文档才重新走 Docling。
 4. 运行 `semantic-build`，复核语义切块、治理状态、隔离清单和 chunk ID 迁移。
 5. 运行 `publish-index`，按 Retrieval Document → serving/governance DB/FTS → embedding JSONL → fast index → manifest 的顺序形成闭包。
-6. 在目标服务器通过 `bgpkb.workflows.candidate_verification_canary` 启动只绑定回环地址的隔离评测服务；该入口只接受已完整通过 `publish-index`、且失败阶段不早于 `verify-release` 的同一候选。
-7. 显式绑定评测 URL、代码提交、三类模型 revision 和 prompt version 后运行 `verify-release`；性能与黄金集报告必须由本次候选真实生成，失败只修复候选并从首个失效阶段恢复。
+6. 在目标服务器通过代码 release 自带的 `scripts/verify-candidate-release` 启动只绑定回环地址的隔离评测服务，并运行同一轮 `verify-release`；该入口只接受已完整通过 `publish-index`、且失败阶段不早于 `verify-release` 的同一候选。
+7. 稳定入口从代码 release manifest、候选 publish manifest 和显式参数形成代码提交、三类模型 revision、prompt version、checkpoint hash 与 pipeline run ID 的唯一绑定，并使用代码实际读取的 `BGP_GROUNDED_PROMPT_VERSION`、`BGP_EMBEDDING_MODEL_REVISION`、`BGP_RERANKER_MODEL_REVISION`、`BGP_LLM_MODEL_REVISION`。canary health 的绑定或 readiness 任一不一致时，在昂贵评测前停止；性能与黄金集报告必须由本次候选真实生成，失败只修复候选并从首个失效阶段恢复。
 8. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
 
 需要重处理时，第 3 步的生产命令必须显式包含
@@ -148,6 +148,27 @@ run ID 完全一致；`publish-index` checkpoint 也必须完整且 hash 一致�
 绑定也随退出消失。运维方在 `verify-release` 返回后必须立即终止隔离服务，最长运行时间仅作
 遗留进程的最终保险。`verify-release` 配置不使用 `--reuse-existing-report`，避免新候选误用
 不存在、其他候选或线上旧 release 的报告。
+
+FastAPI 与隔离 canary 使用相同的启动 readiness：在 `/health` 返回 200 前，以
+single-flight 方式加载一次 fast metadata 和 NumPy mmap，并执行一次矩阵查询以触碰完整
+检索路径。readiness 只接受 `fast_numpy`；缺失、损坏、加载失败或静默回退 JSONL 时，
+服务启动失败或 `/health` 返回 503。这样固定并发性能门禁包含真实服务首次可用后的第一批
+请求，但不会把重复 metadata 解析或未完成初始化伪装成可服务状态。性能脚本本身不发送
+额外预热请求、不删除冷启动样本，也不改变 500 ms 版本化阈值。
+
+示例稳定入口：
+
+```bash
+/home/wbt/DB-code-releases/<代码-release>/scripts/verify-candidate-release \
+  --candidate-dir /srv/bgpkb/artifacts/candidates/<候选-id> \
+  --frozen-release-root /srv/bgpkb/artifacts/releases/<冻结基线-id> \
+  --embedding-revision <锁定-revision> \
+  --reranker-revision <锁定-revision> \
+  --llm-revision <锁定-revision>
+```
+
+入口自动生成或接收唯一 run ID、派生 manifest/checkpoint hash、启动及终止 canary，
+并清理该 run-scoped 会话库；无需人工临时 `export` revision 变量。
 
 ## 成对发布与回滚
 

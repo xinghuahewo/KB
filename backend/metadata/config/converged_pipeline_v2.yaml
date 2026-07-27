@@ -306,6 +306,11 @@ stages:
     subtasks:
       - id: evaluate-server-performance
         module: bgpkb.pipeline.run_server_rag_performance_gate
+        code_dependencies:
+          - bgpkb.api.app
+          - bgpkb.infrastructure.fast_vector_index
+          - bgpkb.infrastructure.retrieval_runtime
+          - bgpkb.workflows.candidate_verification_runner
         failure_policy: collect_for_gate
         write_paths:
           - "{data_dir}"

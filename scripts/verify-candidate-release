@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CODE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PYTHON="$CODE_ROOT/backend/.venv/bin/python"
+
+if [[ ! -x "$PYTHON" ]]; then
+  echo "缺少锁定代码 release Python 环境：$PYTHON" >&2
+  exit 2
+fi
+
+exec "$PYTHON" -m bgpkb.workflows.candidate_verification_runner "$@"
