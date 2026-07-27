@@ -40,6 +40,7 @@ def validate_candidate(
     code_commit: str,
     prompt_version: str,
     model_revisions: Mapping[str, str],
+    llm_model: str = "deepseek-v4-pro",
 ) -> tuple[Path, dict]:
     candidate_root = candidate_dir.expanduser().resolve()
     state_path = candidate_root / ".pipeline" / "candidate.json"
@@ -88,8 +89,8 @@ def validate_candidate(
         or code_release_manifest.get("git_commit") != code_commit
     ):
         raise CandidateVerificationCanaryError("代码提交与当前不可变代码 release 不匹配")
-    if not prompt_version.strip():
-        raise CandidateVerificationCanaryError("prompt version 不得为空")
+    if not prompt_version.strip() or not llm_model.strip():
+        raise CandidateVerificationCanaryError("prompt version 与 LLM model 不得为空")
     if any(not str(model_revisions.get(role, "")).strip() for role in ("embedding", "reranker", "llm")):
         raise CandidateVerificationCanaryError("embedding、reranker、LLM revision 必须完整绑定")
     if publish.get("model_revisions", {}).get("embedding") != model_revisions["embedding"]:
@@ -129,10 +130,14 @@ def verification_environment(
         ),
         "BGPKB_CODE_COMMIT": str(binding["code_commit"]),
         "BGPKB_PIPELINE_RUN_ID": str(binding["pipeline_run_id"]),
+        "BGP_RAG_REQUIRE_RERANKER": "1",
         "BGP_GROUNDED_PROMPT_VERSION": str(binding["prompt_version"]),
+        "BGP_LLM_MODEL": str(binding["llm_model"]),
         "BGP_EMBEDDING_MODEL_REVISION": str(model_revisions["embedding"]),
         "BGP_RERANKER_MODEL_REVISION": str(model_revisions["reranker"]),
         "BGP_LLM_MODEL_REVISION": str(model_revisions["llm"]),
+        "DEEPSEEK_MODEL": str(binding["llm_model"]),
+        "DEEPSEEK_MODEL_REVISION": str(model_revisions["llm"]),
     }
     previous = {name: os.environ.get(name) for name in updates}
     chat_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-version", required=True)
     parser.add_argument("--embedding-revision", required=True)
     parser.add_argument("--reranker-revision", required=True)
+    parser.add_argument("--llm-model", required=True)
     parser.add_argument("--llm-revision", required=True)
     parser.add_argument("--chat-db-path", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
@@ -225,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         code_commit=args.code_commit,
         prompt_version=args.prompt_version,
         model_revisions=model_revisions,
+        llm_model=args.llm_model,
     )
     chat_db_path = validate_chat_db_path(
         candidate_root,
@@ -239,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         "pipeline_run_id": args.pipeline_run_id,
         "code_commit": args.code_commit,
         "prompt_version": args.prompt_version,
+        "llm_model": args.llm_model,
         "model_revisions": model_revisions,
         "chat_db_path": str(chat_db_path),
     }

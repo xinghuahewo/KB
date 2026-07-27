@@ -819,6 +819,7 @@ def verification_candidate_reader_enabled(
     ).hexdigest()
     code_commit = str(binding.get("code_commit", ""))
     prompt_version = str(binding.get("prompt_version", ""))
+    llm_model = str(binding.get("llm_model", ""))
     model_revisions = binding.get("model_revisions")
     if not isinstance(model_revisions, dict):
         return False
@@ -830,7 +831,7 @@ def verification_candidate_reader_enabled(
     pipeline_run_id = str(binding.get("pipeline_run_id", ""))
     if not re.fullmatch(r"run-[0-9a-f]{32}", pipeline_run_id):
         return False
-    if not prompt_version or any(
+    if not prompt_version or not llm_model or any(
         not str(model_revisions.get(role, "")).strip()
         for role in ("embedding", "reranker", "llm")
     ):
@@ -858,10 +859,14 @@ def verification_candidate_reader_enabled(
         and code_release_manifest.get("git_commit") == code_commit
         and published_model_revisions.get("embedding") == model_revisions["embedding"]
         and os.environ.get("BGPKB_CODE_COMMIT") == code_commit
+        and os.environ.get("BGP_RAG_REQUIRE_RERANKER") == "1"
         and os.environ.get("BGP_GROUNDED_PROMPT_VERSION") == prompt_version
+        and os.environ.get("BGP_LLM_MODEL") == llm_model
         and os.environ.get("BGP_EMBEDDING_MODEL_REVISION") == model_revisions["embedding"]
         and os.environ.get("BGP_RERANKER_MODEL_REVISION") == model_revisions["reranker"]
         and os.environ.get("BGP_LLM_MODEL_REVISION") == model_revisions["llm"]
+        and os.environ.get("DEEPSEEK_MODEL") == llm_model
+        and os.environ.get("DEEPSEEK_MODEL_REVISION") == model_revisions["llm"]
     )
 
 
