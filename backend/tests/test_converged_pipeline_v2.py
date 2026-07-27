@@ -583,17 +583,14 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
         for subtask in stage.subtasks
         if "--reuse-existing-report" in subtask.args
     }
-    assert reuse_existing_report_owners == {
-        ("verify-release", "evaluate-server-performance"),
-        ("verify-release", "build-release-gate-evidence"),
-    }
+    assert reuse_existing_report_owners == set()
 
     performance_subtask = next(
         subtask
         for subtask in definition.stages["verify-release"].subtasks
         if subtask.subtask_id == "evaluate-server-performance"
     )
-    assert "--reuse-existing-report" in performance_subtask.args
+    assert "--reuse-existing-report" not in performance_subtask.args
 
     canonicalize_subtasks = {
         subtask.subtask_id: subtask
