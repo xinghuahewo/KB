@@ -71,6 +71,10 @@ git merge --ff-only origin/main
   digest、GPU 1 和 `--network none` 命令，并在执行前通过 GPU 空闲、CUDA、离线环境与
   5 模型 hash 预检。任一文档失败、source/output hash 不符、路径越界或 manifest 集合
   不闭合都必须停止发布。
+- 非 root 容器只接受候选 `.pipeline/tmp/docling/run-*/input` 中由计划声明、hash 匹配的
+  `0444` 普通文件；拒绝 symlink、hardlink、重复目标和未声明输入。原始 `0600` 不变，
+  input mount 只读，output/work/cache 独立最小可写，禁止挂载整个候选。宿主逐文件验证后
+  才原子物化正式 payload 与 manifest，并在成功、失败或受控中断后清理 run staging。
 - 代码 release 与 artifact 必须成对记录，但不得交叉拼接未经验证的新旧版本。
 - release 目录不可变；修复必须产生新提交和新 release id。
 

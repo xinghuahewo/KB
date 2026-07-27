@@ -8,8 +8,11 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import socket
+import stat
 import subprocess
+import tempfile
 from typing import Callable, Literal
 
 from bgpkb import paths
@@ -42,12 +45,225 @@ def _safe_relative(value: str, *, field: str) -> Path:
     return path
 
 
+def _copy_verified_regular_file(
+    source: Path,
+    target: Path,
+    *,
+    expected_digest: str,
+    mode: int,
+) -> None:
+    """拒绝链接与 TOCTOU，把普通文件复制成哈希等价的原子输出。"""
+
+    source = Path(source)
+    target = Path(target).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    descriptor = None
+    try:
+        descriptor = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise CandidateDoclingReprocessError(
+                f"Docling 输入不是独立普通文件：{source}"
+            )
+        digest = hashlib.sha256()
+        with tempfile.NamedTemporaryFile(
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as target_handle, os.fdopen(descriptor, "rb", closefd=False) as source_handle:
+            temporary = Path(target_handle.name)
+            for block in iter(lambda: source_handle.read(1024 * 1024), b""):
+                digest.update(block)
+                target_handle.write(block)
+            target_handle.flush()
+            os.fsync(target_handle.fileno())
+        after = os.fstat(descriptor)
+        actual_digest = "sha256:" + digest.hexdigest()
+        if (
+            actual_digest != expected_digest
+            or _sha256(temporary) != expected_digest
+            or (
+                before.st_dev,
+                before.st_ino,
+                before.st_size,
+                before.st_mtime_ns,
+                before.st_ctime_ns,
+            )
+            != (
+                after.st_dev,
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            )
+        ):
+            raise CandidateDoclingReprocessError(
+                f"Docling 只读 staging hash 不匹配：{source}"
+            )
+        temporary.chmod(mode)
+        os.replace(temporary, target)
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
 def _within_candidate(candidate_dir: Path, value: Path, *, field: str) -> Path:
     candidate = Path(candidate_dir).resolve()
     resolved = Path(value).resolve()
     if resolved != candidate and not resolved.is_relative_to(candidate):
         raise CandidateDoclingReprocessError(f"{field} 路径越界：{resolved}")
     return resolved
+
+
+def _assert_no_symlink_chain(path: Path, *, boundary: Path, field: str) -> None:
+    boundary = Path(boundary).resolve()
+    path = Path(path)
+    try:
+        relative = path.relative_to(boundary)
+    except ValueError as exc:
+        raise CandidateDoclingReprocessError(f"{field} 路径越界：{path}") from exc
+    current = boundary
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise CandidateDoclingReprocessError(
+                f"{field} 路径链不得包含 symlink：{current}"
+            )
+
+
+def _regular_file_identity(path: Path, *, field: str) -> tuple[int, ...]:
+    try:
+        value = Path(path).lstat()
+    except OSError as exc:
+        raise CandidateDoclingReprocessError(f"{field} 不可读：{exc}") from exc
+    if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1:
+        raise CandidateDoclingReprocessError(f"{field} 不是独立普通文件：{path}")
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _stage_container_inputs(
+    *,
+    candidate_dir: Path,
+    runtime_tmp: Path,
+    source_manifest_path: Path,
+    source_store_root: Path,
+    plan_path: Path,
+    runtime_evidence_path: Path,
+    plan: dict,
+) -> dict[str, Path]:
+    """在候选 tmp 中准备非 root 容器可读的最小只读输入闭包。"""
+
+    stage_root = _within_candidate(
+        candidate_dir, runtime_tmp / "readonly-inputs", field="Docling staging"
+    )
+    staged_source_store = stage_root / "source-store"
+    staged_source_manifest = stage_root / "source_ingest.json"
+    staged_plan = stage_root / "docling_reprocess_plan_v1.json"
+    staged_runtime_evidence = stage_root / "docling_runtime_evidence_v1.json"
+    for field, value in (
+        ("source manifest", source_manifest_path),
+        ("Docling plan", plan_path),
+        ("Docling runtime evidence", runtime_evidence_path),
+        ("source store", source_store_root),
+    ):
+        _assert_no_symlink_chain(value, boundary=candidate_dir, field=field)
+    source_manifest_identity = _regular_file_identity(
+        source_manifest_path, field="source manifest"
+    )
+    _regular_file_identity(plan_path, field="Docling plan")
+    _regular_file_identity(runtime_evidence_path, field="Docling runtime evidence")
+    source_manifest, snapshots = _load_source_manifest(
+        source_manifest_path, Path(source_store_root).resolve()
+    )
+    if _sha256(source_manifest_path) != plan["source_ingest_manifest_sha256"]:
+        raise CandidateDoclingReprocessError("Docling staging source manifest hash 不匹配")
+    source_rows = {
+        row["source_id"]: row for row in source_manifest["sources"]
+    }
+    selected_rows = []
+    staged_targets = set()
+    for planned in plan["sources"]:
+        source_id = planned["source_id"]
+        snapshot = snapshots[source_id]
+        relative = _safe_relative(
+            str(snapshot["object_path"]), field="snapshot object_path"
+        )
+        source = Path(source_store_root).resolve() / relative
+        _assert_no_symlink_chain(
+            source,
+            boundary=Path(source_store_root).resolve(),
+            field=f"Docling source object {source_id}",
+        )
+        resolved_source = source.resolve()
+        source_store = Path(source_store_root).resolve()
+        if not resolved_source.is_relative_to(source_store):
+            raise CandidateDoclingReprocessError(
+                f"Docling source object 路径越界：{source_id}"
+            )
+        target = (staged_source_store / relative).resolve()
+        _within_candidate(candidate_dir, target, field="Docling staged source")
+        if target in staged_targets:
+            raise CandidateDoclingReprocessError(
+                f"Docling staged source 目标重复：{source_id}"
+            )
+        staged_targets.add(target)
+        _copy_verified_regular_file(
+            source,
+            target,
+            expected_digest=planned["object_digest"],
+            mode=0o444,
+        )
+        selected_rows.append(source_rows[source_id])
+    staged_manifest = {**source_manifest, "sources": selected_rows}
+    atomic_write_json(staged_source_manifest, staged_manifest, indent=2)
+    staged_source_manifest.chmod(0o444)
+    _copy_verified_regular_file(
+        plan_path,
+        staged_plan,
+        expected_digest=_sha256(plan_path),
+        mode=0o444,
+    )
+    _copy_verified_regular_file(
+        runtime_evidence_path,
+        staged_runtime_evidence,
+        expected_digest=_sha256(runtime_evidence_path),
+        mode=0o444,
+    )
+    if _sha256(source_manifest_path) != plan["source_ingest_manifest_sha256"]:
+        raise CandidateDoclingReprocessError(
+            "Docling staging 期间 source manifest 发生变化"
+        )
+    if (
+        _regular_file_identity(source_manifest_path, field="source manifest")
+        != source_manifest_identity
+    ):
+        raise CandidateDoclingReprocessError(
+            "Docling staging 期间 source manifest 身份发生变化"
+        )
+    for directory in sorted(
+        (path for path in stage_root.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        directory.chmod(0o555)
+    stage_root.chmod(0o555)
+    return {
+        "root": stage_root,
+        "source_store": staged_source_store,
+        "source_manifest": staged_source_manifest,
+        "plan": staged_plan,
+        "runtime_evidence": staged_runtime_evidence,
+    }
 
 
 def _runtime_identity(policy: dict) -> dict:
@@ -185,8 +401,18 @@ def _validate_receipt(
             raise CandidateDoclingReprocessError(
                 f"Docling payload 路径越界：{source_id}"
             )
-        if not payload_path.is_file():
+        try:
+            payload_stat = payload_path.lstat()
+        except OSError:
             raise CandidateDoclingReprocessError(f"Docling payload 缺失：{source_id}")
+        if (
+            not stat.S_ISREG(payload_stat.st_mode)
+            or payload_stat.st_nlink != 1
+            or payload_path.is_symlink()
+        ):
+            raise CandidateDoclingReprocessError(
+                f"Docling payload 不是独立普通文件：{source_id}"
+            )
         if row.get("payload_sha256") != _sha256(payload_path):
             raise CandidateDoclingReprocessError(
                 f"Docling payload 输出 hash 不匹配：{source_id}"
@@ -198,6 +424,95 @@ def _validate_receipt(
             raise CandidateDoclingReprocessError(
                 f"Docling payload parser revision 不匹配：{source_id}"
             )
+
+
+def _publish_payloads_atomically(
+    *,
+    candidate_dir: Path,
+    receipt: dict,
+    staged_payload_root: Path,
+    payload_root: Path,
+) -> None:
+    """验证后的 payload 先形成完整 incoming 目录，再原子发布正式回执。"""
+
+    payload_root = _within_candidate(
+        candidate_dir, payload_root, field="Docling payload root"
+    )
+    payload_root.parent.mkdir(parents=True, exist_ok=True)
+    incoming = Path(
+        tempfile.mkdtemp(
+            prefix=".incoming-docling-payloads-",
+            dir=payload_root.parent,
+        )
+    )
+    published = False
+    try:
+        seen = set()
+        for row in receipt["documents"]:
+            relative = _safe_relative(
+                str(row["payload_path"]), field="Docling payload"
+            )
+            if relative in seen:
+                raise CandidateDoclingReprocessError(
+                    f"Docling payload 目标重复：{relative.as_posix()}"
+                )
+            seen.add(relative)
+            _copy_verified_regular_file(
+                Path(staged_payload_root) / relative,
+                incoming / relative,
+                expected_digest=row["payload_sha256"],
+                mode=0o600,
+            )
+        atomic_write_json(
+            incoming / "docling_payload_manifest_v1.json",
+            receipt,
+            indent=2,
+        )
+        for directory in sorted(
+            (path for path in incoming.rglob("*") if path.is_dir()),
+            key=lambda path: len(path.parts),
+            reverse=True,
+        ):
+            directory.chmod(0o750)
+        incoming.chmod(0o750)
+        if payload_root.exists():
+            if not payload_root.is_dir() or any(payload_root.iterdir()):
+                raise CandidateDoclingReprocessError(
+                    "正式 Docling payload 目录已存在且非空，拒绝覆盖"
+                )
+            payload_root.rmdir()
+        os.replace(incoming, payload_root)
+        published = True
+    finally:
+        if not published and incoming.exists():
+            shutil.rmtree(incoming)
+
+
+def _cleanup_run_staging(candidate_dir: Path, run_root: Path) -> None:
+    """只清理候选 docling/run-* 临时目录，并恢复只读目录的删除权限。"""
+
+    candidate = Path(candidate_dir).resolve()
+    run_root = Path(run_root).resolve()
+    expected_parent = candidate / ".pipeline" / "tmp" / "docling"
+    if (
+        run_root.parent != expected_parent
+        or not run_root.name.startswith("run-")
+        or not run_root.is_relative_to(candidate)
+    ):
+        raise CandidateDoclingReprocessError(
+            f"拒绝清理非法 Docling staging：{run_root}"
+        )
+    if not run_root.exists():
+        return
+    for root, directories, _files in os.walk(run_root, topdown=True):
+        root_path = Path(root)
+        if not root_path.is_symlink():
+            root_path.chmod(0o700)
+        for name in directories:
+            directory = root_path / name
+            if not directory.is_symlink():
+                directory.chmod(0o700)
+    shutil.rmtree(run_root)
 
 
 def _resolve_local_addresses(target_host: str) -> set[str]:
@@ -410,6 +725,7 @@ class SSHDoclingRunner:
         release_id = kwargs["release_id"]
         runtime_identity = kwargs["runtime_identity"]
         policy = kwargs["policy"]
+        plan = kwargs["plan"]
         evidence = self._preflight(policy=policy)
         runtime_evidence_path = (
             candidate_dir / "data" / "manifests" / "docling_runtime_evidence_v1.json"
@@ -423,88 +739,123 @@ class SSHDoclingRunner:
             **evidence,
         }
         atomic_write_json(runtime_evidence_path, runtime_evidence, indent=2)
-        payload_root.mkdir(parents=True, exist_ok=True)
-        runtime_tmp = candidate_dir / ".pipeline" / "tmp" / "docling"
-        runtime_cache = candidate_dir / ".pipeline" / "cache" / "docling"
-        runtime_tmp.mkdir(parents=True, exist_ok=True)
-        runtime_cache.mkdir(parents=True, exist_ok=True)
-        for directory in (payload_root, runtime_tmp, runtime_cache):
-            directory.chmod(0o777)
-        receipt_path = payload_root / "docling_payload_manifest_v1.json"
-        route = policy["docling"]
-        def mount(source: Path, *, readonly: bool = False) -> str:
-            value = f"type=bind,src={source},dst={source}"
-            return value + ",readonly" if readonly else value
+        runtime_base = candidate_dir / ".pipeline" / "tmp" / "docling"
+        runtime_base.mkdir(parents=True, exist_ok=True)
+        runtime_base.chmod(0o750)
+        run_root = Path(tempfile.mkdtemp(prefix="run-", dir=runtime_base))
+        try:
+            staged = _stage_container_inputs(
+                candidate_dir=candidate_dir,
+                runtime_tmp=run_root / "input",
+                source_manifest_path=source_manifest_path,
+                source_store_root=source_store_root,
+                plan_path=plan_path,
+                runtime_evidence_path=runtime_evidence_path,
+                plan=plan,
+            )
+            staged_payload_root = run_root / "output"
+            input_work_root = run_root / "work" / "inputs"
+            runtime_process_tmp = run_root / "work" / "tmp"
+            runtime_cache = run_root / "cache"
+            for directory in (
+                staged_payload_root,
+                input_work_root,
+                runtime_process_tmp,
+                runtime_cache,
+            ):
+                directory.mkdir(parents=True, exist_ok=True)
+                directory.chmod(0o777)
+            receipt_path = (
+                staged_payload_root / "docling_payload_manifest_v1.json"
+            )
+            route = policy["docling"]
 
-        input_work_root = runtime_tmp / "inputs"
-        command = [
-            "docker",
-            "run",
-            "--rm",
-            "--device",
-            route["device"],
-            "--network",
-            route["network"],
-            "--env",
-            f"PYTHONPATH={code_root / 'backend' / 'src'}",
-            "--env",
-            "HF_HUB_OFFLINE=1",
-            "--env",
-            "TRANSFORMERS_OFFLINE=1",
-            "--env",
-            "DOCLING_ARTIFACTS_PATH=/opt/docling/models",
-            "--env",
-            f"TMPDIR={runtime_tmp}",
-            "--env",
-            f"XDG_CACHE_HOME={runtime_cache}",
-            "--mount",
-            mount(candidate_dir),
-            "--mount",
-            mount(source_store_root, readonly=True),
-            "--mount",
-            mount(source_manifest_path, readonly=True),
-            "--mount",
-            mount(plan_path, readonly=True),
-            "--mount",
-            mount(runtime_evidence_path, readonly=True),
-            "--mount",
-            mount(code_root, readonly=True),
-            "--workdir",
-            str(code_root / "backend"),
-            "--entrypoint",
-            "python",
-            route["image"],
-            "-m",
-            "bgpkb.ingestion.docling_payload_worker",
-            "--plan",
-            str(plan_path),
-            "--source-manifest",
-            str(source_manifest_path),
-            "--source-store",
-            str(source_store_root),
-            "--output-root",
-            str(payload_root),
-            "--input-work-root",
-            str(input_work_root),
-            "--receipt",
-            str(receipt_path),
-            "--runtime-evidence",
-            str(runtime_evidence_path),
-            "--release-id",
-            release_id,
-        ]
-        try:
+            def mount(source: Path, *, readonly: bool = False) -> str:
+                value = f"type=bind,src={source},dst={source}"
+                return value + ",readonly" if readonly else value
+
+            command = [
+                "docker",
+                "run",
+                "--rm",
+                "--device",
+                route["device"],
+                "--network",
+                route["network"],
+                "--env",
+                f"PYTHONPATH={code_root / 'backend' / 'src'}",
+                "--env",
+                "HF_HUB_OFFLINE=1",
+                "--env",
+                "TRANSFORMERS_OFFLINE=1",
+                "--env",
+                "DOCLING_ARTIFACTS_PATH=/opt/docling/models",
+                "--env",
+                f"TMPDIR={runtime_process_tmp}",
+                "--env",
+                f"XDG_CACHE_HOME={runtime_cache}",
+                "--mount",
+                mount(staged["root"], readonly=True),
+                "--mount",
+                mount(staged_payload_root),
+                "--mount",
+                mount(run_root / "work"),
+                "--mount",
+                mount(runtime_cache),
+                "--mount",
+                mount(code_root, readonly=True),
+                "--workdir",
+                str(code_root / "backend"),
+                "--entrypoint",
+                "python",
+                route["image"],
+                "-m",
+                "bgpkb.ingestion.docling_payload_worker",
+                "--plan",
+                str(staged["plan"]),
+                "--source-manifest",
+                str(staged["source_manifest"]),
+                "--source-store",
+                str(staged["source_store"]),
+                "--output-root",
+                str(staged_payload_root),
+                "--input-work-root",
+                str(input_work_root),
+                "--receipt",
+                str(receipt_path),
+                "--runtime-evidence",
+                str(staged["runtime_evidence"]),
+                "--release-id",
+                release_id,
+            ]
             self._run_target(route["ssh_target"], command)
+            try:
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                raise CandidateDoclingReprocessError(
+                    f"Docling payload 回执不可读：{exc}"
+                ) from exc
+            _source_manifest, snapshots = _load_source_manifest(
+                source_manifest_path, source_store_root
+            )
+            _validate_receipt(
+                receipt=receipt,
+                plan=plan,
+                snapshots=snapshots,
+                payload_root=staged_payload_root,
+                release_id=release_id,
+                runtime_identity=runtime_identity,
+            )
+            _publish_payloads_atomically(
+                candidate_dir=candidate_dir,
+                receipt=receipt,
+                staged_payload_root=staged_payload_root,
+                payload_root=payload_root,
+            )
+            return receipt
         finally:
-            for directory in (payload_root, runtime_tmp, runtime_cache):
-                if directory.exists():
-                    directory.chmod(0o750)
-        try:
-            return json.loads(receipt_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise CandidateDoclingReprocessError(
-                f"Docling payload 回执不可读：{exc}"
-            ) from exc
+            if run_root.exists():
+                _cleanup_run_staging(candidate_dir, run_root)
 
 
 def run_candidate_docling_reprocess(

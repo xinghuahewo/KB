@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -485,6 +486,402 @@ def test_local_and_remote_transports_execute_equivalent_locked_commands(tmp_path
     local_calls = collect("local", {"10.99.8.28"})
     remote_calls = collect("remote", set())
     assert [shlex.split(command[-1]) for command in remote_calls] == local_calls
+
+
+def _set_original_inputs_private(inputs):
+    paths = [
+        Path(inputs["plan_path"]),
+        Path(inputs["source_manifest"]),
+        *Path(inputs["source_store"]).rglob("*"),
+    ]
+    regular_files = [path for path in paths if path.is_file()]
+    for path in regular_files:
+        path.chmod(0o600)
+    return {path: path.stat().st_mode & 0o777 for path in regular_files}
+
+
+def _runtime_evidence(candidate, runtime_identity):
+    path = candidate / "data" / "manifests" / "docling_runtime_evidence_v1.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "docling_runtime_evidence_v1",
+                "release_id": candidate.name,
+                "status": "complete",
+                "runtime": runtime_identity,
+                "preflight": {
+                    "models": [
+                        {
+                            "name": f"model-{index}",
+                            "expected_sha256": f"hash-{index}",
+                            "actual_sha256": f"hash-{index}",
+                        }
+                        for index in range(5)
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(0o600)
+    return path
+
+
+def test_staging_copies_only_declared_hash_bound_inputs_and_keeps_original_0600(
+    tmp_path,
+):
+    from bgpkb.ingestion.candidate_docling_reprocess import _stage_container_inputs
+
+    inputs = _write_inputs(tmp_path, count=2)
+    candidate = Path(inputs["candidate"])
+    plan_path = Path(inputs["plan_path"])
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan["sources"] = plan["sources"][:1]
+    plan["summary"]["requested"] = 1
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    runtime_identity = {
+        "pipeline_revision": "docling-html-reprocess-v1",
+        "parser_version": "2.107.0",
+        "image": "bgpkb-docling-v2:2.107.0-cu128",
+        "image_digest": IMAGE_DIGEST,
+        "gpu_index": 1,
+        "device": "nvidia.com/gpu=1",
+        "network": "none",
+    }
+    evidence = _runtime_evidence(candidate, runtime_identity)
+    original_modes = _set_original_inputs_private(inputs)
+
+    staged = _stage_container_inputs(
+        candidate_dir=candidate,
+        runtime_tmp=candidate / ".pipeline" / "tmp" / "run-test" / "input",
+        source_manifest_path=Path(inputs["source_manifest"]),
+        source_store_root=Path(inputs["source_store"]),
+        plan_path=plan_path,
+        runtime_evidence_path=evidence,
+        plan=plan,
+    )
+
+    staged_manifest = json.loads(staged["source_manifest"].read_text(encoding="utf-8"))
+    assert [row["source_id"] for row in staged_manifest["sources"]] == [
+        inputs["source_ids"][0]
+    ]
+    staged_objects = [path for path in staged["source_store"].rglob("*") if path.is_file()]
+    assert len(staged_objects) == 1
+    assert all(path.stat().st_mode & 0o777 == 0o444 for path in staged_objects)
+    assert staged["root"].stat().st_mode & 0o777 == 0o555
+    assert all(path.stat().st_mode & 0o777 == mode for path, mode in original_modes.items())
+
+
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
+def test_staging_rejects_linked_source_objects(tmp_path, link_kind):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        _stage_container_inputs,
+    )
+
+    inputs = _write_inputs(tmp_path, count=1)
+    candidate = Path(inputs["candidate"])
+    plan = json.loads(Path(inputs["plan_path"]).read_text(encoding="utf-8"))
+    object_path = (
+        Path(inputs["source_store"]) / plan["sources"][0]["object_path"]
+    )
+    if link_kind == "symlink":
+        target = tmp_path / "linked-source"
+        target.write_bytes(object_path.read_bytes())
+        object_path.unlink()
+        object_path.symlink_to(target)
+        message = "symlink"
+    else:
+        os.link(object_path, tmp_path / "second-link")
+        message = "独立普通文件"
+    evidence = _runtime_evidence(candidate, {
+        "pipeline_revision": "docling-html-reprocess-v1",
+        "parser_version": "2.107.0",
+        "image": "bgpkb-docling-v2:2.107.0-cu128",
+        "image_digest": IMAGE_DIGEST,
+        "gpu_index": 1,
+        "device": "nvidia.com/gpu=1",
+        "network": "none",
+    })
+
+    with pytest.raises((CandidateDoclingReprocessError, ValueError), match=message):
+        _stage_container_inputs(
+            candidate_dir=candidate,
+            runtime_tmp=candidate / ".pipeline" / "tmp" / "run-test" / "input",
+            source_manifest_path=Path(inputs["source_manifest"]),
+            source_store_root=Path(inputs["source_store"]),
+            plan_path=Path(inputs["plan_path"]),
+            runtime_evidence_path=evidence,
+            plan=plan,
+        )
+
+
+def test_staging_rejects_hash_change_before_copy(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import _stage_container_inputs
+
+    inputs = _write_inputs(tmp_path, count=1)
+    candidate = Path(inputs["candidate"])
+    plan = json.loads(Path(inputs["plan_path"]).read_text(encoding="utf-8"))
+    object_path = Path(inputs["source_store"]) / plan["sources"][0]["object_path"]
+    object_path.write_bytes(object_path.read_bytes() + b"changed")
+    evidence = _runtime_evidence(candidate, {
+        "pipeline_revision": "docling-html-reprocess-v1",
+        "parser_version": "2.107.0",
+        "image": "bgpkb-docling-v2:2.107.0-cu128",
+        "image_digest": IMAGE_DIGEST,
+        "gpu_index": 1,
+        "device": "nvidia.com/gpu=1",
+        "network": "none",
+    })
+
+    with pytest.raises(Exception, match="hash"):
+        _stage_container_inputs(
+            candidate_dir=candidate,
+            runtime_tmp=candidate / ".pipeline" / "tmp" / "run-test" / "input",
+            source_manifest_path=Path(inputs["source_manifest"]),
+            source_store_root=Path(inputs["source_store"]),
+            plan_path=Path(inputs["plan_path"]),
+            runtime_evidence_path=evidence,
+            plan=plan,
+        )
+
+
+def test_staging_rejects_duplicate_declared_targets(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        _stage_container_inputs,
+    )
+
+    inputs = _write_inputs(tmp_path, count=2)
+    candidate = Path(inputs["candidate"])
+    plan_path = Path(inputs["plan_path"])
+    manifest_path = Path(inputs["source_manifest"])
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    first_snapshot = manifest["sources"][0]["snapshot"]
+    second_snapshot = manifest["sources"][1]["snapshot"]
+    for field in ("object_path", "object_digest", "byte_size"):
+        second_snapshot[field] = first_snapshot[field]
+        plan["sources"][1][field] = first_snapshot[field]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    plan["source_ingest_manifest_sha256"] = _sha256(manifest_path.read_bytes())
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    evidence = _runtime_evidence(candidate, _locked_runtime_identity())
+
+    with pytest.raises(CandidateDoclingReprocessError, match="目标重复"):
+        _stage_container_inputs(
+            candidate_dir=candidate,
+            runtime_tmp=candidate / ".pipeline" / "tmp" / "run-test" / "input",
+            source_manifest_path=manifest_path,
+            source_store_root=Path(inputs["source_store"]),
+            plan_path=plan_path,
+            runtime_evidence_path=evidence,
+            plan=plan,
+        )
+
+
+def test_atomic_payload_publish_cleans_failure_and_success_staging(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        _publish_payloads_atomically,
+    )
+
+    candidate = tmp_path / "candidate"
+    staged = candidate / ".pipeline" / "tmp" / "run" / "output"
+    staged.mkdir(parents=True)
+    payload = staged / "source.json"
+    payload.write_text('{"ok": true}\n', encoding="utf-8")
+    receipt = {
+        "documents": [
+            {
+                "source_id": "source",
+                "payload_path": "source.json",
+                "payload_sha256": "sha256:" + "0" * 64,
+            }
+        ]
+    }
+    formal = candidate / "data" / "derived" / "docling_payloads"
+
+    with pytest.raises(CandidateDoclingReprocessError, match="hash"):
+        _publish_payloads_atomically(
+            candidate_dir=candidate,
+            receipt=receipt,
+            staged_payload_root=staged,
+            payload_root=formal,
+        )
+    assert not formal.exists()
+    assert not list(formal.parent.glob(".incoming-docling-payloads-*"))
+
+    receipt["documents"][0]["payload_sha256"] = _sha256(payload.read_bytes())
+    _publish_payloads_atomically(
+        candidate_dir=candidate,
+        receipt=receipt,
+        staged_payload_root=staged,
+        payload_root=formal,
+    )
+    assert (formal / "docling_payload_manifest_v1.json").is_file()
+    assert not list(formal.parent.glob(".incoming-docling-payloads-*"))
+
+
+def _locked_runtime_identity():
+    return {
+        "pipeline_revision": "docling-html-reprocess-v1",
+        "parser_version": "2.107.0",
+        "image": "bgpkb-docling-v2:2.107.0-cu128",
+        "image_digest": IMAGE_DIGEST,
+        "gpu_index": 1,
+        "device": "nvidia.com/gpu=1",
+        "network": "none",
+    }
+
+
+def _preflight_evidence():
+    return {
+        "execution_transport": "local",
+        "target_host": "10.99.8.28",
+        "gpu": {
+            "index": 1,
+            "uuid": "GPU-test-1",
+            "memory_used_mib": 3,
+            "memory_total_mib": 11264,
+            "utilization_percent": 0,
+            "active_compute_processes": 0,
+        },
+        "image_id": IMAGE_DIGEST,
+        "preflight": {
+            "ok": True,
+            "gpu": {"cuda_available": True},
+            "models": [
+                {
+                    "name": f"model-{index}",
+                    "expected_sha256": f"hash-{index}",
+                    "actual_sha256": f"hash-{index}",
+                }
+                for index in range(5)
+            ],
+        },
+    }
+
+
+def test_runner_uses_minimal_mounts_and_cleans_run_staging_on_success(
+    tmp_path, monkeypatch
+):
+    from bgpkb.ingestion.candidate_docling_reprocess import SSHDoclingRunner
+    from bgpkb.ingestion.canonicalize_candidate import load_reprocess_policy
+    from bgpkb.ingestion.docling_payload_worker import run_payload_worker
+
+    inputs = _write_inputs(tmp_path, count=1)
+    candidate = Path(inputs["candidate"])
+    original_modes = _set_original_inputs_private(inputs)
+    policy = load_reprocess_policy(Path(inputs["policy_path"]))
+    plan = json.loads(Path(inputs["plan_path"]).read_text(encoding="utf-8"))
+    captured = {}
+
+    def command_runner(command, **kwargs):
+        captured["command"] = command
+
+        def argument(flag):
+            return Path(command[command.index(flag) + 1])
+
+        result = run_payload_worker(
+            plan_path=argument("--plan"),
+            source_manifest_path=argument("--source-manifest"),
+            source_store_root=argument("--source-store"),
+            output_root=argument("--output-root"),
+            input_work_root=argument("--input-work-root"),
+            receipt_path=argument("--receipt"),
+            runtime_evidence_path=argument("--runtime-evidence"),
+            release_id=command[command.index("--release-id") + 1],
+            parser=lambda source: _payload(source.stem),
+        )
+        return subprocess.CompletedProcess(
+            command, 0, json.dumps(result["summary"]), ""
+        )
+
+    runner = SSHDoclingRunner(
+        command_runner=command_runner,
+        local_address_resolver=lambda _host: {"10.99.8.28"},
+    )
+    monkeypatch.setattr(
+        runner, "_preflight", lambda *, policy: _preflight_evidence()
+    )
+    receipt = runner(
+        candidate_dir=candidate,
+        plan=plan,
+        plan_path=Path(inputs["plan_path"]),
+        source_manifest_path=Path(inputs["source_manifest"]),
+        source_store_root=Path(inputs["source_store"]),
+        payload_root=candidate / "data" / "derived" / "docling_payloads",
+        code_root=Path(__file__).parents[2],
+        release_id=candidate.name,
+        runtime_identity=_locked_runtime_identity(),
+        policy=policy,
+    )
+
+    assert receipt["status"] == "complete"
+    command = captured["command"]
+    mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+    assert all(f"src={candidate},dst={candidate}" not in mount for mount in mounts)
+    assert all(str(inputs["source_store"]) not in mount for mount in mounts)
+    assert all(str(inputs["source_manifest"]) not in mount for mount in mounts)
+    assert all(str(inputs["plan_path"]) not in mount for mount in mounts)
+    assert any(
+        "/input/readonly-inputs" in mount and mount.endswith(",readonly")
+        for mount in mounts
+    )
+    assert "--user" not in command
+    assert (candidate / "data/derived/docling_payloads/docling_payload_manifest_v1.json").is_file()
+    runtime_base = candidate / ".pipeline" / "tmp" / "docling"
+    assert runtime_base.is_dir() and not list(runtime_base.iterdir())
+    assert all(path.stat().st_mode & 0o777 == mode for path, mode in original_modes.items())
+
+
+def test_runner_failure_cleans_writable_staging_and_leaves_no_formal_manifest(
+    tmp_path, monkeypatch
+):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        SSHDoclingRunner,
+    )
+    from bgpkb.ingestion.canonicalize_candidate import load_reprocess_policy
+
+    inputs = _write_inputs(tmp_path, count=1)
+    candidate = Path(inputs["candidate"])
+    policy = load_reprocess_policy(Path(inputs["policy_path"]))
+    plan = json.loads(Path(inputs["plan_path"]).read_text(encoding="utf-8"))
+
+    def command_runner(command, **kwargs):
+        output = Path(command[command.index("--output-root") + 1])
+        (output / "partial.json").write_text("partial", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 3, "", "worker failed")
+
+    runner = SSHDoclingRunner(
+        command_runner=command_runner,
+        local_address_resolver=lambda _host: {"10.99.8.28"},
+    )
+    monkeypatch.setattr(
+        runner, "_preflight", lambda *, policy: _preflight_evidence()
+    )
+    with pytest.raises(CandidateDoclingReprocessError, match="worker failed"):
+        runner(
+            candidate_dir=candidate,
+            plan=plan,
+            plan_path=Path(inputs["plan_path"]),
+            source_manifest_path=Path(inputs["source_manifest"]),
+            source_store_root=Path(inputs["source_store"]),
+            payload_root=candidate / "data" / "derived" / "docling_payloads",
+            code_root=Path(__file__).parents[2],
+            release_id=candidate.name,
+            runtime_identity=_locked_runtime_identity(),
+            policy=policy,
+        )
+
+    runtime_base = candidate / ".pipeline" / "tmp" / "docling"
+    assert runtime_base.is_dir() and not list(runtime_base.iterdir())
+    assert not (
+        candidate / "data/derived/docling_payloads/docling_payload_manifest_v1.json"
+    ).exists()
+    assert not list((candidate / "data/derived").glob(".incoming-docling-payloads-*"))
 
 
 def test_container_worker_uses_snapshot_hash_and_writes_auditable_receipt(tmp_path):
