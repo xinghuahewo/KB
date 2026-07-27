@@ -106,9 +106,11 @@ revision、锁定镜像 digest、状态和诊断；来源集合、任一 hash、
 7. 生成新的不可变 release、`SHA256SUMS`、迁移证据和成对回滚命令，不修改历史 release。
 
 需要重处理时，第 3 步的生产命令必须显式包含
-`--docling-execution-mode remote`。编排器先写候选内计划，再通过固定无代理 SSH 调度锁定
-Docling 容器，最后复用 `docling_reprocess_materializer` 生成严格 Canonical；不得把容器
-payload、手工生成的成功报告或旧 checkpoint 直接拼入 release。
+`--docling-execution-mode remote`。编排器先写候选内计划，再验证目标主机：已在
+`10.99.8.28` 本机运行时直接调用锁定 Docker 命令；从外部运行时才通过固定无代理 SSH
+调度同一组命令。主机判定不闭合、显式 local 与本机地址不匹配或 SSH 失败均须停止。
+最后复用 `docling_reprocess_materializer` 生成严格 Canonical；不得把容器 payload、
+手工生成的成功报告或旧 checkpoint 直接拼入 release。
 
 v1 parsed/chunks 和 legacy reader 只保留为受控只读迁移入口，不得进入新 serving、embedding、真实评测或治理决定；正式退役必须等待一个稳定发布周期和零生产引用证明。
 

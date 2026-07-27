@@ -66,9 +66,11 @@ git merge --ff-only origin/main
   `--docling-execution-mode remote`。计划、payload、运行时证据、严格 Canonical、manifest、
   日志、临时目录和缓存均只能写候选；旧 release、`current`、`previous` 与冻结 snapshot
   保持只读。默认模式和 `--plan-only` 不得启动 SSH、Docker 或 GPU 作业。
-- 远端 Docling 必须使用固定无代理 SSH、锁定镜像 digest、GPU 1 和 `--network none`，
-  并在执行前通过 GPU 空闲、CUDA、离线环境与 5 模型 hash 预检。任一文档失败、source/output
-  hash 不符、路径越界或 manifest 集合不闭合都必须停止发布。
+- Docling runner 必须先验证目标主机；在 `10.99.8.28` 本机时直接运行，从外部运行时使用
+  固定无代理 SSH，禁止 SSH 自连或修改服务器密钥。两种执行面必须使用等价的锁定镜像
+  digest、GPU 1 和 `--network none` 命令，并在执行前通过 GPU 空闲、CUDA、离线环境与
+  5 模型 hash 预检。任一文档失败、source/output hash 不符、路径越界或 manifest 集合
+  不闭合都必须停止发布。
 - 代码 release 与 artifact 必须成对记录，但不得交叉拼接未经验证的新旧版本。
 - release 目录不可变；修复必须产生新提交和新 release id。
 
