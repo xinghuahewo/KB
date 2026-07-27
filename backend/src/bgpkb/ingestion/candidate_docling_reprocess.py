@@ -8,8 +8,9 @@ import json
 import os
 from pathlib import Path
 import shlex
+import socket
 import subprocess
-from typing import Callable
+from typing import Callable, Literal
 
 from bgpkb import paths
 from bgpkb.ingestion.canonicalize_candidate import (
@@ -199,15 +200,47 @@ def _validate_receipt(
             )
 
 
+def _resolve_local_addresses(target_host: str) -> set[str]:
+    """解析本机地址；UDP 只选路由源地址，不发送任何数据。"""
+
+    addresses = {"127.0.0.1", "::1"}
+    for hostname in {socket.gethostname(), socket.getfqdn()}:
+        try:
+            addresses.update(
+                row[4][0] for row in socket.getaddrinfo(hostname, None)
+            )
+        except OSError:
+            continue
+    try:
+        target_rows = socket.getaddrinfo(target_host, 9, type=socket.SOCK_DGRAM)
+    except OSError:
+        target_rows = []
+    for family, socktype, protocol, _canonname, sockaddr in target_rows:
+        probe = socket.socket(family, socktype, protocol)
+        try:
+            probe.connect(sockaddr)
+            addresses.add(str(probe.getsockname()[0]))
+        except OSError:
+            continue
+        finally:
+            probe.close()
+    return addresses
+
+
 class SSHDoclingRunner:
-    """通过固定无代理 SSH 和离线 Docker 执行锁定 Docling worker。"""
+    """在目标本机直跑，否则通过固定无代理 SSH 执行锁定 Docling worker。"""
 
     def __init__(
         self,
         *,
         command_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+        local_address_resolver: Callable[[str], set[str]] = _resolve_local_addresses,
+        transport_override: Literal["local", "remote"] | None = None,
     ):
         self.command_runner = command_runner
+        self.local_address_resolver = local_address_resolver
+        self.transport_override = transport_override
+        self._transport: Literal["local", "remote"] | None = None
 
     @staticmethod
     def _ssh_prefix(target: str) -> list[str]:
@@ -222,15 +255,49 @@ class SSHDoclingRunner:
             target,
         ]
 
-    def _run_remote(
+    @staticmethod
+    def _target_host(target: str) -> str:
+        host = target.rsplit("@", 1)[-1].strip()
+        if not host:
+            raise CandidateDoclingReprocessError("Docling 目标主机为空")
+        return host
+
+    def _select_transport(self, target: str) -> Literal["local", "remote"]:
+        host = self._target_host(target)
+        try:
+            target_addresses = {
+                row[4][0] for row in socket.getaddrinfo(host, None)
+            }
+            local_addresses = set(self.local_address_resolver(host))
+        except OSError as exc:
+            raise CandidateDoclingReprocessError(
+                f"Docling 执行面主机判定失败：{exc}"
+            ) from exc
+        is_local = bool(target_addresses & local_addresses)
+        if self.transport_override == "local" and not is_local:
+            raise CandidateDoclingReprocessError(
+                "显式 local 执行面与本机地址不匹配，拒绝运行"
+            )
+        if self.transport_override is not None:
+            return self.transport_override
+        return "local" if is_local else "remote"
+
+    def _run_target(
         self,
         target: str,
         command: list[str],
         *,
         check: bool = True,
     ) -> subprocess.CompletedProcess:
+        if self._transport is None:
+            self._transport = self._select_transport(target)
+        routed_command = (
+            command
+            if self._transport == "local"
+            else [*self._ssh_prefix(target), shlex.join(command)]
+        )
         completed = self.command_runner(
-            [*self._ssh_prefix(target), shlex.join(command)],
+            routed_command,
             text=True,
             capture_output=True,
             check=False,
@@ -238,14 +305,15 @@ class SSHDoclingRunner:
         if check and completed.returncode:
             detail = (completed.stderr or completed.stdout or "").strip()
             raise CandidateDoclingReprocessError(
-                f"远端 Docling 命令失败（{completed.returncode}）：{detail}"
+                f"Docling {self._transport} 命令失败（{completed.returncode}）：{detail}"
             )
         return completed
 
     def _preflight(self, *, policy: dict) -> dict:
         route = policy["docling"]
         target = route["ssh_target"]
-        gpu_rows = self._run_remote(
+        self._transport = self._select_transport(target)
+        gpu_rows = self._run_target(
             target,
             [
                 "nvidia-smi",
@@ -261,7 +329,7 @@ class SSHDoclingRunner:
                 break
         if selected is None:
             raise CandidateDoclingReprocessError("未找到锁定 GPU 1")
-        app_result = self._run_remote(
+        app_result = self._run_target(
             target,
             [
                 "nvidia-smi",
@@ -277,7 +345,7 @@ class SSHDoclingRunner:
         ]
         if active:
             raise CandidateDoclingReprocessError("锁定 GPU 1 当前有计算任务")
-        image_id = self._run_remote(
+        image_id = self._run_target(
             target,
             ["docker", "image", "inspect", "--format", "{{.Id}}", route["image"]],
         ).stdout.strip()
@@ -285,7 +353,7 @@ class SSHDoclingRunner:
             raise CandidateDoclingReprocessError(
                 f"Docling 镜像 digest 不匹配：{image_id}"
             )
-        runtime_result = self._run_remote(
+        runtime_result = self._run_target(
             target,
             [
                 "docker",
@@ -318,6 +386,8 @@ class SSHDoclingRunner:
         ):
             raise CandidateDoclingReprocessError("Docling GPU/模型/offline 预检未通过")
         return {
+            "execution_transport": self._transport,
+            "target_host": self._target_host(target),
             "gpu": {
                 "index": int(selected[0]),
                 "uuid": selected[1],
@@ -424,7 +494,7 @@ class SSHDoclingRunner:
             release_id,
         ]
         try:
-            self._run_remote(route["ssh_target"], command)
+            self._run_target(route["ssh_target"], command)
         finally:
             for directory in (payload_root, runtime_tmp, runtime_cache):
                 if directory.exists():

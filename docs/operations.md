@@ -99,10 +99,12 @@ make canonicalize CANDIDATE_DIR=<候选目录> \
   PIPELINE_ARGS="<冻结输入参数> --docling-execution-mode remote"
 ```
 
-该参数是远端作业的显式授权开关；`--plan-only` 和默认 `disabled` 均不得启动远端作业。
-生产 runner 固定使用
-`ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28`，
-并在转换前完成以下失败关闭检查：
+该参数是 Docling 作业的显式授权开关；`--plan-only` 和默认 `disabled` 均不得启动作业。
+生产 runner 先把策略目标 `10.99.8.28` 与本机地址做失败关闭判定：流水线已在该主机运行时
+直接调用锁定命令；从外部运行时固定使用
+`ssh -F /dev/null -o ProxyCommand=none -o ProxyJump=none root@10.99.8.28`。
+不得通过 SSH 自连、复制密钥或修改服务器配置解决执行面问题。local 与 remote 两种执行面
+必须产生等价命令，并在转换前完成以下失败关闭检查：
 
 1. GPU 1 存在且没有计算进程；不得仅凭显存数字推断空闲。
 2. 本地镜像 ID 与策略中的不可变 digest 完全一致。

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shlex
 import subprocess
 
 import pytest
@@ -351,38 +352,22 @@ def test_remote_preflight_uses_fixed_ssh_gpu1_offline_image_and_five_models(tmp_
 
     inputs = _write_inputs(tmp_path, count=1)
     calls = []
-    responses = iter(
-        [
-            "1, GPU-test-1, 3, 11264, 0\n",
-            "",
-            IMAGE_DIGEST + "\n",
-            json.dumps(
-                {
-                    "ok": True,
-                    "errors": [],
-                    "gpu": {"cuda_available": True},
-                    "models": [
-                        {
-                            "name": f"model-{index}",
-                            "expected_sha256": f"hash-{index}",
-                            "actual_sha256": f"hash-{index}",
-                        }
-                        for index in range(5)
-                    ],
-                }
-            ),
-        ]
-    )
+    responses = iter(_successful_preflight_responses())
 
     def command_runner(command, **kwargs):
         calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, 0, next(responses), "")
 
     policy = load_reprocess_policy(Path(inputs["policy_path"]))
-    result = SSHDoclingRunner(command_runner=command_runner)._preflight(policy=policy)
+    result = SSHDoclingRunner(
+        command_runner=command_runner,
+        local_address_resolver=lambda _host: set(),
+        transport_override="remote",
+    )._preflight(policy=policy)
 
     assert result["gpu"]["index"] == 1
     assert len(result["preflight"]["models"]) == 5
+    assert result["execution_transport"] == "remote"
     assert all(
         command[:8]
         == [
@@ -401,6 +386,105 @@ def test_remote_preflight_uses_fixed_ssh_gpu1_offline_image_and_five_models(tmp_
     assert "--device nvidia.com/gpu=1" in docker_preflight
     assert "--network none" in docker_preflight
     assert "bgpkb-docling-v2:2.107.0-cu128" in docker_preflight
+
+
+def _successful_preflight_responses():
+    return [
+        "1, GPU-test-1, 3, 11264, 0\n",
+        "",
+        IMAGE_DIGEST + "\n",
+        json.dumps(
+            {
+                "ok": True,
+                "errors": [],
+                "gpu": {"cuda_available": True},
+                "models": [
+                    {
+                        "name": f"model-{index}",
+                        "expected_sha256": f"hash-{index}",
+                        "actual_sha256": f"hash-{index}",
+                    }
+                    for index in range(5)
+                ],
+            }
+        ),
+    ]
+
+
+def test_target_host_runs_locked_commands_locally_without_ssh_or_environment(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import SSHDoclingRunner
+    from bgpkb.ingestion.canonicalize_candidate import load_reprocess_policy
+
+    inputs = _write_inputs(tmp_path, count=1)
+    calls = []
+    responses = iter(_successful_preflight_responses())
+
+    def command_runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, next(responses), "")
+
+    policy = load_reprocess_policy(Path(inputs["policy_path"]))
+    result = SSHDoclingRunner(
+        command_runner=command_runner,
+        local_address_resolver=lambda _host: {"10.99.8.28"},
+    )._preflight(policy=policy)
+
+    assert result["execution_transport"] == "local"
+    assert all(command[0] != "ssh" for command, _kwargs in calls)
+    assert calls[0][0][0] == "nvidia-smi"
+    assert calls[-1][0][:3] == ["docker", "run", "--rm"]
+    assert all("env" not in kwargs for _command, kwargs in calls)
+    flattened = "\n".join(" ".join(command) for command, _kwargs in calls)
+    assert "DEEPSEEK" not in flattened
+    assert "runtime.env" not in flattened
+
+
+def test_explicit_local_transport_rejects_wrong_host_before_running_command(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import (
+        CandidateDoclingReprocessError,
+        SSHDoclingRunner,
+    )
+    from bgpkb.ingestion.canonicalize_candidate import load_reprocess_policy
+
+    inputs = _write_inputs(tmp_path, count=1)
+    policy = load_reprocess_policy(Path(inputs["policy_path"]))
+    calls = []
+
+    with pytest.raises(CandidateDoclingReprocessError, match="本机地址不匹配"):
+        SSHDoclingRunner(
+            command_runner=lambda command, **kwargs: calls.append((command, kwargs)),
+            local_address_resolver=lambda _host: {"10.99.8.99"},
+            transport_override="local",
+        )._preflight(policy=policy)
+
+    assert calls == []
+
+
+def test_local_and_remote_transports_execute_equivalent_locked_commands(tmp_path):
+    from bgpkb.ingestion.candidate_docling_reprocess import SSHDoclingRunner
+    from bgpkb.ingestion.canonicalize_candidate import load_reprocess_policy
+
+    inputs = _write_inputs(tmp_path, count=1)
+    policy = load_reprocess_policy(Path(inputs["policy_path"]))
+
+    def collect(transport, addresses):
+        calls = []
+        responses = iter(_successful_preflight_responses())
+
+        def command_runner(command, **kwargs):
+            calls.append(command)
+            return subprocess.CompletedProcess(command, 0, next(responses), "")
+
+        SSHDoclingRunner(
+            command_runner=command_runner,
+            local_address_resolver=lambda _host: addresses,
+            transport_override=transport,
+        )._preflight(policy=policy)
+        return calls
+
+    local_calls = collect("local", {"10.99.8.28"})
+    remote_calls = collect("remote", set())
+    assert [shlex.split(command[-1]) for command in remote_calls] == local_calls
 
 
 def test_container_worker_uses_snapshot_hash_and_writes_auditable_receipt(tmp_path):
