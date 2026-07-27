@@ -571,6 +571,23 @@ def test_existing_fine_grained_scripts_are_mapped_with_logs_and_remain_importabl
     assert importlib.util.find_spec("bgpkb.pipeline.run_pipeline") is not None
     assert importlib.util.find_spec("bgpkb.pipeline.build_fast_vector_index") is not None
 
+    catalog_subtask = next(
+        subtask
+        for subtask in definition.stages["publish-index"].subtasks
+        if subtask.subtask_id == "build-candidate-catalogs"
+    )
+    assert "--reuse-existing-report" not in catalog_subtask.args
+    reuse_existing_report_owners = {
+        (stage_name, subtask.subtask_id)
+        for stage_name, stage in definition.stages.items()
+        for subtask in stage.subtasks
+        if "--reuse-existing-report" in subtask.args
+    }
+    assert reuse_existing_report_owners == {
+        ("verify-release", "evaluate-server-performance"),
+        ("verify-release", "build-release-gate-evidence"),
+    }
+
     performance_subtask = next(
         subtask
         for subtask in definition.stages["verify-release"].subtasks
