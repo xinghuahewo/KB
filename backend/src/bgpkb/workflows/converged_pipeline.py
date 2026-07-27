@@ -11,11 +11,13 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 import time
 from typing import Callable, Mapping, Sequence
+import uuid
 
 import yaml
 
@@ -413,6 +415,8 @@ def _write_candidate_state(
     reader_selectable: bool,
     protected_state: Mapping[str, object],
     failed_stage: str | None = None,
+    active_target_stage: str | None = None,
+    active_run_id: str | None = None,
 ) -> None:
     _atomic_json(
         candidate_state_path(candidate_dir),
@@ -421,6 +425,8 @@ def _write_candidate_state(
             "status": status,
             "reader_selectable": reader_selectable,
             "failed_stage": failed_stage,
+            "active_target_stage": active_target_stage,
+            "active_run_id": active_run_id,
             "protected_state_fingerprint": protected_state["fingerprint"],
             "updated_at": _utc_now(),
         },
@@ -787,6 +793,11 @@ def run_pipeline(
     runtime_cache = candidate / ".pipeline" / "cache"
     runtime_temp.mkdir(parents=True, exist_ok=True)
     runtime_cache.mkdir(parents=True, exist_ok=True)
+    pipeline_run_id = os.environ.get("BGPKB_PIPELINE_RUN_ID", "").strip()
+    if not pipeline_run_id:
+        pipeline_run_id = f"run-{uuid.uuid4().hex}"
+    elif not re.fullmatch(r"run-[0-9a-f]{32}", pipeline_run_id):
+        raise PipelineDefinitionError("BGPKB_PIPELINE_RUN_ID 必须使用 run- 加 32 位小写十六进制")
     environment = dict(os.environ)
     for name in ("BGPKB_CURRENT_RELEASE_DIR", "BGPKB_PREVIOUS_RELEASE_DIR"):
         environment.pop(name, None)
@@ -802,6 +813,7 @@ def run_pipeline(
         "BGPKB_FROZEN_SOURCE_CATALOG_PATH": str(frozen_source_catalog_path),
         "BGPKB_FROZEN_ENTITY_EVIDENCE_PATH": str(frozen_entity_evidence_path),
         "BGPKB_PIPELINE_WRITE_ROOT": str(candidate),
+        "BGPKB_PIPELINE_RUN_ID": pipeline_run_id,
         "TMPDIR": str(runtime_temp),
         "TMP": str(runtime_temp),
         "TEMP": str(runtime_temp),
@@ -813,6 +825,8 @@ def run_pipeline(
         status="building",
         reader_selectable=False,
         protected_state=protected_before,
+        active_target_stage=target_stage,
+        active_run_id=pipeline_run_id,
     )
     executor = task_executor or _default_task_executor
     external_input_fingerprints = {

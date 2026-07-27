@@ -141,8 +141,10 @@ v1 parsed/chunks 和 legacy reader 只保留为受控只读迁移入口，不得
 不会修改候选 `reader_selectable`。服务进程同时精确绑定候选根、release ID、
 publish manifest hash、当前不可变代码 release 的完整 commit、prompt version 和三类模型
 revision。reader 逐项复核这些绑定、`publish-index` 阶段 manifest 与候选发布 manifest；
-目录、hash、commit、revision 不一致，阶段不完整或更早阶段失败时仍然拒绝读取。会话库只能
-位于候选 `.pipeline/tmp/canary-chat/`，显式拒绝生产会话库，并在进程退出时清理；进程级能力
+运行中的候选还必须显式声明目标阶段为 `verify-release`，并与隔离服务预绑定的 pipeline
+run ID 完全一致；`publish-index` checkpoint 也必须完整且 hash 一致。目录、hash、commit、revision
+不一致，目标不是 `verify-release`、阶段不完整或更早阶段失败时仍然拒绝读取。会话库只能
+位于候选 `.pipeline/tmp/canary-chat/<run-id>/`，显式拒绝生产会话库，并在进程退出时清理；进程级能力
 绑定也随退出消失。运维方在 `verify-release` 返回后必须立即终止隔离服务，最长运行时间仅作
 遗留进程的最终保险。`verify-release` 配置不使用 `--reuse-existing-report`，避免新候选误用
 不存在、其他候选或线上旧 release 的报告。

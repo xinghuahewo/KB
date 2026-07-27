@@ -778,9 +778,16 @@ def verification_candidate_reader_enabled(
         return False
     if candidate_state.get("reader_selectable") is True:
         return False
-    if candidate_state.get("status") not in {"candidate", "failed"}:
+    candidate_status = candidate_state.get("status")
+    if candidate_status not in {"candidate", "failed", "building"}:
         return False
-    if candidate_state.get("failed_stage") not in {None, "verify-release"}:
+    if candidate_status == "building":
+        if (
+            candidate_state.get("active_target_stage") != "verify-release"
+            or candidate_state.get("active_run_id") != binding.get("pipeline_run_id")
+        ):
+            return False
+    elif candidate_state.get("failed_stage") not in {None, "verify-release"}:
         return False
     try:
         code_release_manifest = json.loads(
@@ -790,6 +797,12 @@ def verification_candidate_reader_enabled(
             (candidate_root / ".pipeline" / "manifests" / "publish-index.json").read_text(
                 encoding="utf-8"
             )
+        )
+        publish_checkpoint_path = (
+            candidate_root / ".pipeline" / "checkpoints" / "publish-index.json"
+        )
+        publish_checkpoint = json.loads(
+            publish_checkpoint_path.read_text(encoding="utf-8")
         )
         publish_manifest = json.loads(
             (candidate_root / "data" / "published" / "publish_index_manifest_v1.json").read_text(
@@ -801,6 +814,9 @@ def verification_candidate_reader_enabled(
     publish_manifest_hash = "sha256:" + hashlib.sha256(
         (candidate_root / "data" / "published" / "publish_index_manifest_v1.json").read_bytes()
     ).hexdigest()
+    publish_checkpoint_hash = "sha256:" + hashlib.sha256(
+        publish_checkpoint_path.read_bytes()
+    ).hexdigest()
     code_commit = str(binding.get("code_commit", ""))
     prompt_version = str(binding.get("prompt_version", ""))
     model_revisions = binding.get("model_revisions")
@@ -811,13 +827,18 @@ def verification_candidate_reader_enabled(
         return False
     if not re.fullmatch(r"[0-9a-f]{40}", code_commit):
         return False
+    pipeline_run_id = str(binding.get("pipeline_run_id", ""))
+    if not re.fullmatch(r"run-[0-9a-f]{32}", pipeline_run_id):
+        return False
     if not prompt_version or any(
         not str(model_revisions.get(role, "")).strip()
         for role in ("embedding", "reranker", "llm")
     ):
         return False
     isolated_chat_db = Path(str(binding.get("chat_db_path", ""))).expanduser().resolve()
-    isolated_chat_root = (candidate_root / ".pipeline" / "tmp" / "canary-chat").resolve()
+    isolated_chat_root = (
+        candidate_root / ".pipeline" / "tmp" / "canary-chat" / pipeline_run_id
+    ).resolve()
     if (
         isolated_chat_db.parent != isolated_chat_root
         or Path(os.environ.get("BGP_CHAT_DB_PATH", "")).expanduser().resolve()
@@ -827,10 +848,13 @@ def verification_candidate_reader_enabled(
     return (
         stage_manifest.get("stage") == "publish-index"
         and stage_manifest.get("status") == "complete"
+        and publish_checkpoint.get("stage") == "publish-index"
+        and publish_checkpoint.get("status") == "complete"
         and publish_manifest.get("status") == "complete"
         and publish_manifest.get("release_id") == candidate_root.name
         and binding.get("release_id") == candidate_root.name
         and binding.get("publish_manifest_hash") == publish_manifest_hash
+        and binding.get("publish_checkpoint_hash") == publish_checkpoint_hash
         and code_release_manifest.get("git_commit") == code_commit
         and published_model_revisions.get("embedding") == model_revisions["embedding"]
         and os.environ.get("BGPKB_CODE_COMMIT") == code_commit

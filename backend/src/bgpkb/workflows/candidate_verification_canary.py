@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 from contextlib import contextmanager
 import hashlib
 import ipaddress
@@ -35,6 +36,7 @@ def validate_candidate(
     *,
     release_id: str,
     publish_manifest_hash: str,
+    publish_checkpoint_hash: str,
     code_commit: str,
     prompt_version: str,
     model_revisions: Mapping[str, str],
@@ -42,10 +44,12 @@ def validate_candidate(
     candidate_root = candidate_dir.expanduser().resolve()
     state_path = candidate_root / ".pipeline" / "candidate.json"
     stage_path = candidate_root / ".pipeline" / "manifests" / "publish-index.json"
+    checkpoint_path = candidate_root / ".pipeline" / "checkpoints" / "publish-index.json"
     publish_path = candidate_root / "data" / "published" / "publish_index_manifest_v1.json"
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         stage = json.loads(stage_path.read_text(encoding="utf-8"))
+        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
         publish = json.loads(publish_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise CandidateVerificationCanaryError(f"候选验证证据不可读：{exc}") from exc
@@ -66,6 +70,13 @@ def validate_candidate(
     actual_manifest_hash = "sha256:" + hashlib.sha256(publish_path.read_bytes()).hexdigest()
     if publish_manifest_hash != actual_manifest_hash:
         raise CandidateVerificationCanaryError("publish-index manifest hash 与显式绑定不匹配")
+    actual_checkpoint_hash = "sha256:" + hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+    if (
+        checkpoint.get("stage") != "publish-index"
+        or checkpoint.get("status") != "complete"
+        or publish_checkpoint_hash != actual_checkpoint_hash
+    ):
+        raise CandidateVerificationCanaryError("publish-index checkpoint 与显式绑定不匹配")
     try:
         code_release_manifest = json.loads(
             CODE_RELEASE_MANIFEST_PATH.read_text(encoding="utf-8")
@@ -86,8 +97,14 @@ def validate_candidate(
     return candidate_root, publish
 
 
-def validate_chat_db_path(candidate_root: Path, chat_db_path: Path) -> Path:
-    isolated_root = (candidate_root / ".pipeline" / "tmp" / "canary-chat").resolve()
+def validate_chat_db_path(
+    candidate_root: Path,
+    chat_db_path: Path,
+    pipeline_run_id: str,
+) -> Path:
+    isolated_root = (
+        candidate_root / ".pipeline" / "tmp" / "canary-chat" / pipeline_run_id
+    ).resolve()
     resolved = chat_db_path.expanduser().resolve()
     production_path = os.environ.get("BGP_CHAT_DB_PATH", "").strip()
     if production_path and resolved == Path(production_path).expanduser().resolve():
@@ -111,6 +128,7 @@ def verification_environment(
             dict(binding), ensure_ascii=False, sort_keys=True
         ),
         "BGPKB_CODE_COMMIT": str(binding["code_commit"]),
+        "BGPKB_PIPELINE_RUN_ID": str(binding["pipeline_run_id"]),
         "BGP_GROUNDED_PROMPT_VERSION": str(binding["prompt_version"]),
         "BGP_EMBEDDING_MODEL_REVISION": str(model_revisions["embedding"]),
         "BGP_RERANKER_MODEL_REVISION": str(model_revisions["reranker"]),
@@ -118,6 +136,8 @@ def verification_environment(
     }
     previous = {name: os.environ.get(name) for name in updates}
     chat_db_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_root = Path(str(binding["candidate_root"]))
+    cleanup_chat_database(candidate_root, chat_db_path, str(binding["pipeline_run_id"]))
     try:
         os.environ.update(updates)
         yield
@@ -127,10 +147,40 @@ def verification_environment(
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-        for suffix in ("", "-wal", "-shm"):
-            cleanup_path = Path(str(chat_db_path) + suffix)
-            if cleanup_path.is_file():
-                cleanup_path.unlink()
+        cleanup_chat_database(candidate_root, chat_db_path, str(binding["pipeline_run_id"]))
+
+
+def cleanup_chat_database(
+    candidate_root: Path,
+    chat_db_path: Path,
+    pipeline_run_id: str,
+) -> None:
+    resolved_candidate = candidate_root.expanduser().resolve()
+    resolved_chat_db = chat_db_path.expanduser().resolve()
+    if not re.fullmatch(r"run-[0-9a-f]{32}", pipeline_run_id):
+        raise CandidateVerificationCanaryError("拒绝使用无效 pipeline run id 清理")
+    isolated_root = (
+        resolved_candidate / ".pipeline" / "tmp" / "canary-chat" / pipeline_run_id
+    ).resolve()
+    if resolved_chat_db.parent != isolated_root or resolved_chat_db.suffix != ".sqlite3":
+        raise CandidateVerificationCanaryError("拒绝清理候选 canary-chat 隔离目录之外的路径")
+    for suffix in ("", "-wal", "-shm"):
+        cleanup_path = Path(str(resolved_chat_db) + suffix)
+        if cleanup_path.is_file():
+            cleanup_path.unlink()
+
+
+def run_server_with_timeout(server: object, max_runtime_seconds: int) -> None:
+    timer = threading.Timer(
+        max_runtime_seconds,
+        lambda: setattr(server, "should_exit", True),
+    )
+    timer.daemon = True
+    timer.start()
+    try:
+        server.run()
+    finally:
+        timer.cancel()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,6 +188,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate-dir", type=Path, required=True)
     parser.add_argument("--release-id", required=True)
     parser.add_argument("--publish-manifest-hash", required=True)
+    parser.add_argument("--publish-checkpoint-hash", required=True)
+    parser.add_argument("--pipeline-run-id", required=True)
     parser.add_argument("--code-commit", required=True)
     parser.add_argument("--prompt-version", required=True)
     parser.add_argument("--embedding-revision", required=True)
@@ -158,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("端口必须位于 1..65535")
     if not 1 <= args.max_runtime_seconds <= 3600:
         raise SystemExit("最长运行时间必须位于 1..3600 秒")
+    if not re.fullmatch(r"run-[0-9a-f]{32}", args.pipeline_run_id):
+        raise SystemExit("pipeline run id 必须使用 run- 加 32 位小写十六进制")
     model_revisions = {
         "embedding": args.embedding_revision,
         "reranker": args.reranker_revision,
@@ -167,15 +221,22 @@ def main(argv: list[str] | None = None) -> int:
         args.candidate_dir,
         release_id=args.release_id,
         publish_manifest_hash=args.publish_manifest_hash,
+        publish_checkpoint_hash=args.publish_checkpoint_hash,
         code_commit=args.code_commit,
         prompt_version=args.prompt_version,
         model_revisions=model_revisions,
     )
-    chat_db_path = validate_chat_db_path(candidate_root, args.chat_db_path)
+    chat_db_path = validate_chat_db_path(
+        candidate_root,
+        args.chat_db_path,
+        args.pipeline_run_id,
+    )
     binding = {
         "candidate_root": str(candidate_root),
         "release_id": args.release_id,
         "publish_manifest_hash": args.publish_manifest_hash,
+        "publish_checkpoint_hash": args.publish_checkpoint_hash,
+        "pipeline_run_id": args.pipeline_run_id,
         "code_commit": args.code_commit,
         "prompt_version": args.prompt_version,
         "model_revisions": model_revisions,
@@ -187,17 +248,18 @@ def main(argv: list[str] | None = None) -> int:
     server = uvicorn.Server(
         uvicorn.Config("bgpkb.api.app:app", host=args.host, port=args.port)
     )
-    timer = threading.Timer(
-        args.max_runtime_seconds,
-        lambda: setattr(server, "should_exit", True),
+    atexit.register(
+        cleanup_chat_database,
+        candidate_root,
+        chat_db_path,
+        args.pipeline_run_id,
     )
-    timer.daemon = True
-    with verification_environment(binding=binding, chat_db_path=chat_db_path):
-        timer.start()
-        try:
-            server.run()
-        finally:
-            timer.cancel()
+    try:
+        with verification_environment(binding=binding, chat_db_path=chat_db_path):
+            run_server_with_timeout(server, args.max_runtime_seconds)
+    finally:
+        atexit.unregister(cleanup_chat_database)
+        cleanup_chat_database(candidate_root, chat_db_path, args.pipeline_run_id)
     return 0
 
 

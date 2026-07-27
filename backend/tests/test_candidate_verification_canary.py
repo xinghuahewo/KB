@@ -21,6 +21,7 @@ MODEL_REVISIONS = {
     "reranker": "reranker-revision",
     "llm": "llm-revision",
 }
+PIPELINE_RUN_ID = "run-" + "1" * 32
 
 
 def _candidate(tmp_path: Path, *, failed_stage: str | None = "verify-release") -> Path:
@@ -35,6 +36,10 @@ def _candidate(tmp_path: Path, *, failed_stage: str | None = "verify-release") -
     )
     _write_json(
         candidate / ".pipeline" / "manifests" / "publish-index.json",
+        {"stage": "publish-index", "status": "complete"},
+    )
+    _write_json(
+        candidate / ".pipeline" / "checkpoints" / "publish-index.json",
         {"stage": "publish-index", "status": "complete"},
     )
     _write_json(
@@ -53,15 +58,25 @@ def _candidate(tmp_path: Path, *, failed_stage: str | None = "verify-release") -
 
 def _binding(candidate: Path) -> dict:
     publish_path = candidate / "data" / "published" / "publish_index_manifest_v1.json"
+    checkpoint_path = candidate / ".pipeline" / "checkpoints" / "publish-index.json"
     return {
         "candidate_root": str(candidate),
         "release_id": candidate.name,
         "publish_manifest_hash": "sha256:" + hashlib.sha256(publish_path.read_bytes()).hexdigest(),
+        "publish_checkpoint_hash": "sha256:" + hashlib.sha256(
+            checkpoint_path.read_bytes()
+        ).hexdigest(),
+        "pipeline_run_id": PIPELINE_RUN_ID,
         "code_commit": CODE_COMMIT,
         "prompt_version": PROMPT_VERSION,
         "model_revisions": MODEL_REVISIONS,
         "chat_db_path": str(
-            candidate / ".pipeline" / "tmp" / "canary-chat" / "history.sqlite3"
+            candidate
+            / ".pipeline"
+            / "tmp"
+            / "canary-chat"
+            / PIPELINE_RUN_ID
+            / "history.sqlite3"
         ),
     }
 
@@ -111,6 +126,40 @@ def test_candidate_reader_requires_exact_verification_scope(monkeypatch, tmp_pat
         serving_bundle.resolve_serving_database_path(data_dir)
 
 
+def test_candidate_reader_allows_only_verify_release_building_state(
+    monkeypatch, tmp_path, code_manifest
+):
+    candidate = _candidate(tmp_path)
+    data_dir = candidate / "data"
+    binding = _configure_reader(monkeypatch, candidate, code_manifest)
+    state_path = candidate / ".pipeline" / "candidate.json"
+    _write_json(
+        state_path,
+        {
+            "status": "building",
+            "reader_selectable": False,
+            "failed_stage": None,
+            "active_target_stage": "verify-release",
+            "active_run_id": PIPELINE_RUN_ID,
+        },
+    )
+    assert serving_bundle.resolve_serving_database_path(data_dir).is_file()
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["active_target_stage"] = "publish-index"
+    _write_json(state_path, state)
+    with pytest.raises(serving_bundle.ServingBundleCompatibilityError, match="候选"):
+        serving_bundle.resolve_serving_database_path(data_dir)
+
+    state["active_target_stage"] = "verify-release"
+    state["active_run_id"] = "run-" + "2" * 32
+    _write_json(state_path, state)
+    with pytest.raises(serving_bundle.ServingBundleCompatibilityError, match="候选"):
+        serving_bundle.resolve_serving_database_path(data_dir)
+
+    assert binding["publish_manifest_hash"].startswith("sha256:")
+
+
 def test_candidate_reader_rejects_failure_before_verify_release(
     monkeypatch, tmp_path, code_manifest
 ):
@@ -127,6 +176,7 @@ def test_candidate_reader_rejects_failure_before_verify_release(
             candidate,
             release_id=candidate.name,
             publish_manifest_hash=binding["publish_manifest_hash"],
+            publish_checkpoint_hash=binding["publish_checkpoint_hash"],
             code_commit=CODE_COMMIT,
             prompt_version=PROMPT_VERSION,
             model_revisions=MODEL_REVISIONS,
@@ -138,6 +188,7 @@ def test_candidate_reader_rejects_failure_before_verify_release(
     [
         ("release_id", "other-release"),
         ("publish_manifest_hash", "sha256:" + "0" * 64),
+        ("publish_checkpoint_hash", "sha256:" + "0" * 64),
         ("code_commit", "b" * 40),
         ("prompt_version", ""),
     ],
@@ -154,6 +205,7 @@ def test_candidate_validation_rejects_identity_binding_mismatch(
             candidate,
             release_id=binding["release_id"],
             publish_manifest_hash=binding["publish_manifest_hash"],
+            publish_checkpoint_hash=binding["publish_checkpoint_hash"],
             code_commit=binding["code_commit"],
             prompt_version=binding["prompt_version"],
             model_revisions=binding["model_revisions"],
@@ -188,6 +240,7 @@ def test_candidate_canary_rejects_production_chat_database(monkeypatch, tmp_path
         candidate_verification_canary.validate_chat_db_path(
             candidate,
             production_chat_db,
+            PIPELINE_RUN_ID,
         )
 
 
@@ -213,6 +266,122 @@ def test_verification_environment_is_process_scoped_and_cleans_chat_files(
     assert serving_bundle.VERIFICATION_CANDIDATE_BINDING_ENV not in os.environ
     assert not chat_db.exists()
     assert not Path(str(chat_db) + "-wal").exists()
+
+
+def test_cleanup_chat_database_is_idempotent(tmp_path):
+    candidate = tmp_path / "candidate"
+    chat_db = (
+        candidate
+        / ".pipeline"
+        / "tmp"
+        / "canary-chat"
+        / PIPELINE_RUN_ID
+        / "verification.sqlite3"
+    )
+    chat_db.parent.mkdir(parents=True)
+    for suffix in ("", "-wal", "-shm"):
+        Path(str(chat_db) + suffix).write_bytes(b"temporary")
+
+    candidate_verification_canary.cleanup_chat_database(
+        candidate, chat_db, PIPELINE_RUN_ID
+    )
+    candidate_verification_canary.cleanup_chat_database(
+        candidate, chat_db, PIPELINE_RUN_ID
+    )
+
+    assert not any(Path(str(chat_db) + suffix).exists() for suffix in ("", "-wal", "-shm"))
+
+
+def test_cleanup_chat_database_rejects_path_outside_candidate(tmp_path):
+    candidate = tmp_path / "candidate"
+    production_chat = tmp_path / "production.sqlite3"
+    production_chat.write_bytes(b"do not delete")
+
+    with pytest.raises(
+        candidate_verification_canary.CandidateVerificationCanaryError,
+        match="拒绝清理",
+    ):
+        candidate_verification_canary.cleanup_chat_database(
+            candidate,
+            production_chat,
+            PIPELINE_RUN_ID,
+        )
+
+    assert production_chat.read_bytes() == b"do not delete"
+
+
+def test_verification_environment_cleans_on_exception(tmp_path):
+    candidate = _candidate(tmp_path)
+    binding = _binding(candidate)
+    chat_db = Path(binding["chat_db_path"])
+
+    with pytest.raises(RuntimeError, match="evaluation failed"):
+        with candidate_verification_canary.verification_environment(
+            binding=binding,
+            chat_db_path=chat_db,
+        ):
+            chat_db.write_bytes(b"chat")
+            Path(str(chat_db) + "-wal").write_bytes(b"wal")
+            Path(str(chat_db) + "-shm").write_bytes(b"shm")
+            raise RuntimeError("evaluation failed")
+
+    assert not any(Path(str(chat_db) + suffix).exists() for suffix in ("", "-wal", "-shm"))
+
+
+def test_run_server_timeout_sets_exit_and_cancels_timer(monkeypatch):
+    events: list[str] = []
+
+    class FakeTimer:
+        daemon = False
+
+        def __init__(self, seconds, callback):
+            assert seconds == 7
+            self.callback = callback
+
+        def start(self):
+            events.append("start")
+            self.callback()
+
+        def cancel(self):
+            events.append("cancel")
+
+    class FakeServer:
+        should_exit = False
+
+        def run(self):
+            assert self.should_exit is True
+            events.append("run")
+
+    monkeypatch.setattr(candidate_verification_canary.threading, "Timer", FakeTimer)
+    candidate_verification_canary.run_server_with_timeout(FakeServer(), 7)
+
+    assert events == ["start", "run", "cancel"]
+
+
+def test_run_server_exception_still_cancels_timer(monkeypatch):
+    events: list[str] = []
+
+    class FakeTimer:
+        daemon = False
+
+        def __init__(self, _seconds, _callback):
+            pass
+
+        def start(self):
+            events.append("start")
+
+        def cancel(self):
+            events.append("cancel")
+
+    class FailingServer:
+        def run(self):
+            raise RuntimeError("server failed")
+
+    monkeypatch.setattr(candidate_verification_canary.threading, "Timer", FakeTimer)
+    with pytest.raises(RuntimeError, match="server failed"):
+        candidate_verification_canary.run_server_with_timeout(FailingServer(), 7)
+
+    assert events == ["start", "cancel"]
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "10.99.8.28", "example.com", "localhost"])
